@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QS Platform: Data Hub Ingestion</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#00e5ff",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0f2123",
+                        "surface-dark": "#162628",
+                        "border-dark": "#395356"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white overflow-hidden h-screen flex">
+<!-- Navigation Rail -->
+<aside class="w-[280px] h-full flex flex-col border-r border-border-dark bg-background-dark shrink-0">
+<div class="p-4 pb-2">
+<div class="flex gap-3 items-center mb-8">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 bg-primary/20 flex items-center justify-center border border-primary/30" data-alt="Abstract geometric quantum logo">
+<span class="material-symbols-outlined text-primary">token</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-bold leading-normal tracking-tight">Quant Science</h1>
+<p class="text-primary text-xs font-mono leading-normal">Alpha v0.9.2</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2 px-3 flex-1 overflow-y-auto">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+<p class="text-sm font-medium leading-normal">Dashboard</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">timeline</span>
+<p class="text-sm font-medium leading-normal">Strategy</p>
+</div>
+<!-- Active State -->
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-white cursor-pointer">
+<span class="material-symbols-outlined text-primary fill-1">database</span>
+<p class="text-sm font-medium leading-normal">Data Hub</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">terminal</span>
+<p class="text-sm font-medium leading-normal">Execution</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">settings</span>
+<p class="text-sm font-medium leading-normal">Settings</p>
+</div>
+</div>
+<div class="p-4 border-t border-border-dark">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">logout</span>
+<p class="text-sm font-medium leading-normal">Log Out</p>
+</div>
+</div>
+</aside>
+<!-- Content Area -->
+<main class="flex-1 flex flex-row overflow-hidden">
+<!-- Inner Sidebar: Data Sources -->
+<section class="w-80 border-r border-border-dark bg-background-dark/50 flex flex-col shrink-0">
+<div class="p-6 border-b border-border-dark">
+<h2 class="text-white text-lg font-bold leading-tight">Connectors</h2>
+<p class="text-slate-400 text-xs mt-1">Select source to ingest</p>
+</div>
+<div class="flex flex-col gap-3 p-4 overflow-y-auto">
+<!-- FMP -->
+<label class="flex items-start gap-4 rounded-xl border border-border-dark bg-surface-dark p-4 cursor-pointer hover:border-primary/50 transition-colors group">
+<input class="mt-1 h-4 w-4 border-2 border-slate-500 bg-transparent text-primary focus:ring-offset-background-dark focus:ring-primary checked:border-primary checked:bg-primary" name="datasource" type="radio"/>
+<div class="flex grow flex-col">
+<div class="flex justify-between items-center">
+<p class="text-white text-sm font-medium leading-normal">FMP</p>
+<span class="text-[10px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">Connected</span>
+</div>
+<p class="text-slate-400 text-xs font-normal leading-normal mt-1">Financial Modeling Prep</p>
+</div>
+</label>
+<!-- IBKR -->
+<label class="flex items-start gap-4 rounded-xl border border-border-dark bg-surface-dark p-4 cursor-pointer hover:border-primary/50 transition-colors group">
+<input class="mt-1 h-4 w-4 border-2 border-slate-500 bg-transparent text-primary focus:ring-offset-background-dark focus:ring-primary checked:border-primary checked:bg-primary" name="datasource" type="radio"/>
+<div class="flex grow flex-col">
+<div class="flex justify-between items-center">
+<p class="text-white text-sm font-medium leading-normal">IBKR</p>
+<span class="text-[10px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">Connected</span>
+</div>
+<p class="text-slate-400 text-xs font-normal leading-normal mt-1">Interactive Brokers</p>
+</div>
+</label>
+<!-- DuckDB -->
+<label class="flex items-start gap-4 rounded-xl border border-primary bg-primary/5 p-4 cursor-pointer">
+<input checked="" class="mt-1 h-4 w-4 border-2 border-slate-500 bg-transparent text-primary focus:ring-offset-background-dark focus:ring-primary checked:border-primary checked:bg-primary" name="datasource" type="radio"/>
+<div class="flex grow flex-col">
+<div class="flex justify-between items-center">
+<p class="text-white text-sm font-medium leading-normal">DuckDB (Local)</p>
+<span class="text-[10px] uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-slate-400 text-xs font-normal leading-normal mt-1">Local Parquet Store</p>
+</div>
+</label>
+<!-- Polygon -->
+<label class="flex items-start gap-4 rounded-xl border border-border-dark bg-surface-dark p-4 cursor-pointer hover:border-primary/50 transition-colors group opacity-60">
+<input class="mt-1 h-4 w-4 border-2 border-slate-600 bg-transparent text-slate-500 focus:ring-0" disabled="" name="datasource" type="radio"/>
+<div class="flex grow flex-col">
+<div class="flex justify-between items-center">
+<p class="text-slate-300 text-sm font-medium leading-normal">Polygon.io</p>
+<span class="text-[10px] uppercase tracking-wider text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded">Offline</span>
+</div>
+<p class="text-slate-500 text-xs font-normal leading-normal mt-1">Websocket Stream</p>
+</div>
+</label>
+<button class="flex items-center justify-center gap-2 w-full py-3 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 hover:bg-white/5 transition-all mt-2">
+<span class="material-symbols-outlined text-lg">add</span>
+<span class="text-xs font-medium uppercase tracking-wide">Add New Source</span>
+</button>
+</div>
+</section>
+<!-- Main Panel -->
+<section class="flex-1 flex flex-col min-w-0 overflow-y-auto bg-background-dark">
+<!-- Header -->
+<header class="px-8 py-6 border-b border-border-dark flex justify-between items-end">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary text-sm font-mono">QS_CONNECT // INGESTION</span>
+</div>
+<h1 class="text-white text-3xl font-bold leading-tight tracking-tight">Data Hub Ingestion</h1>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 rounded-lg bg-surface-dark border border-border-dark text-white hover:bg-white/5 text-sm font-medium transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">history</span>
+                        View Logs
+                    </button>
+<button class="px-4 py-2 rounded-lg bg-primary text-background-dark hover:bg-primary/90 text-sm font-bold transition-colors shadow-[0_0_15px_rgba(0,229,255,0.3)] flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">play_arrow</span>
+                        Run Manual Ingestion
+                    </button>
+</div>
+</header>
+<!-- Active Job Status -->
+<div class="p-8 pb-4">
+<div class="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-lg relative overflow-hidden group">
+<!-- Subtle pattern background -->
+<div class="absolute top-0 right-0 w-64 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none"></div>
+<div class="flex flex-col gap-4 relative z-10">
+<div class="flex justify-between items-start">
+<div class="flex gap-4">
+<div class="bg-primary/10 rounded-lg p-3 h-fit border border-primary/20">
+<span class="material-symbols-outlined text-primary">cloud_sync</span>
+</div>
+<div>
+<h3 class="text-white text-lg font-semibold leading-normal">Batch Processing: Tick Data 2020-2023</h3>
+<p class="text-slate-400 text-sm mt-1 font-mono">Job ID: <span class="text-slate-300">#8829-AFX-22</span> • Priority: <span class="text-primary">High</span></p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-white text-2xl font-mono font-bold">912,450,200</p>
+<p class="text-slate-500 text-xs uppercase tracking-wider font-medium">Rows Processed</p>
+</div>
+</div>
+<div class="space-y-2 mt-2">
+<div class="flex justify-between text-xs font-mono text-primary">
+<span>Bundling Data...</span>
+<span>65%</span>
+</div>
+<div class="h-2 w-full bg-background-dark rounded-full overflow-hidden border border-white/5">
+<div class="h-full bg-primary shadow-[0_0_10px_rgba(0,229,255,0.5)] transition-all duration-500 ease-out" style="width: 65%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Table Section -->
+<div class="px-8 py-4 flex-1">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-white text-lg font-medium">Recent Ingestions</h3>
+<div class="flex gap-2">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-2 text-slate-500 text-lg">search</span>
+<input class="pl-9 pr-4 py-1.5 bg-surface-dark border border-border-dark rounded-lg text-sm text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 placeholder-slate-600 font-mono w-64" placeholder="Filter datasets..." type="text"/>
+</div>
+<button class="p-1.5 rounded-lg border border-border-dark text-slate-400 hover:text-white hover:border-slate-400 transition-colors">
+<span class="material-symbols-outlined text-lg">filter_list</span>
+</button>
+</div>
+</div>
+<div class="overflow-hidden rounded-xl border border-border-dark bg-background-dark shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-dark border-b border-border-dark">
+<th class="px-6 py-4 text-slate-400 text-xs font-bold uppercase tracking-wider w-[35%]">Dataset Name</th>
+<th class="px-6 py-4 text-slate-400 text-xs font-bold uppercase tracking-wider w-[20%]">Rows</th>
+<th class="px-6 py-4 text-slate-400 text-xs font-bold uppercase tracking-wider w-[25%]">Timestamp</th>
+<th class="px-6 py-4 text-slate-400 text-xs font-bold uppercase tracking-wider w-[20%] text-right">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark font-mono text-sm">
+<!-- Row 1: Success -->
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 text-base">table_chart</span>
+<span class="text-white font-medium group-hover:text-primary transition-colors">AAPL_1min_OHLCV</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-300">1,200,450</td>
+<td class="px-6 py-4 text-slate-500">2023-10-27 14:00:00</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                        Success
+                                    </span>
+</td>
+</tr>
+<!-- Row 2: Processing -->
+<tr class="bg-primary/[0.02] border-l-2 border-l-primary hover:bg-primary/[0.04] transition-colors">
+<td class="px-6 py-4 pl-[22px]"> <!-- Adjust padding for left border -->
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-base animate-pulse">sync</span>
+<span class="text-white font-medium">SPY_tick_trades</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-300">45,000,000+</td>
+<td class="px-6 py-4 text-slate-500">2023-10-27 13:45:00</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                                        Processing
+                                    </span>
+</td>
+</tr>
+<!-- Row 3: Failed -->
+<tr class="hover:bg-white/[0.02] transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 text-base">currency_exchange</span>
+<span class="text-white font-medium">FX_EURUSD</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-300">0</td>
+<td class="px-6 py-4 text-slate-500">2023-10-27 12:00:00</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+<span class="material-symbols-outlined text-[10px]">close</span>
+                                        Failed
+                                    </span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-white/[0.02] transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 text-base">table_chart</span>
+<span class="text-white font-medium">NVDA_options_chain</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-300">8,920</td>
+<td class="px-6 py-4 text-slate-500">2023-10-27 11:30:00</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                        Success
+                                    </span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-white/[0.02] transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 text-base">candlestick_chart</span>
+<span class="text-white font-medium">BTC_USDT_binance</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-300">245,600</td>
+<td class="px-6 py-4 text-slate-500">2023-10-27 11:15:00</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                        Success
+                                    </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination / Footer -->
+<div class="flex items-center justify-between mt-4 px-2">
+<p class="text-xs text-slate-500 font-mono">Showing 5 of 128 jobs</p>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-xs font-medium text-slate-400 border border-border-dark rounded bg-surface-dark hover:text-white transition-colors">Previous</button>
+<button class="px-3 py-1 text-xs font-medium text-white border border-border-dark rounded bg-surface-dark hover:bg-white/5 transition-colors">Next</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+</body></html>
