@@ -1,193 +1,74 @@
-# 🚀 Next.js + shadcn/ui Starter Template
+# Quant Science Platform
 
-A modern, production-ready starter powered by **Next.js (App Router)**, **shadcn/ui**, **Tailwind CSS**, and **next-themes** for dark/light mode.  
-Designed to be a clean foundation for any new project—SaaS, dashboards, landing pages, internal tools, and more.
+> "Hedge Fund in a Box" — A professional-grade algorithmic trading dashboard.
 
----
+## Overview
 
-## ✨ Features
+The **Quant Science Platform** is a unified ecosystem designed to bridge the gap between retail trading and institutional quantitative finance. It provides a cohesive interface for the entire algorithmic trading lifecycle:
+1.  **Data Ingestion:** Managing vast datasets of price and fundamental data.
+2.  **Strategy Research:** Developing and backtesting strategies using Python (Zipline).
+3.  **Live Execution:** Automated order routing and portfolio management.
 
-- ⚡ **Next.js App Router** (latest version)
-- 🎨 **Tailwind CSS** with automatic class merging
-- 🧩 **shadcn/ui** — all components pre-installed & configured
-- 🌓 **Dark / Light / System theme** using `next-themes`
-- 🔤 **TypeScript-first** project with strict mode
-- 📁 Well-organized, scalable folder structure
-- 🛠️ ESLint + Prettier already set up (if using default Next.js config)
+## Features
 
----
+-   **Precision Industrial UI:** A dark-mode native interface optimized for long trading sessions and high data density.
+-   **Central Dashboard:** Real-time view of P&L, Sharpe Ratio, and portfolio performance.
+-   **Data Hub:** Monitor data pipelines and explore the asset universe.
+-   **Research Lab:** Integrated environment for coding strategies and analyzing backtest results (Tear Sheets).
+-   **Live Ops:** Real-time system console and manual order entry for intervention.
 
-## 📦 What's Included
+## Tech Stack
 
-### UI / Styling
-- Tailwind CSS
-- shadcn/ui components
-- Preconfigured `ThemeProvider`
-- Optional Theme toggle component included
+-   **Framework:** Next.js 14 (App Router)
+-   **Language:** TypeScript
+-   **Styling:** Tailwind CSS, CSS Variables
+-   **UI Library:** shadcn/ui (Radix Primitives)
+-   **Design:** Custom Material Design 3 implementation
 
-### Utility
-- `clsx` + `tailwind-merge` via shadcn’s `cn()` helper
-- `next-themes`
+## Getting Started
 
-### Structure
+### Prerequisites
 
-```text
-app/
-  layout.tsx
-  page.tsx
-  globals.css
-components/
-  ui/               # shadcn components
-  theme-toggle.tsx  # (optional)
-lib/
-  utils.ts          # cn() helper (class merging)
+-   Node.js (v18+)
+-   npm / yarn / pnpm
+
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/brain-byt-es/quant-hedge-fund.git
+    cd quant-hedge-fund
+    ```
+
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+
+3.  Run the development server:
+    ```bash
+    npm run dev
+    ```
+
+4.  Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Project Structure
+
+```
+src/
+├── app/                 # Next.js App Router pages
+│   ├── dashboard/       # Main overview
+│   ├── data/            # Data management
+│   ├── research/        # Strategy IDE
+│   └── live/            # Execution & Logs
+├── components/          # React components
+│   ├── dashboard/       # Dashboard-specific widgets
+│   ├── layout/          # App shell (Sidebar, Header)
+│   ├── ui/              # Shared UI primitives (Buttons, Inputs, etc.)
+│   └── ...
+└── lib/                 # Utilities and helpers
 ```
 
----
+## License
 
-## 🛠️ Getting Started
-
-### 1. Install dependencies
-
-```bash
-npm install
-# or
-yarn
-# or
-pnpm install
-```
-
-### 2. Run the dev server
-
-```bash
-npm run dev
-```
-
-App runs at:  
-👉 http://localhost:3000
-
----
-
-## 🎨 Theming (next-themes)
-
-This template includes a working setup of next-themes integrated with shadcn/ui.
-
-**ThemeProvider is placed in `app/layout.tsx`:**
-
-```tsx
-// app/layout.tsx
-import { ThemeProvider } from "@/components/theme-provider"
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-        </ThemeProvider>
-      </body>
-    </html>
-  )
-}
-```
-
-**Tailwind config includes `darkMode: "class"`:**
-
-```js
-// tailwind.config.js
-module.exports = {
-  darkMode: ["class"],
-  // ...
-}
-```
-
-**Optional: Theme toggle button**
-
-```tsx
-import { ThemeToggle } from "@/components/theme-toggle"
-
-<ThemeToggle />
-```
-
----
-
-## 📁 Project Structure
-
-```text
-.
-├── app/
-│   ├── layout.tsx
-│   ├── page.tsx
-│   └── globals.css
-├── components/
-│   ├── ui/                # shadcn components
-│   └── theme-toggle.tsx
-├── lib/
-│   └── utils.ts           # cn() helper
-├── public/
-├── tailwind.config.js
-├── tsconfig.json
-└── package.json
-```
-
----
-
-## 🧑‍💻 Development Tips
-
-**Add new shadcn components**
-
-```bash
-npx shadcn@latest add button
-```
-
-**Update shadcn components**
-
-```bash
-npx shadcn@latest update
-```
-
-**Check TypeScript issues**
-
-```bash
-npm run build
-```
-
----
-
-## 🚀 Deploying
-
-This template works perfectly on:
-
-- Vercel (recommended)
-- Netlify
-- Docker
-- Any Node.js environment
-
-**Vercel detects everything automatically—no configuration needed.**
-
----
-
-## 📚 Recommended Add-Ons (Optional)
-
-If you want to extend this template later:
-
-**Forms & Validation**
-- `react-hook-form`
-- `zod`
-- `@hookform/resolvers`
-
-**Data Fetching**
-- `@tanstack/react-query`
-
-**Auth**
-- `next-auth` (Auth.js)
-
-**Dev Tools**
-- `husky` + `lint-staged`
-- `vitest` for unit testing
-
----
-
-## 📝 License
-
-MIT — feel free to use this template for personal or commercial projects.
+[MIT](LICENSE)
