@@ -39,3 +39,42 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ============================================
+# Python & Data Science (Integrated)
+# ============================================
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+*.egg
+*.pkl
+*.pickle
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Data & Analytical DBs
+data/cache/
+data/bundles/
+data/outputs/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+# MLflow / Experiments
+mlruns/
+mlartifacts/
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+htmlcov/
