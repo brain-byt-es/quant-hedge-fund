@@ -70,6 +70,15 @@ export const api = {
   resumeSystem: async () => {
     const res = await fetch(`${API_BASE_URL}/live/resume`, { method: "POST" });
     return res.json();
+  },
+
+  configureBroker: async (active_broker: string) => {
+    const res = await fetch(`${API_BASE_URL}/live/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active_broker }),
+    });
+    return res.json();
   }
 };
 

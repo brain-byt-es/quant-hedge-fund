@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button"
 import { ExternalLink, Power, Play } from "lucide-react"
 import { useWebSocket } from "@/hooks/use-websocket"
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
 export default function DashboardPage() {
   const [dataStatus, setDataStatus] = useState<string>("checking...")
   const [liveStatus, setLiveStatus] = useState<any>(null)
@@ -57,25 +65,42 @@ export default function DashboardPage() {
       }
   }
 
+  const handleBrokerChange = async (value: string) => {
+      try {
+          await api.configureBroker(value);
+          setLiveStatus((prev: any) => ({ ...prev, active_broker: value }));
+      } catch (e) {
+          alert("Failed to switch broker. Check backend logs.");
+      }
+  }
+
   if (!mounted) return null
 
   // Derived Metrics from WS or Polling
   const latency = liveStatus?.latency_p50_ms ? `${liveStatus.latency_p50_ms.toFixed(1)}ms` : "--"
   const isHalted = liveStatus?.engine_halted || false
   const activeSymbols = liveStatus?.active_symbols?.length || 0
+  const activeBroker = liveStatus?.active_broker || "ALPACA"
   
-  // WS Data Parsing (Daily P&L)
-  // Assuming WS sends type="status" with pnl info, or we use poling fallback
-  const dailyPnL = liveStatus?.daily_pnl_usd || 0.0; // Fallback to polling if WS not ready
-  // Note: Backend needs to send daily_pnl in health status for this to work perfectly via polling
-  // or we parse wsData if it contains PnL. For now, let's use the structure we have.
+  // ... (rest of logic) ...
 
   return (
     <div className="flex flex-col gap-6 p-4">
       {/* Header with Admin Link */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-3 items-center">
+            {/* Broker Toggle */}
+            <Select value={activeBroker} onValueChange={handleBrokerChange}>
+                <SelectTrigger className="w-[140px] h-9 bg-background border-border/50">
+                    <SelectValue placeholder="Broker" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="ALPACA">Alpaca (Paper)</SelectItem>
+                    <SelectItem value="IBKR">IBKR (Live/Paper)</SelectItem>
+                </SelectContent>
+            </Select>
+
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isHalted ? "bg-red-500/10 border-red-500 text-red-500" : "bg-emerald-500/10 border-emerald-500 text-emerald-500"}`}>
                 <span className={`flex h-2 w-2 rounded-full ${isHalted ? "bg-red-500 animate-none" : "bg-emerald-500 animate-pulse"}`} />
                 <span className="text-sm font-medium">{isHalted ? "SYSTEM HALTED" : "SYSTEM NORMAL"}</span>
