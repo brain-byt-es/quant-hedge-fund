@@ -9,9 +9,10 @@ interface MetricCardProps {
   trend?: "up" | "down" | "neutral"
   trendValue?: string
   className?: string
+  isLive?: boolean
 }
 
-export function MetricCard({ title, value, subtext, trend, trendValue, className }: MetricCardProps) {
+export function MetricCard({ title, value, subtext, trend, trendValue, className, isLive }: MetricCardProps) {
   return (
     <Card className={cn("overflow-hidden", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -23,7 +24,7 @@ export function MetricCard({ title, value, subtext, trend, trendValue, className
         {trend === "neutral" && <Activity className="h-4 w-4 text-muted-foreground" />}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold font-mono tracking-tight">{value}</div>
+        <div className={cn("text-2xl font-bold font-mono tracking-tight", isLive && "animate-pulse text-emerald-400")}>{value}</div>
         {(subtext || trendValue) && (
           <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
             {trendValue && (

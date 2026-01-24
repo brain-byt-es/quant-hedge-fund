@@ -4,20 +4,20 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContai
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 const data = [
-  { time: "09:30", value: 100000 },
-  { time: "10:00", value: 100200 },
-  { time: "10:30", value: 100150 },
-  { time: "11:00", value: 100450 },
-  { time: "11:30", value: 100300 },
-  { time: "12:00", value: 100600 },
-  { time: "12:30", value: 100550 },
-  { time: "13:00", value: 100800 },
-  { time: "13:30", value: 100900 },
-  { time: "14:00", value: 100750 },
-  { time: "14:30", value: 101100 },
-  { time: "15:00", value: 101300 },
-  { time: "15:30", value: 101200 },
-  { time: "16:00", value: 101500 },
+  { time: "09:30", value: 100000, benchmark: 100000 },
+  { time: "10:00", value: 100200, benchmark: 100100 },
+  { time: "10:30", value: 100150, benchmark: 100120 },
+  { time: "11:00", value: 100450, benchmark: 100250 },
+  { time: "11:30", value: 100300, benchmark: 100300 },
+  { time: "12:00", value: 100600, benchmark: 100400 },
+  { time: "12:30", value: 100550, benchmark: 100350 },
+  { time: "13:00", value: 100800, benchmark: 100500 },
+  { time: "13:30", value: 100900, benchmark: 100600 },
+  { time: "14:00", value: 100750, benchmark: 100550 },
+  { time: "14:30", value: 101100, benchmark: 100700 },
+  { time: "15:00", value: 101300, benchmark: 100800 },
+  { time: "15:30", value: 101200, benchmark: 100750 },
+  { time: "16:00", value: 101500, benchmark: 100900 },
 ]
 
 export function PortfolioChart() {
@@ -26,7 +26,7 @@ export function PortfolioChart() {
       <CardHeader>
         <CardTitle>Portfolio Performance</CardTitle>
         <CardDescription>
-          Intraday Equity Curve (Live)
+          Strategy (Cyan) vs S&P 500 Benchmark (Green)
         </CardDescription>
       </CardHeader>
       <CardContent className="pl-2">
@@ -37,6 +37,10 @@ export function PortfolioChart() {
                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorBenchmark" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis 
@@ -61,9 +65,18 @@ export function PortfolioChart() {
                     borderRadius: '8px',
                     color: 'var(--card-foreground)'
                 }}
-                itemStyle={{ color: 'var(--primary)' }}
+                itemStyle={{ color: 'var(--foreground)' }}
               />
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
+              <Area 
+                type="monotone" 
+                dataKey="benchmark" 
+                stroke="#10b981" 
+                strokeWidth={2}
+                fillOpacity={1} 
+                fill="url(#colorBenchmark)" 
+                name="S&P 500"
+              />
               <Area 
                 type="monotone" 
                 dataKey="value" 
@@ -71,6 +84,7 @@ export function PortfolioChart() {
                 strokeWidth={2}
                 fillOpacity={1} 
                 fill="url(#colorValue)" 
+                name="Strategy"
               />
             </AreaChart>
           </ResponsiveContainer>

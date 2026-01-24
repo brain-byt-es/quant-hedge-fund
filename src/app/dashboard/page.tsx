@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
+import { TopHoldings } from "@/components/dashboard/top-holdings"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { ExternalLink } from "lucide-react"
@@ -38,75 +39,72 @@ export default function DashboardPage() {
   // Calculate some derived metrics if available
   const latency = liveStatus?.latency_p50_ms ? `${liveStatus.latency_p50_ms.toFixed(1)}ms` : "--"
   const backendHalted = liveStatus?.engine_halted ? "HALTED" : "RUNNING"
-  const backendHaltedTrend = liveStatus?.engine_halted ? "down" : "up"
-
+  
   return (
     <div className="flex flex-col gap-6 p-4">
       {/* Header with Admin Link */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
-        <Button variant="outline" className="gap-2" onClick={() => window.open('http://localhost:8501', '_blank')}>
-          <ExternalLink className="h-4 w-4" />
-          Open Admin Control Plane (Streamlit)
-        </Button>
+        <div className="flex gap-2">
+            <span className="flex h-2 w-2 translate-y-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-sm text-muted-foreground pt-1">System Normal</span>
+            <Button variant="outline" size="sm" className="ml-4 gap-2" onClick={() => window.open('http://localhost:8501', '_blank')}>
+            <ExternalLink className="h-4 w-4" />
+            Admin Cockpit
+            </Button>
+        </div>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="Data Engine"
-          value={dataStatus.toUpperCase()}
-          trend={dataStatus === "connected" ? "up" : "down"}
-          subtext="QS Connect"
+          title="Total P&L"
+          value=",245,302.50"
+          trend="up"
+          trendValue="+12.4%"
+          subtext="Inception to Date"
         />
         <MetricCard
-          title="Trading Engine"
-          value={backendHalted}
-          trend={backendHaltedTrend}
-          trendValue={liveStatus?.ib_connected ? "Connected" : "Disconnected"}
-          subtext="IBKR Gateway"
+          title="Daily P&L"
+          value="+2,450.00"
+          trend="up"
+          trendValue="+1.02%"
+          subtext="Real-time"
+          isLive={true}
         />
         <MetricCard
-          title="Execution Latency"
-          value={latency}
+          title="Risk Metrics"
+          value="2.45"
           trend="neutral"
-          subtext="P50 Order Latency"
+          subtext="Sharpe Ratio (Annualized)"
+          trendValue="DD: -4.2%"
         />
         <MetricCard
-          title="Active Symbols"
-          value={liveStatus?.active_symbols?.length?.toString() || "0"}
+          title="Live Model"
+          value="PROD-ALPHA-V4"
           trend="neutral"
-          subtext="Truth Layer Tracking"
+          subtext="Regime: Volatility Long"
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="col-span-4 lg:col-span-3">
+      {/* Main Content Area */}
+      <div className="grid gap-4 md:grid-cols-7 lg:grid-cols-7 h-[500px]">
+        <div className="col-span-4 lg:col-span-5 h-full">
              <PortfolioChart />
         </div>
         
-        <div className="col-span-4 lg:col-span-1 grid gap-4">
-            <MetricCard 
-                title="Market Status" 
-                value="OPEN" 
-                subtext="NYSE / NASDAQ" 
-                className="bg-sidebar/50"
-            />
-             {/* Iframe to Streamlit Micro-View? No, let's keep it clean for now. */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
-                <h3 className="font-semibold leading-none tracking-tight mb-4">Quick Actions</h3>
-                <div className="flex flex-col gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => window.open('http://localhost:8501', '_blank')}>
-                        Manage Risk Limits
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => window.open('http://localhost:8501', '_blank')}>
-                        View Audit Logs
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => window.open('http://localhost:8501', '_blank')}>
-                        Emergency Halt
-                    </Button>
-                </div>
-            </div>
+        <div className="col-span-4 lg:col-span-2 h-full">
+            <TopHoldings />
         </div>
+      </div>
+      
+      {/* Footer / Status Bar (Visual Only) */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div>Data Engine: {dataStatus.toUpperCase()}</div>
+        <div className="h-3 w-[1px] bg-border" />
+        <div>IBKR Gateway: {liveStatus?.ib_connected ? "CONNECTED" : "DISCONNECTED"}</div>
+        <div className="h-3 w-[1px] bg-border" />
+        <div>Execution Latency: {latency}</div>
       </div>
     </div>
   )
