@@ -88,6 +88,51 @@ class TradingApp:
             f"(paper={self.paper_trading})"
         )
     
+    def set_broker(self, broker_type: str) -> bool:
+        """
+        Dynamically switch the active broker.
+        """
+        settings = get_settings()
+        broker_type = broker_type.upper()
+        
+        if broker_type == self.broker_type and self.is_connected():
+            return True
+            
+        logger.info(f"Switching broker from {self.broker_type} to {broker_type}...")
+        
+        # Disconnect current
+        if self.is_connected():
+            self.disconnect()
+            
+        try:
+            if broker_type == "ALPACA":
+                from omega.broker.alpaca import AlpacaBroker
+                self.broker = AlpacaBroker(
+                    settings.alpaca_api_key, 
+                    settings.alpaca_secret_key, 
+                    settings.alpaca_paper
+                )
+            elif broker_type == "IBKR":
+                from omega.broker.ibkr import IBBroker
+                self.broker = IBBroker(self.host, self.port, self.client_id)
+            else:
+                logger.error(f"Unknown broker type: {broker_type}")
+                return False
+                
+            self.broker_type = broker_type
+            
+            # Connect new
+            if self.connect():
+                logger.info(f"Successfully switched to {broker_type}")
+                return True
+            else:
+                logger.error(f"Failed to connect to {broker_type}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Broker switch failed: {e}")
+            return False
+
     # =====================
     # Connection Management
     # =====================

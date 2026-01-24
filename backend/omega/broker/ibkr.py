@@ -85,14 +85,66 @@ class IBBroker(BaseBroker):
     def submit_order(self, symbol: str, quantity: int, side: str, order_type: str, price: float = None) -> Optional[Any]:
         if not self.is_connected(): return None
         try:
-            from ib_insync import Stock, MarketOrder, LimitOrder
+            from ib_insync import Stock, MarketOrder, LimitOrder, AlgoOrder
             contract = Stock(symbol, "SMART", "USD")
-            if order_type == "MKT":
-                order = MarketOrder(side, abs(quantity))
+            
+            order = None
+            action = side.upper()
+            qty = abs(quantity)
+            ot = order_type.upper()
+            
+            if ot == "MKT":
+                order = MarketOrder(action, qty)
+            elif ot == "ADAPTIVE":
+                # Adaptive Algo
+                # Note: Adaptive requires a price (usually current market or limit)
+                # If price is None, we can't really do a Limit Adaptive safely without more context
+                # For safety, if no price, default to MKT or fail? 
+                # Let's assume price is provided or we use MKT Adaptive if supported (it is usually Limit)
+                if price:
+                    order = LimitOrder(action, qty, price)
+                    order.algoStrategy = "Adaptive"
+                    order.algoParams = [("adaptivePriority", "Normal")]
+                else:
+                    # Fallback to Market Adaptive? Or just Market.
+                    # IBKR Adaptive usually works best as Limit.
+                    order = MarketOrder(action, qty) 
+                    order.algoStrategy = "Adaptive"
+                    order.algoParams = [("adaptivePriority", "Normal")]
+            elif ot == "VWAP":
+                # VWAP Algo
+                order = AlgoOrder(
+                    action=action, 
+                    totalQuantity=qty, 
+                    algoStrategy="Vwap",
+                    algoParams=[
+                        ("startTime", ""), # Now
+                        ("endTime", ""), # Market Close
+                        ("maxPctVol", 0.05), # Max 5% of volume
+                        ("noTakeLiq", False)
+                    ]
+                )
+            elif ot == "TWAP":
+                # TWAP Algo
+                order = AlgoOrder(
+                    action=action, 
+                    totalQuantity=qty, 
+                    algoStrategy="Twap",
+                    algoParams=[
+                        ("startTime", ""), 
+                        ("endTime", ""),
+                        ("strategyType", "Marketable")
+                    ]
+                )
             else:
-                order = LimitOrder(side, abs(quantity), price)
+                # Default Limit or Market
+                if price:
+                    order = LimitOrder(action, qty, price)
+                else:
+                    order = MarketOrder(action, qty)
             
             trade = self._ib.placeOrder(contract, order)
+            logger.info(f"IBKR Order Submitted: {ot} {action} {qty} {symbol}")
             return trade
         except Exception as e:
             logger.error(f"IB Order Error: {e}")

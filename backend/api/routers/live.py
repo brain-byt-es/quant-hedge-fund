@@ -21,10 +21,26 @@ class OrderRequest(BaseModel):
     side: str
     order_type: str = "MKT"
 
+class BrokerConfigRequest(BaseModel):
+    active_broker: str
+
 @router.get("/status")
 def get_live_status():
     app = get_omega_app()
-    return app.get_health_status()
+    status = app.get_health_status()
+    # Augment with broker info
+    status["active_broker"] = app.broker_type
+    return status
+
+@router.post("/config")
+def configure_live_ops(config: BrokerConfigRequest):
+    """Configure live operations (e.g. switch broker)."""
+    app = get_omega_app()
+    success = app.set_broker(config.active_broker)
+    if success:
+        return {"status": "updated", "active_broker": app.broker_type}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to switch broker")
 
 @router.get("/positions")
 def get_positions():
