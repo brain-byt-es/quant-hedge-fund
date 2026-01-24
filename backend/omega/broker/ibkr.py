@@ -12,6 +12,9 @@ class IBBroker(BaseBroker):
         
     def connect(self) -> bool:
         try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            
             from ib_insync import IB
             if self._ib is None:
                 try:
