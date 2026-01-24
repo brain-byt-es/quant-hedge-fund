@@ -32,7 +32,11 @@ export function ProcessMonitor() {
           // 1. Trigger Download
           setSteps(s => s.map(step => step.name.includes("Downloading") ? { ...step, status: "running", progress: 50 } : step));
           
-          await api.triggerIngestion({ start_date: "2023-01-01" });
+          // Use specific symbols to avoid FMP Free Tier "Bulk" limits (403 Forbidden)
+          await api.triggerIngestion({ 
+              start_date: "2023-01-01",
+              symbols: ["AAPL", "MSFT", "SPY", "NVDA", "TSLA"] 
+          });
           
           // Since API is fire-and-forget background task, we optimistically show "Started"
           // In a real app, we'd poll a task ID. For now, we simulate completion of the *request*.

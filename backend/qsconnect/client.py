@@ -66,8 +66,8 @@ class Client:
         self._cache_dir = cache_dir or settings.cache_dir
         
         # Validate API keys
-        if not self._fmp_api_key:
-            logger.warning("FMP API key not set. Some features will be unavailable.")
+        if not self._fmp_api_key or "your_fmp_api_key" in self._fmp_api_key:
+            logger.critical("FMP API key is missing or set to default! Data ingestion will FAIL. Update .env with a valid key.")
         
         # Initialize sub-clients
         self._fmp_client = FMPClient(api_key=self._fmp_api_key)

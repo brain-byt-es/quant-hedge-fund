@@ -157,8 +157,8 @@ class FMPClient(BaseAPIClient):
         
         all_data = []
         
-        # Process in batches of 5 symbols per request
-        batch_size = 5
+        # Process in batches of 1 symbol per request (Free Tier friendly)
+        batch_size = 1
         for i in tqdm(range(0, len(symbols), batch_size), desc="Downloading prices"):
             batch = symbols[i : i + batch_size]
             symbols_str = ",".join(batch)
