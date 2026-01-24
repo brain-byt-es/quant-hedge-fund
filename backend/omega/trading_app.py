@@ -390,6 +390,18 @@ class TradingApp:
         account_info = self.get_account_info()
         asset_class = self.registry.get_asset_class(symbol)
 
+        # Calculate Real-Time Daily P&L for Risk Check
+        current_pnl = 0.0
+        if self.metrics["daily_pnl_initial_value"]:
+             current_pnl = portfolio_value - self.metrics["daily_pnl_initial_value"]
+
+        # Liquidity Check (Spread)
+        quote = self.get_quote(symbol)
+        is_liquid, spread_msg = self.risk_manager.validate_spread(symbol, quote["bid"], quote["ask"])
+        if not is_liquid:
+             logger.error(f"RISK REJECTED: Liquidity check failed for {symbol}: {spread_msg}")
+             return False
+
         is_valid, reason = self.risk_manager.validate_order(
             symbol=symbol,
             asset_class=asset_class,
@@ -398,13 +410,49 @@ class TradingApp:
             price=current_price,
             portfolio_value=portfolio_value,
             current_positions=current_positions,
-            account_info=account_info
+            account_info=account_info,
+            current_daily_pnl=current_pnl
         )
 
         if not is_valid:
             logger.error(f"RISK REJECTED: {reason}")
+            # If it was a circuit breaker rejection, auto-halt the system
+            if "CIRCUIT BREAKER" in reason:
+                self.halt()
             return False
 
+        return True
+
+    def check_global_risk(self) -> bool:
+        """
+        Periodic Global Risk Check (Circuit Breaker).
+        Should be called by the scheduler or heartbeat loop.
+        
+        Returns:
+            True if system is healthy, False if HALTED.
+        """
+        if self._halted: 
+            return False
+
+        # 1. Check P&L Circuit Breaker
+        portfolio_value = self.get_portfolio_value()
+        
+        # Initialize daily PnL reference if not set (first run of the day)
+        if self.metrics["daily_pnl_initial_value"] is None:
+            self.metrics["daily_pnl_initial_value"] = portfolio_value
+            logger.info(f"Risk Engine: Initialized Daily P&L Reference at ${portfolio_value:,.2f}")
+            return True
+
+        current_pnl = portfolio_value - self.metrics["daily_pnl_initial_value"]
+        
+        should_halt, msg = self.risk_manager.check_daily_loss(current_pnl)
+        
+        if should_halt:
+            logger.critical(f"GLOBAL RISK ALERT: {msg}")
+            self.halt()
+            # Optional: self.flatten_all_positions() if configured for hard stops
+            return False
+            
         return True
     
     def order_target_percent(

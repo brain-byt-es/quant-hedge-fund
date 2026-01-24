@@ -28,6 +28,34 @@ class RiskManager:
             logger.error(f"Failed to load risk limits from {self.limits_path}: {e}")
             self.limits = {}
 
+    def validate_spread(self, symbol: str, bid: float, ask: float) -> (bool, str):
+        """
+        Check if the bid-ask spread is within acceptable limits (Liquidity Check).
+        """
+        if bid <= 0 or ask <= 0:
+            return False, "Invalid quote (bid/ask <= 0)"
+            
+        spread_pct = (ask - bid) / ((ask + bid) / 2)
+        max_spread = self.limits.get("GLOBAL_LIMITS", {}).get("max_spread_pct", 0.02) # Default 2%
+        
+        if spread_pct > max_spread:
+            return False, f"Spread {spread_pct:.2%} exceeds limit {max_spread:.2%}"
+            
+        return True, "Spread OK"
+
+    def check_daily_loss(self, current_pnl: float) -> (bool, str):
+        """
+        Check if the daily P&L has breached the maximum loss limit.
+        Returns (True, msg) if circuit breaker should trigger (HALT).
+        """
+        daily_loss_limit = self.limits.get("GLOBAL_LIMITS", {}).get("daily_loss_limit_usd", 5000.0)
+        
+        # Note: Limit is positive (e.g. 5000), PnL is negative (e.g. -5500)
+        if current_pnl < -abs(daily_loss_limit):
+            return True, f"Daily P&L {current_pnl:.2f} exceeds loss limit -{abs(daily_loss_limit):.2f}"
+            
+        return False, "P&L OK"
+
     def validate_order(
         self, 
         symbol: str, 
@@ -37,7 +65,8 @@ class RiskManager:
         price: float, 
         portfolio_value: float,
         current_positions: List[Dict[str, Any]],
-        account_info: Dict[str, Any]
+        account_info: Dict[str, Any],
+        current_daily_pnl: float = 0.0 # Added parameter
     ) -> (bool, str):
         """
         Comprehensive pre-trade check.
@@ -60,11 +89,10 @@ class RiskManager:
         if asset_class not in allowed_classes:
             return False, f"Execution not allowed for asset class: {asset_class}"
 
-        # 2. Daily Loss Limit (Placeholder for real PnL tracking)
-        # In production, this would query the DB for today's realized/unrealized PnL
-        daily_loss_limit = self.limits.get("GLOBAL_LIMITS", {}).get("daily_loss_limit_usd", 0)
-        # current_drawdown = ... (query DB)
-        # if current_drawdown > daily_loss_limit: return False, "Daily loss limit exceeded"
+        # 2. Daily Loss Limit (Circuit Breaker Check)
+        should_halt, msg = self.check_daily_loss(current_daily_pnl)
+        if should_halt:
+            return False, f"CIRCUIT BREAKER: {msg}"
 
         # 3. Individual Symbol Exposure
         symbol_limit_pct = self.limits.get("GLOBAL_LIMITS", {}).get("max_symbol_exposure_pct", 0.1)

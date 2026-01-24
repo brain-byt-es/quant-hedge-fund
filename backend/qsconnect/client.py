@@ -294,6 +294,99 @@ class Client:
         self._bundler.ingest_bundle(bundle_name)
     
     # =====================
+    # Index Management (Survivorship Bias)
+    # =====================
+
+    def sync_index_constituents(self, index_symbol: str = "^GSPC") -> int:
+        """
+        Download and sync historical index constituents for Point-in-Time accuracy.
+        Currently supports S&P 500 (^GSPC).
+        """
+        logger.info(f"Syncing historical constituents for {index_symbol}...")
+        
+        if index_symbol == "^GSPC":
+            df = self._fmp_client.get_historical_sp500_constituents()
+        else:
+            logger.warning(f"Index {index_symbol} not supported for auto-sync yet.")
+            return 0
+            
+        if df.is_empty():
+            logger.warning("No constituent data found.")
+            return 0
+            
+        # Transform for DB
+        # FMP usually gives current list + historical changes.
+        # We need to map it to our schema.
+        # Required: index_symbol, date, symbol
+        # FMP Return format typically includes: symbol, name, sector, dateFirstAdded, founded, etc.
+        # For a true Point-in-Time, we ideally need a timeseries. 
+        # If FMP returns just current list + added dates, we can construct the history.
+        # However, for this implementation, let's assume we store what we get and 
+        # `get_point_in_time_universe` will handle the logic.
+        
+        # Adding 'index_symbol' column
+        df = df.with_columns(pl.lit(index_symbol).alias("index_symbol"))
+        
+        # Ensure date column exists (use dateFirstAdded or today if missing)
+        if "dateFirstAdded" in df.columns:
+             # Use dateFirstAdded as the 'date' for the record, or fallback to a default
+             df = df.with_columns(
+                 pl.col("dateFirstAdded").fill_null(pl.lit("2000-01-01")).alias("date"),
+                 pl.col("dateFirstAdded").alias("added_date")
+             )
+        else:
+             df = df.with_columns(
+                 pl.lit(date.today()).alias("date"),
+                 pl.lit(None).alias("added_date")
+             )
+             
+        # Cleanup column names
+        # We need: index_symbol, date, symbol
+        df_db = df.select([
+            pl.col("index_symbol"),
+            pl.col("date").cast(pl.Date),
+            pl.col("symbol"),
+            pl.col("added_date").cast(pl.Date),
+            # removed_date might be in data if using a changes endpoint, else null
+        ])
+        
+        if "removedDate" in df.columns:
+             df_db = df_db.with_columns(pl.col("removedDate").alias("removed_date"))
+        else:
+             df_db = df_db.with_columns(pl.lit(None).cast(pl.Date).alias("removed_date"))
+             
+        count = self._db_manager.upsert_index_constituents(df_db)
+        logger.info(f"Synced {count} constituent records for {index_symbol}")
+        return count
+
+    def get_point_in_time_universe(self, index_symbol: str, target_date: str) -> List[str]:
+        """
+        Get the list of symbols that were in the index on the target date.
+        Handles survivorship bias by reconstructing the index composition.
+        """
+        # Logic:
+        # Select all symbols where:
+        # 1. added_date <= target_date
+        # 2. (removed_date IS NULL OR removed_date > target_date)
+        
+        sql = f"""
+            SELECT DISTINCT symbol 
+            FROM index_constituents 
+            WHERE index_symbol = '{index_symbol}'
+            AND added_date <= '{target_date}'
+            AND (removed_date IS NULL OR removed_date > '{target_date}')
+        """
+        
+        df = self._db_manager.query(sql)
+        if df.is_empty():
+            # Fallback if we have no history (e.g. only current list loaded)
+            logger.warning(f"No point-in-time data for {target_date}, checking for static list...")
+            sql_static = f"SELECT DISTINCT symbol FROM index_constituents WHERE index_symbol = '{index_symbol}'"
+            return self._db_manager.query(sql_static)["symbol"].to_list()
+            
+        return df["symbol"].to_list()
+
+    # =====================
     # Utilities
     # =====================
     

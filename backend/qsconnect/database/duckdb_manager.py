@@ -266,6 +266,20 @@ class DuckDBManager:
                 PRIMARY KEY (symbol, timestamp)
             )
         """)
+
+        # Point-in-Time Index Constituents (Survivorship Bias Mitigation)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS index_constituents (
+                index_symbol VARCHAR,
+                date DATE,
+                symbol VARCHAR,
+                weight DOUBLE,
+                added_date DATE,
+                removed_date DATE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (index_symbol, date, symbol)
+            )
+        """)
         
         # Migration: Add columns if they don't exist (DuckDB doesn't have native IF NOT EXISTS for columns yet)
         try:
@@ -281,6 +295,7 @@ class DuckDBManager:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_time ON trades(execution_time)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_strat ON trades(strategy_hash)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_strategy_audit_stage ON strategy_audit_log(stage)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_index_constituents ON index_constituents(index_symbol, date)")
         
         logger.info("Database schema initialized with Governance and Execution logs")
     
@@ -448,6 +463,117 @@ class DuckDBManager:
         conn.unregister("temp_stocks")
         logger.info(f"Upserted {len(df)} stock records")
         return len(df)
+
+    def upsert_index_constituents(self, df: pl.DataFrame) -> int:
+        """
+        Upsert historical index constituents.
+        Expected schema: index_symbol, date, symbol, [weight, added_date, removed_date]
+        """
+        if df.is_empty():
+            return 0
+            
+        conn = self.connect()
+        conn.register("temp_constituents", df)
+        
+        # Ensure we have required columns
+        req_cols = ["index_symbol", "date", "symbol"]
+        if not all(col in df.columns for col in req_cols):
+             logger.error("upsert_index_constituents: Missing required columns")
+             return 0
+        
+        # Optional columns handling
+        cols = ["index_symbol", "date", "symbol"]
+        select_cols = ["index_symbol", "date", "symbol"]
+        
+        if "weight" in df.columns: 
+            cols.append("weight")
+            select_cols.append("weight")
+        else:
+            cols.append("weight")
+            select_cols.append("NULL")
+
+        if "addedDate" in df.columns:
+            cols.append("added_date")
+            select_cols.append("addedDate")
+        elif "added_date" in df.columns:
+            cols.append("added_date")
+            select_cols.append("added_date")
+        else:
+             cols.append("added_date")
+             select_cols.append("NULL")
+
+        if "removedDate" in df.columns:
+            cols.append("removed_date")
+            select_cols.append("removedDate")
+        elif "removed_date" in df.columns:
+            cols.append("removed_date")
+            select_cols.append("removed_date")
+        else:
+            cols.append("removed_date")
+            select_cols.append("NULL")
+
+        cols_str = ", ".join(cols)
+        select_str = ", ".join(select_cols)
+
+        conn.execute(f"""
+            INSERT OR REPLACE INTO index_constituents ({cols_str})
+            SELECT {select_str} FROM temp_constituents
+        """)
+        
+        conn.unregister("temp_constituents")
+        logger.info(f"Upserted {len(df)} index constituent records")
+        return len(df)
+
+    def check_data_quality(self, symbols: Optional[List[str]] = None) -> pl.DataFrame:
+        """
+        Run integrity checks on price data.
+        1. Gap Detection: Finds gaps > 4 days (likely missing data).
+        2. Spike Detection: Finds daily moves > 50% (potential unadjusted splits).
+        
+        Returns:
+            DataFrame with columns [symbol, issue_type, date, details]
+        """
+        symbol_filter = ""
+        if symbols:
+            sanitized = [s.replace("'", "") for s in symbols]
+            s_str = ",".join([f"'{s}'" for s in sanitized])
+            symbol_filter = f"WHERE symbol IN ({s_str})"
+            
+        # 1. Spike Detection Query
+        spike_sql = f"""
+            SELECT 
+                symbol, 
+                'SPIKE_OR_SPLIT' as issue_type,
+                date,
+                concat('Daily change: ', round(change_percent, 2), '%') as details
+            FROM prices
+            {symbol_filter}
+            AND abs(change_percent) > 50
+        """
+        
+        # 2. Gap Detection Query (using window functions)
+        # Note: We need a subquery to calculate lag first
+        gap_sql = f"""
+            WITH lagged AS (
+                SELECT 
+                    symbol, 
+                    date, 
+                    LEAD(date) OVER (PARTITION BY symbol ORDER BY date) as next_date
+                FROM prices
+                {symbol_filter}
+            )
+            SELECT
+                symbol,
+                'DATA_GAP' as issue_type,
+                date,
+                concat('Gap of ', date_diff('day', date, next_date), ' days until ', next_date) as details
+            FROM lagged
+            WHERE date_diff('day', date, next_date) > 4
+        """
+        
+        sql = f"{spike_sql} UNION ALL {gap_sql} ORDER BY symbol, date"
+        
+        return self.query(sql)
     
     # =====================
     # Data Retrieval

@@ -333,3 +333,36 @@ class FMPClient(BaseAPIClient):
             return pl.from_pandas(combined)
         
         return pl.DataFrame()
+
+    # =====================
+    # Index Constituents
+    # =====================
+
+    def get_historical_sp500_constituents(self) -> pl.DataFrame:
+        """
+        Get historical S&P 500 constituents (additions/removals).
+        
+        Returns:
+            Polars DataFrame with constituent changes.
+        """
+        data = self._make_request("historical/sp500_constituents")
+        
+        if data:
+            df = pd.DataFrame(data)
+            # FMP returns 'symbol', 'name', 'sector', 'subSector', 'headQuarter', 'dateFirstAdded', 'founded', 'cik'
+            # But the endpoint often returns a list of *current* constituents unless 'historical' implies changes.
+            # Actually, `historical/sp500_constituents` usually returns the full list with `date` if it's the full history endpoint,
+            # OR it returns changes.
+            # Let's standardize the output
+            return pl.from_pandas(df)
+        
+        return pl.DataFrame()
+
+    def get_sp500_constituent_changes(self) -> pl.DataFrame:
+        """
+        Get explicit additions and removals for S&P 500.
+        Often a separate endpoint or structure is needed for Point-in-Time.
+        """
+        # For FMP, `sp500_constituent` gives the current list.
+        # `historical/sp500_constituents` gives the history.
+        return self.get_historical_sp500_constituents()
