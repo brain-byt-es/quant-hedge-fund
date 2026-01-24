@@ -4,10 +4,16 @@ from loguru import logger
 from .base import BaseBroker
 
 class AlpacaBroker(BaseBroker):
-    def __init__(self, api_key: str, secret_key: str, paper: bool = True):
+    def __init__(self, api_key: str, secret_key: str, paper: bool = True, base_url: str = ""):
         self.api_key = api_key
         self.secret_key = secret_key
-        self.base_url = "https://paper-api.alpaca.markets" if paper else "https://api.alpaca.markets"
+        
+        # Priority: 1. Manual Base URL from .env, 2. Logic based on paper flag
+        if base_url:
+            self.base_url = base_url
+        else:
+            self.base_url = "https://paper-api.alpaca.markets" if paper else "https://api.alpaca.markets"
+            
         self._api = None
         self._connected = False
         

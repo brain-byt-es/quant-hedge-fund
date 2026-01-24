@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     alpaca_api_key: str = Field(default="", description="Alpaca API Key")
     alpaca_secret_key: str = Field(default="", description="Alpaca Secret Key")
     alpaca_paper: bool = Field(default=True, description="Use Alpaca Paper Trading")
+    alpaca_base_url: str = Field(default="", description="Alpaca Base API URL")
 
     # Interactive Brokers
     ib_host: str = Field(default="127.0.0.1", description="IB Gateway host")

@@ -110,7 +110,8 @@ class TradingApp:
                 self.broker = AlpacaBroker(
                     settings.alpaca_api_key, 
                     settings.alpaca_secret_key, 
-                    settings.alpaca_paper
+                    settings.alpaca_paper,
+                    settings.alpaca_base_url
                 )
             elif broker_type == "IBKR":
                 from omega.broker.ibkr import IBBroker
