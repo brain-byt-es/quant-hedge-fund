@@ -475,7 +475,7 @@ class TradingApp:
         self,
         symbol: str,
         target_percent: float,
-        order_type: str = "ADAPTIVE",  # Changed from MKT for safety
+        order_type: str = "ADAPTIVE",
     ) -> Optional[Any]:
         """
         Place order to reach target portfolio percentage.
@@ -483,11 +483,6 @@ class TradingApp:
         if not self.is_connected():
             if not self.connect():
                 return None
-        
-        if self._ib is None:
-            return None
-        
-        from ib_insync import MarketOrder, LimitOrder, AlgoOrder
         
         # Get portfolio value
         portfolio_value = self.get_portfolio_value()
@@ -503,24 +498,14 @@ class TradingApp:
         # Configurable minimum order threshold (default $100)
         min_order_threshold = getattr(get_settings(), 'min_order_threshold', 100)
         if abs(diff_value) < min_order_threshold:
-            logger.info(f"Skipping {symbol}: difference too small (${diff_value:.2f}, threshold: ${min_order_threshold})")
+            logger.info(f"Skipping {symbol}: difference too small (${diff_value:.2f})")
             return None
         
-        # Get current price for share calculation
-        contract = self.create_contract(symbol)
-        ticker = self._ib.reqMktData(contract, snapshot=True)
+        # Get current price
+        quote = self.get_quote(symbol)
+        current_price = quote.get("last", 0.0) or quote.get("ask", 0.0) # Fallback
         
-        # Event-driven wait with timeout
-        max_wait = 2.0 
-        waited = 0.0
-        while ticker.marketPrice() is None and waited < max_wait:
-            self._ib.sleep(0.1)
-            waited += 0.1
-        
-        current_price = ticker.marketPrice()
-        self._ib.cancelMktData(contract)
-        
-        if not current_price or current_price <= 0:
+        if current_price <= 0:
             logger.warning(f"Could not get price for {symbol}")
             return None
         
@@ -528,7 +513,6 @@ class TradingApp:
         shares = int(diff_value / current_price)
         
         if shares == 0:
-            logger.info(f"Skipping {symbol}: calculated 0 shares")
             return None
         
         # Determine order action
@@ -542,58 +526,12 @@ class TradingApp:
         if not self._validate_risk(symbol, shares, current_price, action):
             return None
             
-        # Create order
-        if order_type.upper() == "MKT":
-            logger.warning(f"Using MKT order for {symbol} - consider ADAPTIVE for production")
-            order = MarketOrder(action, shares)
-        elif order_type.upper() == "ADAPTIVE":
-            order = LimitOrder(action, shares, current_price)
-            order.algoStrategy = "Adaptive"
-            order.algoParams = [("adaptivePriority", "Normal")]
-        elif order_type.upper() == "VWAP":
-            # IBKR VWAP Algo
-            order = AlgoOrder(
-                action=action, 
-                totalQuantity=shares, 
-                algoStrategy="Vwap",
-                algoParams=[
-                    ("startTime", ""), # Now
-                    ("endTime", ""), # Market Close
-                    ("maxPctVol", 0.05), # Max 5% of volume
-                    ("noTakeLiq", False)
-                ]
-            )
-        elif order_type.upper() == "TWAP":
-            # IBKR TWAP Algo
-            order = AlgoOrder(
-                action=action, 
-                totalQuantity=shares, 
-                algoStrategy="Twap",
-                algoParams=[
-                    ("startTime", ""), 
-                    ("endTime", ""),
-                    ("strategyType", "Marketable")
-                ]
-            )
-        else:
-            order = LimitOrder(action, shares, current_price)
-        
-        # Submit order
-        trade = self._ib.placeOrder(contract, order)
-        
-        # Hook fill event for logging
-        def onFill(trade, fill):
-            self._log_trade(trade)
-            
-        trade.fillEvent += onFill
+        # Submit via Broker Adapter
+        trade = self.broker.submit_order(symbol, shares, action, order_type, current_price)
         
         # Telemetry
         latency = (time.time() - start_time) * 1000
-
         self.metrics["order_latencies"].append(latency)
-        self.metrics["last_order_time"] = datetime.now()
-        
-        logger.info(f"Placed {order_type} {action} order for {shares} shares of {symbol} (Latency: {latency:.2f}ms)")
         
         return trade
     

@@ -50,6 +50,9 @@ prefect>=3.0.0
 # Interactive Brokers
 ib-insync>=0.9.86
 
+# Alpaca Trading
+alpaca-trade-api>=3.0.0
+
 # Utilities
 tqdm>=4.66.0
 pyarrow>=14.0.0

@@ -61,8 +61,16 @@ class Settings(BaseSettings):
     )
     
     # ===================
-    # Interactive Brokers
+    # Broker Settings
     # ===================
+    active_broker: str = Field(default="IBKR", description="Active broker: 'IBKR' or 'ALPACA'")
+    
+    # Alpaca
+    alpaca_api_key: str = Field(default="", description="Alpaca API Key")
+    alpaca_secret_key: str = Field(default="", description="Alpaca Secret Key")
+    alpaca_paper: bool = Field(default=True, description="Use Alpaca Paper Trading")
+
+    # Interactive Brokers
     ib_host: str = Field(default="127.0.0.1", description="IB Gateway host")
     ib_port: int = Field(default=7497, description="IB Gateway port")
     ib_client_id: int = Field(default=1, description="IB client ID")
