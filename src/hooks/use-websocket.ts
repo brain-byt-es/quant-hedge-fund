@@ -9,18 +9,24 @@ export function useWebSocket<T>(endpoint: string) {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    setStatus('connecting');
+    let ws: WebSocket | null = null;
     
-    // Connect
-    const ws = connectWebSocket(endpoint, (message) => {
-      setData(message);
-    });
+    // Defer setting status to avoid cascading render warning
+    Promise.resolve().then(() => setStatus('connecting'));
 
-    ws.onopen = () => setStatus('connected');
-    ws.onclose = () => setStatus('disconnected');
-    ws.onerror = () => setStatus('error');
+    const connect = () => {
+        ws = connectWebSocket(endpoint, (message) => {
+          setData(message as T);
+        });
 
-    wsRef.current = ws;
+        ws.onopen = () => setStatus('connected');
+        ws.onclose = () => setStatus('disconnected');
+        ws.onerror = () => setStatus('error');
+
+        wsRef.current = ws;
+    };
+
+    connect();
 
     return () => {
       if (wsRef.current) {

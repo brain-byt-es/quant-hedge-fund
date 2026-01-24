@@ -6,7 +6,7 @@ import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import { ExternalLink, Power, Play } from "lucide-react"
+import { Power, Play } from "lucide-react"
 import { useWebSocket } from "@/hooks/use-websocket"
 
 import {
@@ -17,19 +17,32 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+interface LiveStatus {
+  latency_p50_ms?: number;
+  engine_halted?: boolean;
+  active_symbols?: string[];
+  daily_pnl_usd?: number;
+  portfolio_var_95_usd?: number;
+  portfolio_es_95_usd?: number;
+  active_broker?: string;
+  ib_connected?: boolean;
+}
+
 export default function DashboardPage() {
   const [dataStatus, setDataStatus] = useState<string>("checking...")
-  const [liveStatus, setLiveStatus] = useState<any>(null)
+  const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null)
   const [mounted, setMounted] = useState(false)
 
   // Real-time WebSocket Feed
-  const { data: wsData, status: wsStatus } = useWebSocket<{
+  const { status: wsStatus } = useWebSocket<{
     type: string;
-    data: any;
+    data: unknown;
   }>("/live/ws/ticks");
 
   useEffect(() => {
-    setMounted(true)
+    // Avoid cascading render warning
+    Promise.resolve().then(() => setMounted(true));
+    
     const fetchData = async () => {
       try {
         const dStatus = await api.getIngestionStatus()
@@ -40,7 +53,7 @@ export default function DashboardPage() {
       } catch (e) {
         console.error("Failed to fetch dashboard data", e)
         setDataStatus("offline")
-        setLiveStatus({ error: "offline" })
+        setLiveStatus({ ib_connected: false, engine_halted: false })
       }
     }
     fetchData()
@@ -54,22 +67,22 @@ export default function DashboardPage() {
       if (confirm("EMERGENCY HALT: Stop all trading?")) {
           await api.haltSystem();
           // Optimistic update
-          setLiveStatus((prev: any) => ({ ...prev, engine_halted: true }));
+          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, engine_halted: true }));
       }
   }
 
   const handleResume = async () => {
       if (confirm("Resume trading operations?")) {
           await api.resumeSystem();
-          setLiveStatus((prev: any) => ({ ...prev, engine_halted: false }));
+          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, engine_halted: false }));
       }
   }
 
   const handleBrokerChange = async (value: string) => {
       try {
           await api.configureBroker(value);
-          setLiveStatus((prev: any) => ({ ...prev, active_broker: value }));
-      } catch (e) {
+          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, active_broker: value }));
+      } catch {
           alert("Failed to switch broker. Check backend logs.");
       }
   }
@@ -82,7 +95,8 @@ export default function DashboardPage() {
   const activeSymbols = liveStatus?.active_symbols?.length || 0
   const activeBroker = liveStatus?.active_broker || "ALPACA"
   
-  // ... (rest of logic) ...
+  // WS Data Parsing (Daily P&L)
+  const dailyPnL = liveStatus?.daily_pnl_usd || 0.0;
 
   return (
     <div className="flex flex-col gap-6 p-4">

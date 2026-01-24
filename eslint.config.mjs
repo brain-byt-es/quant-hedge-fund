@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Custom ignores for QuantHedgeFund
+    "backend/**",
+    "data/**",
+    "logs/**",
+    "mlruns/**",
+    "mlartifacts/**",
   ]),
 ]);
 

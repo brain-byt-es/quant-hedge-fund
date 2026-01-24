@@ -1,7 +1,6 @@
 import { StrategyForm } from "@/components/research/strategy-form"
 import { CodeEditor } from "@/components/research/code-editor"
 import { ResultsView } from "@/components/research/results-view"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
 export default function ResearchPage() {
   return (

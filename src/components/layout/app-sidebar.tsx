@@ -7,7 +7,6 @@ import {
   FlaskConical,
   Zap,
   Settings,
-  LogOut,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -21,13 +20,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  useSidebar,
 } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
-  const { toggleSidebar, state } = useSidebar()
 
   const navItems = [
     {

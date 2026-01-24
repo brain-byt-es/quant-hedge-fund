@@ -1,9 +1,34 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/api";
 
+export interface IngestionParams {
+  start_date: string;
+  end_date?: string;
+  symbols?: string[];
+}
+
+export interface BacktestParams {
+  bundle_name?: string;
+  start_date: string;
+  end_date: string;
+  capital_base?: number;
+  experiment_name?: string;
+  algorithm?: Record<string, unknown>;
+  preprocessing?: Record<string, unknown>[];
+  factors?: Record<string, unknown>[];
+}
+
+export interface OrderParams {
+  symbol: string;
+  quantity: number;
+  side: 'BUY' | 'SELL';
+  order_type?: string;
+  limit_price?: number;
+}
+
 export const api = {
   // Data Layer
-  triggerIngestion: async (params: any = {}) => {
+  triggerIngestion: async (params: IngestionParams = { start_date: "2020-01-01" }) => {
     const res = await fetch(`${API_BASE_URL}/data/ingest`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -23,7 +48,7 @@ export const api = {
   },
   
   // Research Layer
-  runBacktest: async (params: any) => {
+  runBacktest: async (params: BacktestParams) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,7 +78,7 @@ export const api = {
     return res.json();
   },
   
-  submitOrder: async (order: any) => {
+  submitOrder: async (order: OrderParams) => {
     const res = await fetch(`${API_BASE_URL}/live/order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,7 +107,7 @@ export const api = {
   }
 };
 
-export const connectWebSocket = (endpoint: string, onMessage: (data: any) => void) => {
+export const connectWebSocket = (endpoint: string, onMessage: (data: unknown) => void) => {
     // endpoint should be absolute or relative to WS_BASE_URL
     // e.g., "/live/ws/ticks"
     const url = endpoint.startsWith("ws") ? endpoint : `${WS_BASE_URL}${endpoint}`;
