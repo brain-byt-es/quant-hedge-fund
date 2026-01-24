@@ -1,8 +1,8 @@
-const API_BASE_URL = "http://localhost:8000/api";
-const WS_BASE_URL = "ws://localhost:8000/api"; // Note: FastAPI router prefix might affect WS path depending on mount
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/api";
 
 export const api = {
-  // Data Ingestion
+  // Data Layer
   triggerIngestion: async (params: any = {}) => {
     const res = await fetch(`${API_BASE_URL}/data/ingest`, { 
         method: "POST",
@@ -16,8 +16,13 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}/data/status`);
     return res.json();
   },
+
+  getLatestPrices: async (limit: number = 100) => {
+    const res = await fetch(`${API_BASE_URL}/data/prices/latest?limit=${limit}`);
+    return res.json();
+  },
   
-  // Research
+  // Research Layer
   runBacktest: async (params: any) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run`, {
       method: "POST",
@@ -27,12 +32,17 @@ export const api = {
     return res.json();
   },
   
+  listBacktests: async (limit: number = 20) => {
+    const res = await fetch(`${API_BASE_URL}/backtest/list?limit=${limit}`);
+    return res.json();
+  },
+
   getBacktestResults: async (runId: string) => {
     const res = await fetch(`${API_BASE_URL}/backtest/${runId}/results`);
     return res.json();
   },
 
-  // Live Trading
+  // Live Execution Layer
   getLiveStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/live/status`);
     return res.json();
@@ -50,12 +60,27 @@ export const api = {
         body: JSON.stringify(order),
     });
     return res.json();
+  },
+
+  haltSystem: async () => {
+    const res = await fetch(`${API_BASE_URL}/live/halt`, { method: "POST" });
+    return res.json();
+  },
+
+  resumeSystem: async () => {
+    const res = await fetch(`${API_BASE_URL}/live/resume`, { method: "POST" });
+    return res.json();
   }
 };
 
 export const connectWebSocket = (endpoint: string, onMessage: (data: any) => void) => {
-    // endpoint example: "/data/ws/status"
-    const ws = new WebSocket(`ws://localhost:8000/api${endpoint}`);
+    // endpoint should be absolute or relative to WS_BASE_URL
+    // e.g., "/live/ws/ticks"
+    const url = endpoint.startsWith("ws") ? endpoint : `${WS_BASE_URL}${endpoint}`;
+    
+    logger.debug(`Connecting WS to ${url}`);
+    const ws = new WebSocket(url);
+    
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
@@ -64,5 +89,12 @@ export const connectWebSocket = (endpoint: string, onMessage: (data: any) => voi
             console.error("WS Parse Error", e);
         }
     };
+    
     return ws;
 };
+
+const logger = {
+    debug: (msg: string) => {
+        if (process.env.NODE_ENV === 'development') console.debug(`[API] ${msg}`);
+    }
+}

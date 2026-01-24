@@ -6,12 +6,19 @@ import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Power, Play } from "lucide-react"
+import { useWebSocket } from "@/hooks/use-websocket"
 
 export default function DashboardPage() {
   const [dataStatus, setDataStatus] = useState<string>("checking...")
   const [liveStatus, setLiveStatus] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
+
+  // Real-time WebSocket Feed
+  const { data: wsData, status: wsStatus } = useWebSocket<{
+    type: string;
+    data: any;
+  }>("/live/ws/ticks");
 
   useEffect(() => {
     setMounted(true)
@@ -29,29 +36,62 @@ export default function DashboardPage() {
       }
     }
     fetchData()
-    // Poll every 5 seconds
-    const interval = setInterval(fetchData, 5000)
+    // Poll slower for non-critical status, rely on WS for ticks
+    const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
   }, [])
 
+  // Handle System Controls
+  const handleHalt = async () => {
+      if (confirm("EMERGENCY HALT: Stop all trading?")) {
+          await api.haltSystem();
+          // Optimistic update
+          setLiveStatus((prev: any) => ({ ...prev, engine_halted: true }));
+      }
+  }
+
+  const handleResume = async () => {
+      if (confirm("Resume trading operations?")) {
+          await api.resumeSystem();
+          setLiveStatus((prev: any) => ({ ...prev, engine_halted: false }));
+      }
+  }
+
   if (!mounted) return null
 
-  // Calculate some derived metrics if available
+  // Derived Metrics from WS or Polling
   const latency = liveStatus?.latency_p50_ms ? `${liveStatus.latency_p50_ms.toFixed(1)}ms` : "--"
-  const backendHalted = liveStatus?.engine_halted ? "HALTED" : "RUNNING"
+  const isHalted = liveStatus?.engine_halted || false
+  const activeSymbols = liveStatus?.active_symbols?.length || 0
   
+  // WS Data Parsing (Daily P&L)
+  // Assuming WS sends type="status" with pnl info, or we use poling fallback
+  const dailyPnL = liveStatus?.daily_pnl_usd || 0.0; // Fallback to polling if WS not ready
+  // Note: Backend needs to send daily_pnl in health status for this to work perfectly via polling
+  // or we parse wsData if it contains PnL. For now, let's use the structure we have.
+
   return (
     <div className="flex flex-col gap-6 p-4">
       {/* Header with Admin Link */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
-        <div className="flex gap-2">
-            <span className="flex h-2 w-2 translate-y-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-sm text-muted-foreground pt-1">System Normal</span>
-            <Button variant="outline" size="sm" className="ml-4 gap-2" onClick={() => window.open('http://localhost:8501', '_blank')}>
-            <ExternalLink className="h-4 w-4" />
-            Admin Cockpit
-            </Button>
+        <div className="flex gap-2 items-center">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isHalted ? "bg-red-500/10 border-red-500 text-red-500" : "bg-emerald-500/10 border-emerald-500 text-emerald-500"}`}>
+                <span className={`flex h-2 w-2 rounded-full ${isHalted ? "bg-red-500 animate-none" : "bg-emerald-500 animate-pulse"}`} />
+                <span className="text-sm font-medium">{isHalted ? "SYSTEM HALTED" : "SYSTEM NORMAL"}</span>
+            </div>
+            
+            {isHalted ? (
+                <Button variant="outline" size="sm" className="ml-4 gap-2 text-emerald-500 border-emerald-500 hover:bg-emerald-500/10" onClick={handleResume}>
+                    <Play className="h-4 w-4" />
+                    Resume
+                </Button>
+            ) : (
+                <Button variant="outline" size="sm" className="ml-4 gap-2 text-red-500 border-red-500 hover:bg-red-500/10" onClick={handleHalt}>
+                    <Power className="h-4 w-4" />
+                    Emergency Halt
+                </Button>
+            )}
         </div>
       </div>
 
@@ -59,31 +99,31 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total P&L"
-          value=",245,302.50"
+          value="$1,245,302.50"
           trend="up"
           trendValue="+12.4%"
           subtext="Inception to Date"
         />
         <MetricCard
           title="Daily P&L"
-          value="+2,450.00"
-          trend="up"
-          trendValue="+1.02%"
+          value={dailyPnL >= 0 ? `+${dailyPnL.toFixed(2)}` : `-${Math.abs(dailyPnL).toFixed(2)}`}
+          trend={dailyPnL >= 0 ? "up" : "down"}
+          trendValue="Live"
           subtext="Real-time"
           isLive={true}
         />
         <MetricCard
           title="Risk Metrics"
-          value="2.45"
+          value={liveStatus?.portfolio_var_95_usd ? `${liveStatus.portfolio_var_95_usd.toFixed(0)}` : "--"}
           trend="neutral"
-          subtext="Sharpe Ratio (Annualized)"
-          trendValue="DD: -4.2%"
+          subtext="VaR (95%)"
+          trendValue={`ES: ${liveStatus?.portfolio_es_95_usd ? liveStatus.portfolio_es_95_usd.toFixed(0) : "--"}`}
         />
         <MetricCard
           title="Live Model"
           value="PROD-ALPHA-V4"
           trend="neutral"
-          subtext="Regime: Volatility Long"
+          subtext={`Active Symbols: ${activeSymbols}`}
         />
       </div>
 
@@ -105,6 +145,8 @@ export default function DashboardPage() {
         <div>IBKR Gateway: {liveStatus?.ib_connected ? "CONNECTED" : "DISCONNECTED"}</div>
         <div className="h-3 w-[1px] bg-border" />
         <div>Execution Latency: {latency}</div>
+        <div className="h-3 w-[1px] bg-border" />
+        <div>Stream: {wsStatus.toUpperCase()}</div>
       </div>
     </div>
   )
