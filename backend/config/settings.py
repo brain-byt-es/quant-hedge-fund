@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # ===================
     # Broker Settings
     # ===================
-    active_broker: str = Field(default="IBKR", description="Active broker: 'IBKR' or 'ALPACA'")
+    active_broker: str = Field(default="ALPACA", description="Active broker: 'IBKR' or 'ALPACA'")
     
     # Alpaca
     alpaca_api_key: str = Field(default="", description="Alpaca API Key")

@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from api.routers.main_router import api_router
+from omega.singleton import get_omega_app
+from qsconnect import Client as QSConnectClient
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +23,15 @@ app.add_middleware(
 
 # Include API Routers
 app.include_router(api_router, prefix="/api")
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        logger.info("Initializing Services...")
+        # Force initialization of Omega Singleton
+        get_omega_app()
+    except Exception as e:
+        logger.error(f"Error initializing services: {e}")
 
 @app.get("/")
 def read_root():

@@ -29,6 +29,13 @@ class IBBroker(BaseBroker):
             
             self._connected = True
             return True
+        except RuntimeError as e:
+            if "attached to a different loop" in str(e):
+                logger.warning(f"IBKR Event Loop Conflict (AsyncIO): {e}. IBKR features unavailable in this mode.")
+            else:
+                logger.error(f"IB Connect Runtime Error: {e}")
+            self._connected = False
+            return False
         except Exception as e:
             logger.error(f"IB Connect Error: {e}")
             self._connected = False

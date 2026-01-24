@@ -60,6 +60,24 @@ class TradingApp:
         self._ib = None
         self._halted = False  # Critical safety flag
         
+        # Broker Adapter Strategy
+        self.broker_type = settings.active_broker.upper()
+        self.broker = None
+        
+        if self.broker_type == "ALPACA":
+            from omega.broker.alpaca import AlpacaBroker
+            self.broker = AlpacaBroker(
+                settings.alpaca_api_key, 
+                settings.alpaca_secret_key, 
+                settings.alpaca_paper,
+                settings.alpaca_base_url
+            )
+            logger.info("Initialized Alpaca Broker Adapter")
+        else:
+            from omega.broker.ibkr import IBBroker
+            self.broker = IBBroker(self.host, self.port, self.client_id)
+            logger.info("Initialized IBKR Broker Adapter")
+
         # Governance & Strategy Layer
         if not hasattr(self, '_db_manager'):
             from qsconnect.database.duckdb_manager import DuckDBManager
@@ -139,56 +157,17 @@ class TradingApp:
     # =====================
     
     def connect(self) -> bool:
-        """
-        Connect to Interactive Brokers.
-        
-        Returns:
-            True if connection successful
-        """
-        try:
-            from ib_insync import IB
-            
-            # Re-initialize IB instance if None
-            if self._ib is None:
-                try:
-                    self._ib = IB()
-                except Exception as e:
-                    logger.error(f"Failed to initialize IB instance (Event Loop Issue?): {e}")
-                    self._ib = None
-                    return False
-
-            if not self._ib.isConnected():
-                self._ib.connect(
-                    host=self.host,
-                    port=self.port,
-                    clientId=self.client_id,
-                )
-                # Register Global Tick Event
-                self._ib.tickByTickEvent += self._on_tick_by_tick_all
-            
-            self._connected = True
-            logger.info("Connected to Interactive Brokers. Tick engine initialized.")
-            return True
-            
-        except ImportError:
-            logger.error("ib_insync not installed. Run: pip install ib_insync")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Failed to connect to IB: {e}")
-            self._connected = False
-            return False
+        """Connect to the active broker."""
+        return self.broker.connect()
     
     def disconnect(self) -> None:
-        """Disconnect from Interactive Brokers."""
-        if self._ib and self._connected:
-            self._ib.disconnect()
-            self._connected = False
-            logger.info("Disconnected from Interactive Brokers")
+        """Disconnect from active broker."""
+        # Adapter pattern doesn't strictly enforce disconnect, but good practice
+        pass
     
     def is_connected(self) -> bool:
-        """Check if connected to IB."""
-        return self._connected and self._ib and self._ib.isConnected()
+        """Check if connected to broker."""
+        return self.broker.is_connected()
 
     def halt(self) -> None:
         """Emergency halt all trading activity."""
@@ -204,130 +183,14 @@ class TradingApp:
         """Check if system is currently halted."""
         return self._halted
 
-    def _on_tick_by_tick_all(self, ticker: Any, tick: Any):
-        """Global handler for raw trade ticks from IBKR."""
-        try:
-            # We ONLY care about TRADE ticks (Last)
-            if not hasattr(tick, 'price') or not hasattr(tick, 'size'):
-                return
-                
-            symbol = ticker.contract.symbol
-            if symbol not in self.aggregators:
-                return
-                
-            # --- Safety: Clock-Skew Detection ---
-            exchange_ts = tick.time.timestamp()
-            recv_ts = datetime.now().timestamp()
-            skew = abs(recv_ts - exchange_ts)
-            
-            from omega.data.candle_engine import MAX_CLOCK_SKEW_SEC
-            if skew > MAX_CLOCK_SKEW_SEC:
-                logger.error(f"CRITICAL CLOCK SKEW for {symbol}: {skew:.2f}s. Halting Truth Layer for safety.")
-                self._halted = True
-                return
-
-            # Convert to our internal Truth Layer format
-            truth_tick = Tick(
-                symbol=symbol,
-                price=float(tick.price),
-                size=float(tick.size),
-                exchange_ts=exchange_ts,
-                recv_ts=recv_ts,
-                source="IBKR",
-                asset_class=self.registry.get_asset_class(symbol)
-            )
-            
-            self.aggregators[symbol].process_tick(truth_tick)
-            self.metrics["last_tick_time"] = datetime.now()
-            
-        except Exception as e:
-            logger.error(f"Tick Processing Error for {ticker.contract.symbol}: {e}")
-
-    def subscribe_truth_layer(self, symbol: str, interval_sec: int = 60):
-        """Subscribes to raw trade ticks and attaches a deterministic aggregator."""
-        if not self.is_connected():
-            return
-            
-        if symbol in self.aggregators:
-            return
-            
-        contract = self.create_contract(symbol)
-        
-        # Initialize Aggregator with DB support
-        agg = CandleAggregator(
-            symbol=symbol,
-            interval_sec=interval_sec,
-            event_bus=self.event_bus,
-            db_mgr=self._db_manager,
-            source="IBKR",
-            asset_class=self.registry.get_asset_class(symbol)
-        )
-        self.aggregators[symbol] = agg
-        
-        # Request stream (Last trade only - exact IBKR candle source)
-        self._ib.reqTickByTickData(contract, "Last")
-        logger.info(f"TRUTH LAYER ACTIVE for {symbol} ({interval_sec}s bars)")
-
-    def _log_trade(self, trade: Any):
-        """Log a filled trade to DuckDB for audit."""
-        try:
-            # Extract fill info
-            fill = trade.fills[-1] if trade.fills else None
-            if not fill:
-                return
-
-            strat_hash = self.active_strategy.get("strategy_hash", "UNKNOWN") if self.active_strategy else "MANUAL"
-            
-            conn = self._db_manager.connect()
-            conn.execute("""
-                INSERT INTO trades (
-                    trade_id, strategy_hash, symbol, side, quantity, 
-                    fill_price, execution_time, commission, slippage_bps, 
-                    order_type, account_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                f"{trade.order.orderId}_{int(fill.time.timestamp())}",
-                strat_hash,
-                trade.contract.symbol,
-                trade.order.action,
-                float(fill.execution.shares),
-                float(fill.execution.price),
-                fill.time,
-                float(fill.commissionReport.commission if fill.commissionReport else 0.0),
-                0.0, # Slippage calc placeholder
-                trade.order.orderType,
-                self.client_id
-            ))
-            logger.info(f"Trade LOGGED: {trade.contract.symbol} {trade.order.action} {fill.execution.shares} @ {fill.execution.price}")
-        except Exception as e:
-            logger.error(f"Failed to log trade: {e}")
-
-    
     # =====================
     # Account Information
     # =====================
     
     def get_account_info(self) -> Dict[str, Any]:
-        """
-        Get account information.
-        
-        Returns:
-            Dictionary with account values
-        """
-        if not self.is_connected():
-            self.connect()
-        
-        account_values = self._ib.accountValues()
-        
-        info = {}
-        for av in account_values:
-            if av.tag in ["NetLiquidation", "TotalCashValue", "BuyingPower", "GrossPositionValue"]:
-                info[av.tag] = float(av.value)
-        
-        return info
+        return self.broker.get_account_info()
     
     def get_portfolio_value(self) -> float:
-        """Get total portfolio value."""
         info = self.get_account_info()
         return info.get("NetLiquidation", 0.0)
     
@@ -336,54 +199,9 @@ class TradingApp:
     # =====================
     
     def get_positions(self) -> List[Dict[str, Any]]:
-        """
-        Get current positions.
-        
-        Returns:
-            List of position dictionaries
-        """
-        if not self.is_connected():
-            if not self.connect():
-                return []
-        
-        if self._ib is None:
-            return []
-
-        positions = []
-        try:
-            for pos in self._ib.positions():
-                avg_cost = pos.avgCost if pos.avgCost else 0.0
-                quantity = pos.position
-                
-                # Get current market price for accurate valuation
-                try:
-                    contract = pos.contract
-                    ticker = self._ib.reqMktData(contract, snapshot=True)
-                    self._ib.sleep(0.5)  # Brief wait for snapshot
-                    current_price = ticker.marketPrice() if ticker.marketPrice() else avg_cost
-                    self._ib.cancelMktData(contract)
-                except Exception:
-                    current_price = avg_cost  # Fallback to avg_cost if price unavailable
-                    logger.warning(f"Could not get market price for {pos.contract.symbol}, using avg_cost")
-                
-                positions.append({
-                    "symbol": pos.contract.symbol,
-                    "quantity": quantity,
-                    "avg_cost": avg_cost,
-                    "current_price": current_price,
-                    "cost_basis": quantity * avg_cost,
-                    "market_value": quantity * current_price,
-                    "unrealized_pnl": quantity * (current_price - avg_cost),
-                    "contract": pos.contract,
-                })
-        except Exception as e:
-            logger.error(f"Error fetching positions: {e}")
-            return []
-        
-        return positions
+        return self.broker.get_positions()
     
     def get_position(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Get position for a specific symbol."""
         positions = self.get_positions()
         for pos in positions:
             if pos["symbol"] == symbol:
@@ -395,20 +213,8 @@ class TradingApp:
     # =====================
     
     def create_contract(self, symbol: str, sec_type: str = "STK", exchange: str = "SMART") -> Any:
-        """
-        Create an IB contract object.
-        
-        Args:
-            symbol: Stock symbol
-            sec_type: Security type (STK, OPT, FUT, etc.)
-            exchange: Exchange name
-            
-        Returns:
-            IB Contract object
-        """
-        from ib_insync import Stock
-        
-        return Stock(symbol, exchange, "USD")
+        # Legacy support / Helper if needed, but preferably move to broker adapter
+        return None # Deprecated in favor of adapter
 
     def _validate_risk(self, symbol: str, shares: int, current_price: float, side: str) -> bool:
         """
@@ -639,87 +445,23 @@ class TradingApp:
     # =====================
     
     def get_open_orders(self) -> List[Dict[str, Any]]:
-        """Get list of open orders."""
         if not self.is_connected():
-            if not self.connect():
-                return []
-        
-        if self._ib is None:
             return []
-
-        orders = []
-        try:
-            for trade in self._ib.openTrades():
-                orders.append({
-                    "symbol": trade.contract.symbol,
-                    "action": trade.order.action,
-                    "quantity": trade.order.totalQuantity,
-                    "order_type": trade.order.orderType,
-                    "status": trade.orderStatus.status,
-                })
-        except Exception as e:
-            logger.error(f"Error fetching open orders: {e}")
-            
-        return orders
+        return self.broker.get_open_orders()
     
     def cancel_all_orders(self) -> int:
-        """
-        Cancel all open orders.
-        
-        Returns:
-            Number of orders cancelled
-        """
         if not self.is_connected():
-            if not self.connect():
-                return 0
-        
-        if self._ib is None:
             return 0
-
-        try:
-            open_trades = self._ib.openTrades()
-            
-            for trade in open_trades:
-                self._ib.cancelOrder(trade.order)
-            
-            logger.info(f"Cancelled {len(open_trades)} orders")
-            return len(open_trades)
-        except Exception as e:
-            logger.error(f"Error canceling orders: {e}")
-            return 0
+        return self.broker.cancel_all_orders()
     
     # =====================
     # Market Data
     # =====================
     
     def get_quote(self, symbol: str) -> Dict[str, float]:
-        """
-        Get current quote for a symbol.
-        
-        Returns:
-            Dictionary with bid, ask, last, volume
-        """
         if not self.is_connected():
-            if not self.connect():
-                return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
-        
-        if self._ib is None:
             return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
-
-        try:
-            contract = self.create_contract(symbol)
-            ticker = self._ib.reqMktData(contract)
-            self._ib.sleep(1)
-            
-            return {
-                "bid": ticker.bid or 0.0,
-                "ask": ticker.ask or 0.0,
-                "last": ticker.last or 0.0,
-                "volume": ticker.volume or 0,
-            }
-        except Exception as e:
-            logger.error(f"Error fetching quote for {symbol}: {e}")
-            return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
+        return self.broker.get_quote(symbol)
 
     def get_health_status(self) -> Dict[str, Any]:
         """

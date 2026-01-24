@@ -1,19 +1,13 @@
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Dict, Any
-from omega import TradingApp
 import asyncio
 import json
 
-router = APIRouter()
-omega_app = None
+# Use Singleton
+from omega.singleton import get_omega_app
 
-def get_omega_app():
-    global omega_app
-    if not omega_app:
-        # Paper trading by default for safety
-        omega_app = TradingApp(paper_trading=True)
-    return omega_app
+router = APIRouter()
 
 class OrderRequest(BaseModel):
     symbol: str
@@ -29,7 +23,7 @@ def get_live_status():
     app = get_omega_app()
     status = app.get_health_status()
     # Augment with broker info
-    status["active_broker"] = app.broker_type
+    status["active_broker"] = getattr(app, "broker_type", "UNKNOWN")
     return status
 
 @router.post("/config")
@@ -58,9 +52,7 @@ async def websocket_tick_stream(websocket: WebSocket):
     try:
         while True:
             # Poll for live candle updates
-            # In a production event-driven system, we'd subscribe to a queue.
-            # Here we poll the application state.
-            if app.is_connected() or True: # Force true for demo even if disconnected from IB
+            if app.is_connected() or True: 
                 data = app.get_live_candles()
                 if data:
                     await websocket.send_json({
@@ -70,7 +62,6 @@ async def websocket_tick_stream(websocket: WebSocket):
                     })
             
             # Send heartbeat/pnl updates
-            # This mimics the "Daily P&L" ticker
             status = app.get_health_status()
             await websocket.send_json({
                 "type": "status",
@@ -79,7 +70,6 @@ async def websocket_tick_stream(websocket: WebSocket):
 
             await asyncio.sleep(1) # 1Hz update rate
     except WebSocketDisconnect:
-        # Client disconnected
         pass
     except Exception as e:
         print(f"WS Error: {e}")

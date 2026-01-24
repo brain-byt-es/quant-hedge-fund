@@ -19,10 +19,15 @@ class AlpacaBroker(BaseBroker):
         
     def connect(self) -> bool:
         try:
+            # Clean base_url: Remove trailing /v2 if present to avoid duplication by SDK
+            clean_url = self.base_url.rstrip("/")
+            if clean_url.endswith("/v2"):
+                clean_url = clean_url[:-3]
+                
             self._api = tradeapi.REST(
                 self.api_key, 
                 self.secret_key, 
-                self.base_url, 
+                clean_url, 
                 api_version='v2'
             )
             # Test connection
