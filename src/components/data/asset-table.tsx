@@ -9,54 +9,65 @@ import {
   import { Badge } from "@/components/ui/badge"
   import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
   
-  const assets = [
-    { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", price: "185.92", updated: "1 min ago", status: "Active" },
-    { ticker: "MSFT", name: "Microsoft Corp.", sector: "Technology", price: "402.56", updated: "1 min ago", status: "Active" },
-    { ticker: "GOOGL", name: "Alphabet Inc.", sector: "Technology", price: "152.12", updated: "2 mins ago", status: "Active" },
-    { ticker: "AMZN", name: "Amazon.com Inc.", sector: "Consumer Cyclical", price: "172.34", updated: "5 mins ago", status: "Active" },
-    { ticker: "NVDA", name: "NVIDIA Corp.", sector: "Technology", price: "721.33", updated: "Just now", status: "Active" },
-    { ticker: "TSLA", name: "Tesla Inc.", sector: "Consumer Cyclical", price: "198.20", updated: "10 mins ago", status: "Halting" },
-    { ticker: "BRK.B", name: "Berkshire Hathaway", sector: "Financial", price: "398.20", updated: "15 mins ago", status: "Active" },
-    { ticker: "META", name: "Meta Platforms", sector: "Technology", price: "468.20", updated: "2 mins ago", status: "Active" },
-    { ticker: "LLY", name: "Eli Lilly & Co.", sector: "Healthcare", price: "720.50", updated: "8 mins ago", status: "Active" },
-    { ticker: "V", name: "Visa Inc.", sector: "Financial", price: "278.40", updated: "12 mins ago", status: "Active" },
-    { ticker: "XOM", name: "Exxon Mobil", sector: "Energy", price: "102.30", updated: "20 mins ago", status: "Active" },
-    { ticker: "JPM", name: "JPMorgan Chase", sector: "Financial", price: "175.60", updated: "4 mins ago", status: "Active" },
-  ]
-  
-  export function AssetTable() {
+  export interface Asset {
+      ticker: string;
+      name?: string;
+      sector?: string;
+      price?: string | number;
+      updated?: string;
+      status?: string;
+      quantity?: number; // Added for positions view
+      avg_cost?: number; // Added for positions view
+  }
+
+  interface AssetTableProps {
+      assets?: Asset[];
+      title?: string;
+  }
+
+  export function AssetTable({ assets = [], title = "Asset Universe" }: AssetTableProps) {
     return (
       <Card className="h-full">
         <CardHeader>
-          <CardTitle>Asset Universe (S&P 500)</CardTitle>
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[100px]">Ticker</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Sector</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead>Last Updated</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead className="text-right">Price / Cost</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assets.map((asset) => (
-                <TableRow key={asset.ticker} className="font-mono text-xs md:text-sm">
-                  <TableCell className="font-bold text-primary">{asset.ticker}</TableCell>
-                  <TableCell className="font-sans">{asset.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{asset.sector}</TableCell>
-                  <TableCell className="text-right">${asset.price}</TableCell>
-                  <TableCell className="text-muted-foreground">{asset.updated}</TableCell>
-                  <TableCell>
-                    <Badge variant={asset.status === "Active" ? "outline" : "destructive"} className="text-xs">
-                        {asset.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {assets.length === 0 ? (
+                  <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground h-24">No data available</TableCell>
+                  </TableRow>
+              ) : (
+                  assets.map((asset) => (
+                    <TableRow key={asset.ticker} className="font-mono text-xs md:text-sm">
+                      <TableCell className="font-bold text-primary">{asset.ticker}</TableCell>
+                      <TableCell className="font-sans">
+                          <div>{asset.name || asset.ticker}</div>
+                          <div className="text-xs text-muted-foreground">{asset.sector}</div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                          <div>${Number(asset.price || 0).toFixed(2)}</div>
+                          {asset.avg_cost && <div className="text-xs text-muted-foreground">Avg: ${asset.avg_cost.toFixed(2)}</div>}
+                      </TableCell>
+                      <TableCell className="text-right">{asset.quantity || "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                            {asset.status || "Active"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

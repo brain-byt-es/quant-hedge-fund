@@ -9,55 +9,22 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
-const holdings = [
-  {
-    symbol: "NVDA",
-    name: "NVIDIA Corp",
-    allocation: "12.4%",
-    quantity: 450,
-    pnl: "+$12,450.00",
-    pnlPercent: "+2.5%",
-    side: "Long",
-  },
-  {
-    symbol: "MSFT",
-    name: "Microsoft Corp",
-    allocation: "8.2%",
-    quantity: 120,
-    pnl: "+$3,210.50",
-    pnlPercent: "+0.8%",
-    side: "Long",
-  },
-  {
-    symbol: "SPY",
-    name: "SPDR S&P 500",
-    allocation: "15.0%",
-    quantity: 500,
-    pnl: "-$1,200.00",
-    pnlPercent: "-0.4%",
-    side: "Hedge",
-  },
-  {
-    symbol: "AMD",
-    name: "Advanced Micro Devices",
-    allocation: "5.1%",
-    quantity: 300,
-    pnl: "+$4,500.20",
-    pnlPercent: "+4.2%",
-    side: "Long",
-  },
-  {
-    symbol: "TSLA",
-    name: "Tesla Inc",
-    allocation: "4.8%",
-    quantity: 200,
-    pnl: "-$850.00",
-    pnlPercent: "-1.2%",
-    side: "Short",
-  },
-]
+interface Position {
+  symbol: string;
+  quantity: number;
+  market_value: number;
+  unrealized_pnl: number;
+  asset_class?: string;
+}
 
-export function TopHoldings() {
+interface TopHoldingsProps {
+  positions: Position[];
+}
+
+export function TopHoldings({ positions = [] }: TopHoldingsProps) {
+  // Sort by market value descending
+  const sortedPositions = [...positions].sort((a, b) => Math.abs(b.market_value) - Math.abs(a.market_value)).slice(0, 5);
+
   return (
     <Card className="col-span-4 lg:col-span-2 h-full">
       <CardHeader>
@@ -69,29 +36,39 @@ export function TopHoldings() {
             <TableRow>
               <TableHead>Symbol</TableHead>
               <TableHead>Side</TableHead>
-              <TableHead className="text-right">Alloc</TableHead>
+              <TableHead className="text-right">Value</TableHead>
               <TableHead className="text-right">Unrealized P&L</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {holdings.map((holding) => (
-              <TableRow key={holding.symbol}>
-                <TableCell className="font-medium font-mono">
-                    {holding.symbol}
-                    <div className="text-xs text-muted-foreground font-sans">{holding.name}</div>
-                </TableCell>
-                <TableCell>
-                    <Badge variant={holding.side === "Long" ? "default" : holding.side === "Hedge" ? "secondary" : "destructive"}>
-                        {holding.side}
-                    </Badge>
-                </TableCell>
-                <TableCell className="text-right font-mono">{holding.allocation}</TableCell>
-                <TableCell className={`text-right font-mono ${holding.pnl.startsWith("+") ? "text-emerald-500" : "text-rose-500"}`}>
-                    {holding.pnl}
-                    <div className="text-xs">{holding.pnlPercent}</div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {sortedPositions.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground h-24">No active positions</TableCell>
+                </TableRow>
+            ) : (
+                sortedPositions.map((pos) => {
+                  const side = pos.quantity > 0 ? "Long" : "Short";
+                  const pnlColor = pos.unrealized_pnl >= 0 ? "text-emerald-500" : "text-rose-500";
+                  const pnlSign = pos.unrealized_pnl >= 0 ? "+" : "";
+                  
+                  return (
+                  <TableRow key={pos.symbol}>
+                    <TableCell className="font-medium font-mono">
+                        {pos.symbol}
+                        <div className="text-xs text-muted-foreground font-sans">{pos.asset_class || "STK"}</div>
+                    </TableCell>
+                    <TableCell>
+                        <Badge variant={side === "Long" ? "default" : "destructive"}>
+                            {side}
+                        </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">${Math.abs(pos.market_value).toLocaleString()}</TableCell>
+                    <TableCell className={`text-right font-mono ${pnlColor}`}>
+                        {pnlSign}${pos.unrealized_pnl.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                )})
+            )}
           </TableBody>
         </Table>
       </CardContent>

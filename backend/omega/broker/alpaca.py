@@ -47,11 +47,16 @@ class AlpacaBroker(BaseBroker):
         if not self._connected: return {}
         try:
             acct = self._api.get_account()
+            equity = float(acct.equity)
+            last_equity = float(acct.last_equity)
+            daily_pnl = equity - last_equity
+            
             return {
-                "NetLiquidation": float(acct.portfolio_value),
+                "NetLiquidation": equity,
                 "BuyingPower": float(acct.buying_power),
                 "Cash": float(acct.cash),
-                "Currency": acct.currency
+                "Currency": acct.currency,
+                "DailyPnL": daily_pnl
             }
         except Exception as e:
             logger.error(f"Alpaca account info error: {e}")

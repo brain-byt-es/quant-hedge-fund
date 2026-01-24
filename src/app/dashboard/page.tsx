@@ -26,18 +26,37 @@ interface LiveStatus {
   portfolio_es_95_usd?: number;
   active_broker?: string;
   ib_connected?: boolean;
+  net_liquidation?: number;
 }
 
 export default function DashboardPage() {
   const [dataStatus, setDataStatus] = useState<string>("checking...")
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null)
+  const [positions, setPositions] = useState<any[]>([])
+  const [chartData, setChartData] = useState<any[]>([])
   const [mounted, setMounted] = useState(false)
 
   // Real-time WebSocket Feed
-  const { status: wsStatus } = useWebSocket<{
+  const { data: wsData, status: wsStatus } = useWebSocket<{
     type: string;
-    data: unknown;
+    data: any;
   }>("/live/ws/ticks");
+
+  // Handle WS Data
+  useEffect(() => {
+    if (wsData?.type === "status") {
+       setLiveStatus(wsData.data);
+       // Append to chart history
+       setChartData(prev => {
+           const newVal = {
+               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+               value: wsData.data.daily_pnl_usd || 0,
+               benchmark: 0 // Placeholder until we stream benchmark
+           };
+           return [...prev.slice(-50), newVal]; // Keep last 50 points
+       });
+    }
+  }, [wsData]);
 
   useEffect(() => {
     // Avoid cascading render warning
@@ -50,6 +69,9 @@ export default function DashboardPage() {
 
         const lStatus = await api.getLiveStatus()
         setLiveStatus(lStatus)
+        
+        const pos = await api.getPortfolio()
+        setPositions(pos)
       } catch (e) {
         console.error("Failed to fetch dashboard data", e)
         setDataStatus("offline")
@@ -61,6 +83,7 @@ export default function DashboardPage() {
     const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
   }, [])
+
 
   // Handle System Controls
   const handleHalt = async () => {
@@ -137,11 +160,10 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="Total P&L"
-          value="$1,245,302.50"
-          trend="up"
-          trendValue="+12.4%"
-          subtext="Inception to Date"
+          title="Total Equity"
+          value={liveStatus?.net_liquidation ? `$${liveStatus.net_liquidation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--"}
+          trend="neutral"
+          subtext="Net Liquidation Value"
         />
         <MetricCard
           title="Daily P&L"
@@ -169,11 +191,11 @@ export default function DashboardPage() {
       {/* Main Content Area */}
       <div className="grid gap-4 md:grid-cols-7 lg:grid-cols-7 h-[500px]">
         <div className="col-span-4 lg:col-span-5 h-full">
-             <PortfolioChart />
+             <PortfolioChart data={chartData} />
         </div>
         
         <div className="col-span-4 lg:col-span-2 h-full">
-            <TopHoldings />
+            <TopHoldings positions={positions} />
         </div>
       </div>
       

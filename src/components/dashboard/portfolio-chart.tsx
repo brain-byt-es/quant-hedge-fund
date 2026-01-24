@@ -3,24 +3,17 @@
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-const data = [
-  { time: "09:30", value: 100000, benchmark: 100000 },
-  { time: "10:00", value: 100200, benchmark: 100100 },
-  { time: "10:30", value: 100150, benchmark: 100120 },
-  { time: "11:00", value: 100450, benchmark: 100250 },
-  { time: "11:30", value: 100300, benchmark: 100300 },
-  { time: "12:00", value: 100600, benchmark: 100400 },
-  { time: "12:30", value: 100550, benchmark: 100350 },
-  { time: "13:00", value: 100800, benchmark: 100500 },
-  { time: "13:30", value: 100900, benchmark: 100600 },
-  { time: "14:00", value: 100750, benchmark: 100550 },
-  { time: "14:30", value: 101100, benchmark: 100700 },
-  { time: "15:00", value: 101300, benchmark: 100800 },
-  { time: "15:30", value: 101200, benchmark: 100750 },
-  { time: "16:00", value: 101500, benchmark: 100900 },
-]
+interface ChartDataPoint {
+  time: string;
+  value: number;
+  benchmark?: number;
+}
 
-export function PortfolioChart() {
+interface PortfolioChartProps {
+  data?: ChartDataPoint[];
+}
+
+export function PortfolioChart({ data = [] }: PortfolioChartProps) {
   return (
     <Card className="col-span-4 lg:col-span-3">
       <CardHeader>

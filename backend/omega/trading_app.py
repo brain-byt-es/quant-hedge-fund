@@ -468,8 +468,19 @@ class TradingApp:
         Get system health status for the control plane.
         """
         positions = self.get_positions()
+        account = self.get_account_info()
         portfolio_var = self.risk_manager.calculate_portfolio_var(positions)
         portfolio_es = self.risk_manager.calculate_expected_shortfall(positions)
+        
+        # P&L Calculation
+        daily_pnl = account.get("DailyPnL")
+        if daily_pnl is None:
+            # Fallback to local session tracking
+            portfolio_value = account.get("NetLiquidation", 0.0)
+            if self.metrics["daily_pnl_initial_value"]:
+                daily_pnl = portfolio_value - self.metrics["daily_pnl_initial_value"]
+            else:
+                daily_pnl = 0.0
 
         status = {
             "ib_connected": self.is_connected(),
@@ -480,7 +491,9 @@ class TradingApp:
             "truth_layer_active": len(self.aggregators) > 0,
             "active_symbols": list(self.aggregators.keys()),
             "portfolio_var_95_usd": portfolio_var,
-            "portfolio_es_95_usd": portfolio_es
+            "portfolio_es_95_usd": portfolio_es,
+            "daily_pnl_usd": daily_pnl,
+            "net_liquidation": account.get("NetLiquidation", 0.0)
         }
         
         if self.metrics["order_latencies"]:
