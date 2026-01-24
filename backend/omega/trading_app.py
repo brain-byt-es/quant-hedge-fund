@@ -102,15 +102,23 @@ class TradingApp:
         try:
             from ib_insync import IB
             
-            self._ib = IB()
-            self._ib.connect(
-                host=self.host,
-                port=self.port,
-                clientId=self.client_id,
-            )
-            
-            # Register Global Tick Event
-            self._ib.tickByTickEvent += self._on_tick_by_tick_all
+            # Re-initialize IB instance if None
+            if self._ib is None:
+                try:
+                    self._ib = IB()
+                except Exception as e:
+                    logger.error(f"Failed to initialize IB instance (Event Loop Issue?): {e}")
+                    self._ib = None
+                    return False
+
+            if not self._ib.isConnected():
+                self._ib.connect(
+                    host=self.host,
+                    port=self.port,
+                    clientId=self.client_id,
+                )
+                # Register Global Tick Event
+                self._ib.tickByTickEvent += self._on_tick_by_tick_all
             
             self._connected = True
             logger.info("Connected to Interactive Brokers. Tick engine initialized.")
@@ -122,6 +130,7 @@ class TradingApp:
             
         except Exception as e:
             logger.error(f"Failed to connect to IB: {e}")
+            self._connected = False
             return False
     
     def disconnect(self) -> None:
@@ -288,35 +297,42 @@ class TradingApp:
             List of position dictionaries
         """
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return []
         
+        if self._ib is None:
+            return []
+
         positions = []
-        
-        for pos in self._ib.positions():
-            avg_cost = pos.avgCost if pos.avgCost else 0.0
-            quantity = pos.position
-            
-            # Get current market price for accurate valuation
-            try:
-                contract = pos.contract
-                ticker = self._ib.reqMktData(contract, snapshot=True)
-                self._ib.sleep(0.5)  # Brief wait for snapshot
-                current_price = ticker.marketPrice() if ticker.marketPrice() else avg_cost
-                self._ib.cancelMktData(contract)
-            except Exception:
-                current_price = avg_cost  # Fallback to avg_cost if price unavailable
-                logger.warning(f"Could not get market price for {pos.contract.symbol}, using avg_cost")
-            
-            positions.append({
-                "symbol": pos.contract.symbol,
-                "quantity": quantity,
-                "avg_cost": avg_cost,
-                "current_price": current_price,
-                "cost_basis": quantity * avg_cost,
-                "market_value": quantity * current_price,
-                "unrealized_pnl": quantity * (current_price - avg_cost),
-                "contract": pos.contract,
-            })
+        try:
+            for pos in self._ib.positions():
+                avg_cost = pos.avgCost if pos.avgCost else 0.0
+                quantity = pos.position
+                
+                # Get current market price for accurate valuation
+                try:
+                    contract = pos.contract
+                    ticker = self._ib.reqMktData(contract, snapshot=True)
+                    self._ib.sleep(0.5)  # Brief wait for snapshot
+                    current_price = ticker.marketPrice() if ticker.marketPrice() else avg_cost
+                    self._ib.cancelMktData(contract)
+                except Exception:
+                    current_price = avg_cost  # Fallback to avg_cost if price unavailable
+                    logger.warning(f"Could not get market price for {pos.contract.symbol}, using avg_cost")
+                
+                positions.append({
+                    "symbol": pos.contract.symbol,
+                    "quantity": quantity,
+                    "avg_cost": avg_cost,
+                    "current_price": current_price,
+                    "cost_basis": quantity * avg_cost,
+                    "market_value": quantity * current_price,
+                    "unrealized_pnl": quantity * (current_price - avg_cost),
+                    "contract": pos.contract,
+                })
+        except Exception as e:
+            logger.error(f"Error fetching positions: {e}")
+            return []
         
         return positions
     
@@ -465,7 +481,11 @@ class TradingApp:
         Place order to reach target portfolio percentage.
         """
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return None
+        
+        if self._ib is None:
+            return None
         
         from ib_insync import MarketOrder, LimitOrder, AlgoOrder
         
@@ -608,7 +628,11 @@ class TradingApp:
             return None
         
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return None
+        
+        if self._ib is None:
+            return None
         
         from ib_insync import MarketOrder, LimitOrder
         
@@ -633,18 +657,25 @@ class TradingApp:
     def get_open_orders(self) -> List[Dict[str, Any]]:
         """Get list of open orders."""
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return []
         
+        if self._ib is None:
+            return []
+
         orders = []
-        for trade in self._ib.openTrades():
-            orders.append({
-                "symbol": trade.contract.symbol,
-                "action": trade.order.action,
-                "quantity": trade.order.totalQuantity,
-                "order_type": trade.order.orderType,
-                "status": trade.orderStatus.status,
-            })
-        
+        try:
+            for trade in self._ib.openTrades():
+                orders.append({
+                    "symbol": trade.contract.symbol,
+                    "action": trade.order.action,
+                    "quantity": trade.order.totalQuantity,
+                    "order_type": trade.order.orderType,
+                    "status": trade.orderStatus.status,
+                })
+        except Exception as e:
+            logger.error(f"Error fetching open orders: {e}")
+            
         return orders
     
     def cancel_all_orders(self) -> int:
@@ -655,15 +686,23 @@ class TradingApp:
             Number of orders cancelled
         """
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return 0
         
-        open_trades = self._ib.openTrades()
-        
-        for trade in open_trades:
-            self._ib.cancelOrder(trade.order)
-        
-        logger.info(f"Cancelled {len(open_trades)} orders")
-        return len(open_trades)
+        if self._ib is None:
+            return 0
+
+        try:
+            open_trades = self._ib.openTrades()
+            
+            for trade in open_trades:
+                self._ib.cancelOrder(trade.order)
+            
+            logger.info(f"Cancelled {len(open_trades)} orders")
+            return len(open_trades)
+        except Exception as e:
+            logger.error(f"Error canceling orders: {e}")
+            return 0
     
     # =====================
     # Market Data
@@ -677,18 +716,26 @@ class TradingApp:
             Dictionary with bid, ask, last, volume
         """
         if not self.is_connected():
-            self.connect()
+            if not self.connect():
+                return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
         
-        contract = self.create_contract(symbol)
-        ticker = self._ib.reqMktData(contract)
-        self._ib.sleep(1)
-        
-        return {
-            "bid": ticker.bid or 0.0,
-            "ask": ticker.ask or 0.0,
-            "last": ticker.last or 0.0,
-            "volume": ticker.volume or 0,
-        }
+        if self._ib is None:
+            return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
+
+        try:
+            contract = self.create_contract(symbol)
+            ticker = self._ib.reqMktData(contract)
+            self._ib.sleep(1)
+            
+            return {
+                "bid": ticker.bid or 0.0,
+                "ask": ticker.ask or 0.0,
+                "last": ticker.last or 0.0,
+                "volume": ticker.volume or 0,
+            }
+        except Exception as e:
+            logger.error(f"Error fetching quote for {symbol}: {e}")
+            return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
 
     def get_health_status(self) -> Dict[str, Any]:
         """
