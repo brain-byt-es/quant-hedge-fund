@@ -40,14 +40,18 @@ The **Quant Science Platform** is a unified ecosystem designed to bridge the gap
     cd quant-hedge-fund
     ```
 
-2.  Install dependencies:
+2.  **Frontend Setup:**
     ```bash
     npm install
+    npm run dev
     ```
 
-3.  Run the development server:
+3.  **Backend Setup:**
+    Open a new terminal.
     ```bash
-    npm run dev
+    cd backend
+    pip install -r requirements.txt
+    uvicorn app.main:app --reload
     ```
 
 4.  Open [http://localhost:3000](http://localhost:3000) in your browser.
