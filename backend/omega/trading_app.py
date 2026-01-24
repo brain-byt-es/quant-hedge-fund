@@ -463,21 +463,11 @@ class TradingApp:
     ) -> Optional[Any]:
         """
         Place order to reach target portfolio percentage.
-        
-        This is the primary method for portfolio rebalancing.
-        
-        Args:
-            symbol: Stock symbol
-            target_percent: Target allocation (0.0 to 1.0)
-            order_type: Order type (ADAPTIVE, LMT, MKT - use MKT with caution)
-            
-        Returns:
-            Order trade object
         """
         if not self.is_connected():
             self.connect()
         
-        from ib_insync import MarketOrder, LimitOrder
+        from ib_insync import MarketOrder, LimitOrder, AlgoOrder
         
         # Get portfolio value
         portfolio_value = self.get_portfolio_value()
@@ -500,15 +490,15 @@ class TradingApp:
         contract = self.create_contract(symbol)
         ticker = self._ib.reqMktData(contract, snapshot=True)
         
-        # Event-driven wait with timeout (non-blocking pattern)
-        max_wait = 2.0  # seconds
+        # Event-driven wait with timeout
+        max_wait = 2.0 
         waited = 0.0
         while ticker.marketPrice() is None and waited < max_wait:
             self._ib.sleep(0.1)
             waited += 0.1
         
         current_price = ticker.marketPrice()
-        self._ib.cancelMktData(contract)  # Clean up subscription
+        self._ib.cancelMktData(contract)
         
         if not current_price or current_price <= 0:
             logger.warning(f"Could not get price for {symbol}")
@@ -532,15 +522,39 @@ class TradingApp:
         if not self._validate_risk(symbol, shares, current_price, action):
             return None
             
-        # Create order (Adaptive LMT preferred for production)
+        # Create order
         if order_type.upper() == "MKT":
             logger.warning(f"Using MKT order for {symbol} - consider ADAPTIVE for production")
             order = MarketOrder(action, shares)
         elif order_type.upper() == "ADAPTIVE":
-            # Adaptive algo order - best for production
             order = LimitOrder(action, shares, current_price)
             order.algoStrategy = "Adaptive"
             order.algoParams = [("adaptivePriority", "Normal")]
+        elif order_type.upper() == "VWAP":
+            # IBKR VWAP Algo
+            order = AlgoOrder(
+                action=action, 
+                totalQuantity=shares, 
+                algoStrategy="Vwap",
+                algoParams=[
+                    ("startTime", ""), # Now
+                    ("endTime", ""), # Market Close
+                    ("maxPctVol", 0.05), # Max 5% of volume
+                    ("noTakeLiq", False)
+                ]
+            )
+        elif order_type.upper() == "TWAP":
+            # IBKR TWAP Algo
+            order = AlgoOrder(
+                action=action, 
+                totalQuantity=shares, 
+                algoStrategy="Twap",
+                algoParams=[
+                    ("startTime", ""), 
+                    ("endTime", ""),
+                    ("strategyType", "Marketable")
+                ]
+            )
         else:
             order = LimitOrder(action, shares, current_price)
         
@@ -680,6 +694,10 @@ class TradingApp:
         """
         Get system health status for the control plane.
         """
+        positions = self.get_positions()
+        portfolio_var = self.risk_manager.calculate_portfolio_var(positions)
+        portfolio_es = self.risk_manager.calculate_expected_shortfall(positions)
+
         status = {
             "ib_connected": self.is_connected(),
             "engine_halted": self._halted,
@@ -687,7 +705,9 @@ class TradingApp:
             "latency_p50_ms": 0.0,
             "latency_p99_ms": 0.0,
             "truth_layer_active": len(self.aggregators) > 0,
-            "active_symbols": list(self.aggregators.keys())
+            "active_symbols": list(self.aggregators.keys()),
+            "portfolio_var_95_usd": portfolio_var,
+            "portfolio_es_95_usd": portfolio_es
         }
         
         if self.metrics["order_latencies"]:

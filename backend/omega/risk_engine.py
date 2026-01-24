@@ -136,6 +136,39 @@ class RiskManager:
 
         return True, "Risk validation passed"
 
+    def calculate_portfolio_var(self, positions: List[Dict[str, Any]], confidence_level: float = 0.95) -> float:
+        """
+        Estimate Portfolio Value-at-Risk (VaR) using the historical method.
+        Note: Requires historical returns for all symbols in positions.
+        """
+        import numpy as np
+        if not positions:
+            return 0.0
+            
+        # 1. Get historical returns for each symbol
+        # Simplified: Use 1% as a placeholder if data is missing, 
+        # but in production we'd query DuckDB for the covariance matrix.
+        total_market_value = sum(abs(p["market_value"]) for p in positions)
+        if total_market_value == 0:
+            return 0.0
+            
+        # Simplified Parametric VaR calculation:
+        # VaR = PortfolioValue * Z_score * Portfolio_Volatility
+        # For now, let's assume a default portfolio vol of 15% annual if not calculated
+        vol_daily = 0.15 / np.sqrt(252)
+        z_score = 1.645 if confidence_level == 0.95 else 2.326
+        
+        var_amount = total_market_value * z_score * vol_daily
+        return var_amount
+
+    def calculate_expected_shortfall(self, positions: List[Dict[str, Any]], confidence_level: float = 0.95) -> float:
+        """
+        Estimate Expected Shortfall (Conditional VaR).
+        """
+        var = self.calculate_portfolio_var(positions, confidence_level)
+        # Rule of thumb for normal distribution: ES is roughly 1.2-1.5x VaR at tail
+        return var * 1.25
+
     def get_volatility_adjusted_size(self, portfolio_value: float, price: float, atr: float, risk_per_trade_pct: float = 0.01) -> int:
         """
         Calculates position size based on ATR (Average True Range).

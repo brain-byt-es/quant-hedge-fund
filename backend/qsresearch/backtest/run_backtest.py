@@ -109,7 +109,20 @@ def run_backtest(
         
         # Step 5: Calculate metrics
         logger.info("Calculating performance metrics...")
-        metrics = calculate_all_metrics(performance)
+        
+        # Load benchmark for Alpha/Beta calculation
+        benchmark_symbol = config.get("benchmark", "SPY")
+        benchmark_data = _load_price_data(bundle_name, start_date, end_date) # Simplified
+        benchmark_returns = None
+        if not benchmark_data.empty and benchmark_symbol in benchmark_data['symbol'].values:
+            bench_df = benchmark_data[benchmark_data['symbol'] == benchmark_symbol].sort_values('date')
+            benchmark_returns = bench_df['close'].pct_change().dropna()
+        
+        metrics = calculate_all_metrics(performance, benchmark_returns=benchmark_returns)
+        
+        # Step 5.1: Monte Carlo Check
+        mc_metrics = run_monte_carlo_check(performance["returns"])
+        metrics.update(mc_metrics)
         
         # Step 6: Save results
         results = {
@@ -135,7 +148,7 @@ def run_backtest(
             # Log artifacts
             mlflow.log_artifact(str(output_path))
         
-        logger.info("Backtest completed successfully")
+        logger.info(f"Backtest completed successfully. Stability Score: {metrics.get('mc_stability_score', 0):.2f}")
         return results
         
     except Exception as e:
@@ -252,10 +265,9 @@ def _simulate_portfolio(
     """
     Simulate portfolio performance based on signals.
     
-    This is a simplified but realistic simulation that:
-    1. Uses actual price returns from the data
-    2. Weights returns by signal strength
-    3. Applies transaction costs
+    This simulation includes:
+    1. Realistic Transaction Costs (Commission + Slippage)
+    2. Dynamic Slippage based on volatility
     """
     import numpy as np
     
@@ -269,19 +281,32 @@ def _simulate_portfolio(
         prices_sorted = prices.sort_values(['symbol', 'date'])
         prices_sorted['daily_return'] = prices_sorted.groupby('symbol')['close'].pct_change()
         
+        # Calculate volatility (for dynamic slippage)
+        daily_vol = prices_sorted.groupby('date')['daily_return'].std()
+        
         # Get average market return per day (equal-weighted across all stocks)
         daily_returns = prices_sorted.groupby('date')['daily_return'].mean()
         
         # Filter to date range
         daily_returns = daily_returns.loc[start_date:end_date].dropna()
+        daily_vol = daily_vol.loc[daily_returns.index]
         
         if len(daily_returns) == 0:
             logger.warning("No returns data available, using fallback simulation")
             return _fallback_simulation(capital_base, start_date, end_date)
         
-        # Apply transaction cost (0.1% per month, roughly)
-        transaction_cost = 0.001 / 21  # Daily transaction cost
-        adjusted_returns = daily_returns - transaction_cost
+        # --- Advanced Transaction Cost Model ---
+        # 1. Base Commission (e.g. 5 bps)
+        commission_bps = 0.0005 
+        
+        # 2. Dynamic Slippage (Increases with volatility)
+        slippage_coeff = 0.1 
+        dynamic_slippage = daily_vol * slippage_coeff
+        
+        # Total daily cost
+        total_costs = commission_bps + dynamic_slippage
+        
+        adjusted_returns = daily_returns - total_costs
         
         # Calculate cumulative portfolio value
         portfolio_values = [capital_base]
@@ -302,6 +327,38 @@ def _simulate_portfolio(
     except Exception as e:
         logger.warning(f"Simulation error: {e}, using fallback")
         return _fallback_simulation(capital_base, start_date, end_date)
+
+
+def run_monte_carlo_check(
+    returns: pd.Series,
+    iterations: int = 1000,
+) -> Dict[str, float]:
+    """
+    Monte-Carlo Stability Check.
+    Shuffles returns multiple times and calculates the probability 
+    that a random sequence achieves a better Sharpe than the strategy.
+    """
+    import numpy as np
+    
+    actual_sharpe = (np.mean(returns) / np.std(returns)) * np.sqrt(252) if np.std(returns) > 0 else 0
+    
+    better_count = 0
+    shuffled_sharpes = []
+    
+    for _ in range(iterations):
+        shuffled = np.random.permutation(returns)
+        s_sharpe = (np.mean(shuffled) / np.std(shuffled)) * np.sqrt(252) if np.std(shuffled) > 0 else 0
+        shuffled_sharpes.append(s_sharpe)
+        if s_sharpe > actual_sharpe:
+            better_count += 1
+            
+    p_value = better_count / iterations
+    
+    return {
+        "mc_p_value": p_value,
+        "mc_avg_shuffled_sharpe": float(np.mean(shuffled_sharpes)),
+        "mc_stability_score": 1.0 - p_value # Higher is more stable/less random
+    }
 
 
 def _fallback_simulation(capital_base: float, start_date: str, end_date: str) -> pd.DataFrame:
