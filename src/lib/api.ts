@@ -87,6 +87,43 @@ export const api = {
     return res.json();
   },
 
+  // AI Layer
+  analyzeBacktest: async (runId: string) => {
+      const res = await fetch(`${API_BASE_URL}/ai/analyze_backtest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ run_id: runId }),
+      });
+      return res.json();
+  },
+
+  generateStrategyConfig: async (prompt: string) => {
+      const res = await fetch(`${API_BASE_URL}/ai/generate_strategy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+      });
+      return res.json();
+  },
+
+  generateFactorCode: async (prompt: string) => {
+      const res = await fetch(`${API_BASE_URL}/ai/generate_code`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+      });
+      return res.json();
+  },
+
+  generateHypotheses: async (n: number = 3) => {
+      const res = await fetch(`${API_BASE_URL}/ai/generate_hypotheses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ n }),
+      });
+      return res.json();
+  },
+
   // Live Execution Layer
   getLiveStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/live/status`);

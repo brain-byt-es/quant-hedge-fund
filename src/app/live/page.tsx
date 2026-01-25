@@ -3,66 +3,74 @@
 import { useEffect, useState } from "react"
 import { ConsoleStream } from "@/components/live/console-stream"
 import { OrderTicket } from "@/components/live/order-ticket"
-import { AssetTable, Asset } from "@/components/data/asset-table"
 import { RiskGauge } from "@/components/live/risk-gauge"
+import { LivePerformanceHeader } from "@/components/live/live-performance-header"
+import { DeploymentMetadata } from "@/components/live/deployment-metadata"
+import { LivePerformanceChart } from "@/components/live/performance-chart"
+import { RollingReturnTable } from "@/components/live/rolling-return-table"
+import { ActiveWeightsTable } from "@/components/live/active-weights-table"
 import { api } from "@/lib/api"
 
 export default function LiveOpsPage() {
-  const [positions, setPositions] = useState<Asset[]>([])
   const [liveStatus, setLiveStatus] = useState<any>(null)
 
   useEffect(() => {
       const fetchData = async () => {
           try {
-              // 1. Positions
-              const data = await api.getPortfolio()
-              const assets: Asset[] = data.map((p: any) => ({
-                  ticker: p.symbol,
-                  name: p.contract?.symbol || p.symbol,
-                  sector: p.asset_class || "Equity",
-                  price: p.current_price,
-                  quantity: p.quantity,
-                  avg_cost: p.avg_cost,
-                  status: "OPEN"
-              }))
-              setPositions(assets)
-
-              // 2. Status / Risk
               const status = await api.getLiveStatus()
               setLiveStatus(status)
-
           } catch (e) {
               console.error("Failed to fetch live data", e)
           }
       }
 
       fetchData()
-      const interval = setInterval(fetchData, 3000) // Fast polling for "Live" feel
+      const interval = setInterval(fetchData, 5000)
       return () => clearInterval(interval)
   }, [])
 
   return (
-    <div className="h-[calc(100vh-6rem)] p-4">
-      <div className="grid grid-cols-12 gap-4 h-full">
-        {/* Left: Active Positions / Market Data */}
-        <div className="col-span-12 lg:col-span-8 grid grid-rows-2 gap-4">
-            <div className="row-span-1 border rounded-xl overflow-hidden bg-card">
-                 <AssetTable assets={positions} title="Active Portfolio Positions" /> 
+    <div className="flex flex-col bg-black min-h-screen text-zinc-300">
+      
+      {/* 1. Run Snapshot Header (Sticky-ish) */}
+      <div className="sticky top-0 z-30">
+        <LivePerformanceHeader />
+      </div>
+
+      <div className="p-4 lg:p-6 space-y-6">
+        
+        {/* 2. Metadata Accordion */}
+        <DeploymentMetadata />
+
+        {/* 3. Performance Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-9 h-full min-h-[400px]">
+                <LivePerformanceChart />
             </div>
-            <div className="row-span-1">
-                <ConsoleStream />
+            <div className="lg:col-span-3 h-full">
+                <RollingReturnTable />
             </div>
         </div>
 
-        {/* Right: Controls & Risk */}
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
-            <div className="h-48">
-                <RiskGauge var95={liveStatus?.portfolio_var_95_usd} portfolioValue={liveStatus?.net_liquidation} />
+        {/* 4. Details Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Active Weights */}
+            <div className="lg:col-span-7">
+                <ActiveWeightsTable />
             </div>
-            <div className="flex-1">
-                <OrderTicket />
+
+            {/* Risk, Execution & Logs */}
+            <div className="lg:col-span-5 flex flex-col gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <RiskGauge var95={liveStatus?.portfolio_var_95_usd} portfolioValue={liveStatus?.net_liquidation} />
+                    <OrderTicket />
+                </div>
+                <div className="flex-1 min-h-[300px]">
+                    <ConsoleStream />
+                </div>
             </div>
         </div>
+
       </div>
     </div>
   )

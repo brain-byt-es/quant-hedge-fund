@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Play, RotateCcw } from "lucide-react"
+import { Play, RotateCcw, BrainCircuit } from "lucide-react"
 import { api, BacktestRun } from "@/lib/api"
 
 export function BacktestList() {
@@ -36,6 +36,15 @@ export function BacktestList() {
           setTimeout(fetchRuns, 1000)
       } finally {
           setLoading(false)
+      }
+  }
+
+  const handleAnalyze = async (runId: string) => {
+      try {
+          const analysis = await api.analyzeBacktest(runId);
+          alert(`AI Analysis:\n\nVerdict: ${analysis.verdict}\nRisk: ${analysis.risk_analysis}\n\nTip: ${analysis.recommendation}`);
+      } catch (e) {
+          alert("Analysis failed: " + String(e));
       }
   }
 
@@ -70,12 +79,13 @@ export function BacktestList() {
               <TableHead className="text-right">Alpha</TableHead>
               <TableHead className="text-right">Beta</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead></TableHead> 
             </TableRow>
           </TableHeader>
           <TableBody>
             {runs.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground h-24">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground h-24">
                         No backtests recorded yet. Start one to populate this lab.
                     </TableCell>
                 </TableRow>
@@ -98,6 +108,11 @@ export function BacktestList() {
                         <Badge variant={run.status === "FINISHED" ? "default" : "secondary"}>
                             {run.status}
                         </Badge>
+                    </TableCell>
+                    <TableCell>
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleAnalyze(run.run_id); }}>
+                            <BrainCircuit className="h-4 w-4 text-primary" />
+                        </Button>
                     </TableCell>
                   </TableRow>
                 ))

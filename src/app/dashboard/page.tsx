@@ -216,6 +216,11 @@ export default function DashboardPage() {
         <div>Execution Latency: {latency}</div>
         <div className="h-3 w-[1px] bg-border" />
         <div>Stream: {wsStatus.toUpperCase()}</div>
+        <div className="h-3 w-[1px] bg-border" />
+        <div className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Janitor (Prefect): ONLINE
+        </div>
       </div>
     </div>
   )

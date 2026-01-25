@@ -9,29 +9,37 @@ import os
 from loguru import logger
 from openai import OpenAI
 
-class GroqClient:
-    """Client for interacting with Groq's LLM API."""
+class LLMClient:
+    """Client for interacting with LLM APIs (OpenAI or Groq)."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
-        Initialize the Groq client.
-
-        Args:
-            api_key: Groq API key (defaults to env var GROQ_API_KEY)
-            model: Model name (defaults to env var GROQ_MODEL)
+        Initialize the LLM client. Priorities: OpenAI > Groq.
         """
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self.model = model or os.getenv("GROQ_MODEL", "mixtral-8x7b-32768")
+        import os
+        
+        self.openai_key = os.getenv("OPENAI_API_KEY")
+        self.groq_key = api_key or os.getenv("GROQ_API_KEY")
+        
+        self.provider = "none"
+        self.client = None
 
-        if not self.api_key:
-            logger.warning("GROQ_API_KEY not set. LLM features will be disabled.")
-            self.client = None
-        else:
+        if self.openai_key:
+            self.provider = "openai"
+            self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
+            self.client = OpenAI(api_key=self.openai_key)
+            logger.info(f"LLM Client initialized with OpenAI ({self.model})")
+            
+        elif self.groq_key:
+            self.provider = "groq"
+            self.model = model or os.getenv("GROQ_MODEL", "mixtral-8x7b-32768")
             self.client = OpenAI(
                 base_url="https://api.groq.com/openai/v1",
-                api_key=self.api_key,
+                api_key=self.groq_key,
             )
-            logger.info(f"Groq Client initialized with model: {self.model}")
+            logger.info(f"LLM Client initialized with Groq ({self.model})")
+        else:
+            logger.warning("No LLM API keys found. AI features disabled.")
 
     def generate_completion(
         self, 
@@ -43,19 +51,9 @@ class GroqClient:
     ) -> str:
         """
         Generate a completion from the LLM.
-
-        Args:
-            system_prompt: The system instruction.
-            user_prompt: The user query.
-            temperature: Creativity (0.0 to 1.0).
-            max_tokens: Max output tokens.
-            json_mode: Whether to enforce JSON output.
-
-        Returns:
-            The raw text response.
         """
         if not self.client:
-            raise ValueError("Groq Client not initialized (missing API key)")
+            raise ValueError("LLM Client not initialized")
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -76,7 +74,7 @@ class GroqClient:
             response = self.client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"Error calling Groq API: {e}")
+            logger.error(f"Error calling LLM API ({self.provider}): {e}")
             raise
 
     def generate_strategy_params(self, market_regime: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,3 +115,6 @@ class GroqClient:
         except json.JSONDecodeError:
             logger.error(f"Failed to parse JSON response: {response}")
             raise
+
+# Alias for backward compatibility
+GroqClient = LLMClient

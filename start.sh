@@ -5,9 +5,9 @@ pre_cleanup() {
     echo "🧹 Cleaning up ports and zombie processes..."
     # Kill processes on ports
     lsof -ti:8000 | xargs kill -9 2>/dev/null
-    lsof -ti:8501 | xargs kill -9 2>/dev/null
     lsof -ti:3000 | xargs kill -9 2>/dev/null
     lsof -ti:5000 | xargs kill -9 2>/dev/null
+    lsof -ti:4200 | xargs kill -9 2>/dev/null
     
     # Kill backend python processes specifically (prevents DuckDB locks)
     pgrep -f "backend/main.py" | xargs kill -9 2>/dev/null
@@ -26,8 +26,8 @@ cleanup() {
     echo "Stopping servers..."
     kill $BACKEND_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
-    kill $DASHBOARD_PID 2>/dev/null
     kill $MLFLOW_PID 2>/dev/null
+    kill $PREFECT_PID 2>/dev/null
     exit
 }
 
@@ -56,10 +56,10 @@ echo "Starting Strategy Lab (MLflow)..."
 mlflow ui --port 5000 --backend-store-uri ./mlruns &
 MLFLOW_PID=$!
 
-# Start Streamlit Dashboard
-echo "Starting Dashboard (Streamlit)..."
-python -m streamlit run dashboard/app.py --server.port 8501 --server.headless true &
-DASHBOARD_PID=$!
+# Start Prefect Server (The Janitor)
+echo "Starting Automation Server (Prefect)..."
+prefect server start --host 127.0.0.1 --port 4200 &
+PREFECT_PID=$!
 cd ..
 
 # Start Frontend
@@ -71,8 +71,8 @@ FRONTEND_PID=$!
 echo "Services are running:"
 echo "Backend API:  http://localhost:8000"
 echo "Strategy Lab: http://localhost:5000 (MLflow)"
-echo "Admin Panel:  http://localhost:8501 (Streamlit)"
+echo "Automation:   http://localhost:4200 (Prefect)"
 echo "Dashboard:    http://localhost:3000 (Next.js)"
 
 # Wait for processes
-wait $BACKEND_PID $FRONTEND_PID $DASHBOARD_PID $MLFLOW_PID
+wait $BACKEND_PID $FRONTEND_PID $MLFLOW_PID $PREFECT_PID

@@ -19,19 +19,25 @@ Located in `/backend`, providing the core logic via a modular **FastAPI** bridge
 - **API Bridge:** Modular FastAPI routers (`/api/data`, `/api/live`, `/api/backtest`) with **WebSocket** support for real-time dashboard updates.
 - **AI Insights:** Market analysis and regime detection powered by **Groq**.
 
-### 2. Operational Control Plane (Streamlit)
-Exposed on `localhost:8501`. Serves as the "Admin Cockpit":
-- Emergency HALT/RESUME controls.
-- Real-time candle truth-layer visualization (Plotly).
-- Strategy approval and governance audit logs.
-- AI market analysis engine.
-
-### 3. Frontend (Next.js 14 / TypeScript)
-Exposed on `localhost:3000`. Serves as the "Executive Dashboard":
-- **Real-Time:** WebSockets (`useWebSocket`) stream ticks and P&L from the backend.
-- **Interactive:** Broker switching (Alpaca/IBKR) and system controls (Halt/Resume) directly from the UI.
-- **Visualization:** Recharts for Equity Curves and high-density tables for Holdings.
+### 2. Executive Dashboard (Next.js 14 / TypeScript)
+Exposed on `localhost:3000`. Serves as the central "Mission Control":
+- **High-level KPI Monitoring:** Total P&L, Alpha, Sharpe, VaR (Live).
+- **Strategy Lab:** Backtest triggers and MLflow history integration.
+- **AI Quant Team:** LLM-powered strategy generation and automated performance analysis.
+- **Data Hub:** Real-time data health monitoring and manual ingestion controls.
+- **Admin Controls:** Emergency HALT/RESUME and broker switching (Alpaca/IBKR).
 - Modern, high-density UI using `shadcn/ui` and `Tailwind CSS`.
+
+### 3. Strategy Lab (MLflow)
+Exposed on `localhost:5000`. Handles experiment tracking:
+- Automated logging of every backtest run.
+- Artifact storage for performance charts and parameter snapshots.
+- Comparison engine for strategy versions.
+
+### 4. Automation Layer (Prefect)
+Exposed on `localhost:4200`. The system "Janitor":
+- Orchestrates nightly data ingestion flows.
+- Manages recovery and retries for long-running data tasks.
 
 ## Core Tech Stack
 - **Frontend:** Next.js (App Router), Lucide Icons, Shadcn/UI, Tailwind.

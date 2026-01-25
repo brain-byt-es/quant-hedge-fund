@@ -1,0 +1,152 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { ShieldCheck, History, Landmark } from "lucide-react"
+
+export function StrategyGovernance() {
+  const [auditLog, setAuditLog] = useState<any[]>([])
+  const [rationale, setRationale] = useState("")
+  const [stage, setStage] = useState("PAPER")
+  const [loading, setLoading] = useState(false)
+
+  const fetchAuditTrail = async () => {
+    try {
+      const res = await fetch("/api/governance/audit-trail")
+      const data = await res.json()
+      setAuditLog(data)
+    } catch (e) {
+      console.error("Failed to fetch audit trail", e)
+    }
+  }
+
+  const handleApprove = async () => {
+    if (!rationale) {
+        alert("Please provide a rationale for approval.")
+        return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("/api/governance/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          strategy_hash: "manual-" + Date.now(),
+          strategy_name: "Active Model",
+          stage: stage,
+          rationale: rationale
+        })
+      })
+      if (res.ok) {
+          setRationale("")
+          fetchAuditTrail()
+          alert("Strategy deployment approved.")
+      }
+    } catch (e) {
+      alert("Approval failed.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAuditTrail()
+  }, [])
+
+  return (
+    <div className="grid grid-cols-12 gap-6 h-full">
+      {/* Left: Approval Form */}
+      <Card className="col-span-12 lg:col-span-4 border-emerald-900/30 bg-emerald-950/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-emerald-500">
+            <ShieldCheck className="h-5 w-5" /> Deployment Approval
+          </CardTitle>
+          <CardDescription>Authorize strategy transitions to live stages.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Target Activation Stage</Label>
+            <Select value={stage} onValueChange={setStage}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SHADOW">SHADOW (No Execution)</SelectItem>
+                <SelectItem value="PAPER">PAPER (Simulation)</SelectItem>
+                <SelectItem value="CANARY">CANARY (Small Capital)</SelectItem>
+                <SelectItem value="FULL">FULL (Production)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Human Rationale (Required)</Label>
+            <Textarea 
+                placeholder="Explain why this strategy is ready for the next stage..." 
+                className="h-32 bg-background"
+                value={rationale}
+                onChange={(e) => setRationale(e.target.value)}
+            />
+          </div>
+          <Button className="w-full bg-emerald-600 hover:bg-emerald-500" onClick={handleApprove} disabled={loading}>
+            {loading ? "Logging..." : "Log & Approve Strategy"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Right: Audit Trail */}
+      <Card className="col-span-12 lg:col-span-8">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-muted-foreground" /> Immutable Audit Trail
+            </CardTitle>
+            <CardDescription>History of all approved model changes.</CardDescription>
+          </div>
+          <Landmark className="h-8 w-8 text-zinc-800" />
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Timestamp</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Rationale</TableHead>
+                <TableHead>Approved By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {auditLog.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground h-32 italic">
+                        No approvals recorded in audit trail.
+                    </TableCell>
+                  </TableRow>
+              ) : (
+                  auditLog.map((log, i) => (
+                    <TableRow key={i} className="text-xs">
+                      <TableCell className="font-mono text-zinc-500">
+                        {new Date(log.approved_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={log.stage === "FULL" ? "default" : "secondary"}>
+                            {log.stage}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">{log.human_rationale}</TableCell>
+                      <TableCell className="font-medium text-primary">{log.approved_by}</TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

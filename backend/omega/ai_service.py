@@ -7,56 +7,44 @@ from typing import Dict, Any, Optional
 
 class MarketAnalyst:
     """
-    AI-powered market analysis engine using Groq (LPU Inference).
+    AI-powered market analysis engine using OpenAI (GPT-4) or Groq (Llama 3).
     Transforms structured market data into governance-safe trading insights.
     """
     
     def __init__(self, api_key: Optional[str] = None):
         from dotenv import load_dotenv, find_dotenv
         from pathlib import Path
-        import shutil
+        import os
         
-        # 1. Try finding .env intelligently
-        env_path = find_dotenv()
-        if not env_path:
-            # Fallback to absolute calculation
-            env_path = Path(__file__).resolve().parent.parent / '.env'
-        
-        logger.info(f"🔍 Loading .env from: {env_path}")
+        # Load env
+        env_path = find_dotenv() or (Path(__file__).resolve().parent.parent / '.env')
         load_dotenv(dotenv_path=env_path, override=True)
         
-        # 2. Try standard env var
+        # Provider Selection
+        self.openai_key = os.getenv("OPENAI_API_KEY")
         self.groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GROK_API_KEY")
         
-        # 3. Last Resort: Manual file parse (Brute force)
-        if not self.groq_key and os.path.exists(env_path):
-            try:
-                with open(env_path, 'r') as f:
-                    for line in f:
-                        if line.startswith("GROQ_API_KEY=") or line.startswith("GROK_API_KEY="):
-                            self.groq_key = line.split("=", 1)[1].strip().strip("'").strip('"')
-                            logger.info("✅ Found API Key via manual file parse")
-                            break
-            except Exception as e:
-                logger.error(f"Manual .env parse failed: {e}")
+        self.provider = "none"
+        self.client = None
+        self.model = ""
 
-        # 4. Emergency Backup (Obfuscated to bypass GitHub Scanner)
-        # Key: gsk_ShW...
-        if not self.groq_key:
-            # Reconstruct key from parts to avoid secret scanning detection
-            part_a = "gsk_ShW52P6cA9rLj"
-            part_b = "OLDdU8WWGdyb3FYN"
-            part_c = "1wTtm3H5nula12JDhpFNe9i"
-            self.groq_key = part_a + part_b + part_c
-            logger.warning("⚠️ Used Emergency Backup Key (Check .env configuration)")
-
-        if not self.groq_key:
-             logger.error("❌ GROQ_API_KEY not found in environment or .env file!")
-        
-        self.client = Groq(api_key=self.groq_key)
-        self.model = "llama-3.3-70b-versatile" # Updated to new supported model
-        logger.info("🧠 Initializing AI Service with Groq (Llama3-70b)")
+        # Priority 1: OpenAI (GPT-4o)
+        if self.openai_key:
+            self.provider = "openai"
+            self.client = OpenAI(api_key=self.openai_key)
+            self.model = "gpt-4o" # or gpt-4-turbo
+            logger.info(f"🧠 Initializing AI Service with OpenAI ({self.model})")
             
+        # Priority 2: Groq (Llama 3)
+        elif self.groq_key:
+            self.provider = "groq"
+            self.client = Groq(api_key=self.groq_key)
+            self.model = "llama-3.3-70b-versatile"
+            logger.info(f"🧠 Initializing AI Service with Groq ({self.model})")
+            
+        else:
+             logger.error("❌ No AI API Key (OpenAI or Groq) found!")
+
     def generate_market_summary(self, symbol: str, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Feature 1: AI Market Summary"""
         prompt = f"""
@@ -72,7 +60,7 @@ class MarketAnalyst:
         
         Snapshot: {json.dumps(snapshot)}
         """
-        return self._call_grok(prompt)
+        return self._call_llm(prompt)
 
     def detect_regime(self, symbol: str, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Feature 2: AI Market Regime Detection"""
@@ -83,7 +71,7 @@ class MarketAnalyst:
         
         Snapshot: {json.dumps(snapshot)}
         """
-        return self._call_grok(prompt)
+        return self._call_llm(prompt)
 
     def check_risk_guardrail(self, symbol: str, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Feature 3: AI Risk Guardrail"""
@@ -96,7 +84,7 @@ class MarketAnalyst:
         
         Snapshot: {json.dumps(snapshot)}
         """
-        return self._call_grok(prompt)
+        return self._call_llm(prompt)
 
     def suggest_trade_levels(self, symbol: str, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Feature 4: AI Stop-Loss & Take-Profit"""
@@ -111,14 +99,15 @@ class MarketAnalyst:
         
         Snapshot: {json.dumps(snapshot)}
         """
-        return self._call_grok(prompt)
+        return self._call_llm(prompt)
 
-    def _call_grok(self, user_prompt: str) -> Dict[str, Any]:
-        """Internal helper to call Grok safely"""
+    def _call_llm(self, user_prompt: str) -> Dict[str, Any]:
+        """Internal helper to call LLM (OpenAI or Groq) safely"""
         if not self.client:
             return {"error": "AI Service Disabled"}
             
         try:
+            # Common interface for OpenAI-compatible clients
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -126,12 +115,13 @@ class MarketAnalyst:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.4,
-                max_tokens=512,
+                max_tokens=1024,
                 response_format={"type": "json_object"}
             )
-            return json.loads(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            return json.loads(content)
         except Exception as e:
-            logger.error(f"Grok Call Failed: {e}")
+            logger.error(f"LLM Call Failed ({self.provider}): {e}")
             return {"error": str(e)}
 
 # Singleton instance
