@@ -75,6 +75,9 @@ class Client:
         self._cache_manager = CacheManager(cache_dir=self._cache_dir)
         self._bundler = ZiplineBundler(db_manager=self._db_manager)
         
+        # Stop Signal for background tasks
+        self.stop_requested = False
+        
         logger.info(f"QS Connect client initialized. Cache: {self._cache_dir}")
     
     # =====================
@@ -129,49 +132,60 @@ class Client:
         end_date: Optional[date] = None,
         symbols: Optional[List[str]] = None,
         use_cache: bool = True,
+        progress_callback: Optional[Any] = None,
     ) -> pl.DataFrame:
         """
         Download bulk historical price data for all symbols.
-        
-        Args:
-            start_date: Start date for historical data
-            end_date: End date for historical data
-            symbols: Optional list of specific symbols
-            use_cache: Whether to use cached data
-            
-        Returns:
-            Polars DataFrame with OHLCV data
+        Supports Smart Resume (skips existing in DB) and Incremental Saving.
         """
         if end_date is None:
             end_date = date.today()
         if start_date is None:
             start_date = date(2000, 1, 1)
         
-        cache_key = f"bulk_prices_{start_date}_{end_date}"
+        # 1. Fetch Target Universe
+        if symbols is None:
+            stock_list = self._fmp_client.get_stock_list()
+            if not stock_list.empty:
+                symbols = stock_list["symbol"].tolist()
+            else:
+                symbols = []
         
-        # Check cache
-        if use_cache:
-            cached = self._cache_manager.get(cache_key)
-            if cached is not None:
-                logger.info(f"Loaded {len(cached)} rows from cache")
-                return cached
-        
+        # 2. Smart Resume: Filter out symbols already in DB
+        try:
+            existing_symbols = set(self._db_manager.get_symbols())
+            original_count = len(symbols)
+            # Only skip if we are running a "Full History" backfill (e.g. start_date < 2024)
+            # For daily updates, we might want to overwrite. 
+            # Assuming this is the initial backfill pipeline:
+            symbols = [s for s in symbols if s not in existing_symbols]
+            skipped_count = original_count - len(symbols)
+            if skipped_count > 0:
+                logger.info(f"Smart Resume: Skipping {skipped_count} symbols already in DB. Remaining: {len(symbols)}")
+        except Exception as e:
+            logger.warning(f"Smart Resume check failed: {e}")
+
+        if not symbols:
+            logger.info("All symbols already downloaded.")
+            if progress_callback: progress_callback(100, 100)
+            return pl.DataFrame()
+
         logger.info(f"Fetching bulk historical prices from {start_date} to {end_date}")
         
-        # Get data from FMP
+        # 3. Download with Incremental Save
+        # We pass upsert_prices as the callback to save batches immediately
         prices = self._fmp_client.get_bulk_historical_prices(
             start_date=start_date,
             end_date=end_date,
             symbols=symbols,
+            progress_callback=progress_callback,
+            save_callback=self._db_manager.upsert_prices, # Incremental Persistence
+            stop_check=lambda: self.stop_requested # Kill Switch
         )
         
-        # Cache the result
-        if use_cache and prices is not None:
-            self._cache_manager.set(cache_key, prices)
-        
-        # Store in database (only if we have data)
-        if prices is not None and not prices.is_empty():
-            self._db_manager.upsert_prices(prices)
+        # Cache the result (optional, might be partial if filtered)
+        # if use_cache and prices is not None:
+        #    self._cache_manager.set(cache_key, prices)
         
         return prices
     
@@ -260,6 +274,29 @@ class Client:
         """Execute a SQL query against the database."""
         return self._db_manager.query(sql)
     
+    def get_latest_prices(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get latest prices for all symbols.
+        Reuses the existing database connection to avoid locking conflicts.
+        """
+        sql = f"""
+            SELECT symbol, date, close, volume, change_percent
+            FROM prices
+            WHERE date = (SELECT MAX(date) FROM prices)
+            ORDER BY symbol
+            LIMIT {limit}
+        """
+        df = self._db_manager.query(sql)
+        return df.to_dicts()
+
+    def get_system_logs(self, limit: int = 100) -> pl.DataFrame:
+        """Get recent system logs."""
+        return self._db_manager.get_logs(limit)
+
+    def get_data_health(self) -> pl.DataFrame:
+        """Get data health statistics."""
+        return self._db_manager.get_data_health()
+
     # =====================
     # Zipline Bundle
     # =====================

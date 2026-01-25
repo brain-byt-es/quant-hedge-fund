@@ -4,7 +4,7 @@ import * as React from "react"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Loader2, Database, Play } from "lucide-react"
+import { CheckCircle2, Loader2, Database, Play, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 
@@ -22,36 +22,73 @@ export function ProcessMonitor() {
     { name: "Cleaning Fundamentals", status: "pending", progress: 0 },
     { name: "Syncing DuckDB", status: "pending", progress: 0 },
   ]);
+  const [details, setDetails] = React.useState("");
 
   const handleRunPipeline = async () => {
       setIsRunning(true);
-      // Reset steps
+      // Reset UI
       setSteps(s => s.map(step => ({ ...step, status: "pending", progress: 0 })));
       
       try {
-          // 1. Trigger Download
-          setSteps(s => s.map(step => step.name.includes("Downloading") ? { ...step, status: "running", progress: 50 } : step));
-          
-          // Use specific symbols to avoid FMP Free Tier "Bulk" limits (403 Forbidden)
+          // Fetch full market history (last 5 years)
+          const fiveYearsAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 5)).toISOString().split('T')[0];
           await api.triggerIngestion({ 
-              start_date: "2023-01-01",
-              symbols: ["AAPL", "MSFT", "SPY", "NVDA", "TSLA"] 
+              start_date: fiveYearsAgo,
           });
-          
-          // Since API is fire-and-forget background task, we optimistically show "Started"
-          // In a real app, we'd poll a task ID. For now, we simulate completion of the *request*.
-          setSteps(s => s.map(step => step.name.includes("Downloading") ? { ...step, status: "completed", progress: 100 } : step));
-          
-          // Mark others as scheduled
-          setSteps(s => s.map(step => !step.name.includes("Downloading") ? { ...step, status: "pending", progress: 0 } : step));
-          
       } catch (e) {
           console.error(e);
-          setSteps(s => s.map(step => ({ ...step, status: "error" })));
-      } finally {
-          setTimeout(() => setIsRunning(false), 2000);
+          setIsRunning(false);
       }
   };
+
+  // Poll for progress
+  React.useEffect(() => {
+      let interval: NodeJS.Timeout;
+      
+      const pollProgress = async () => {
+          try {
+              // Add a new endpoint to api.ts for this
+              const res = await fetch("/api/data/ingest/progress"); 
+              if (!res.ok) return;
+              const state = await res.json();
+              
+              if (state.status === "idle") {
+                  if (isRunning) setIsRunning(false); // Stop if backend reset
+                  return;
+              }
+              
+              setIsRunning(state.status === "running");
+              setDetails(state.details || "");
+
+              // Map backend steps to UI steps
+              setSteps(prev => {
+                  return prev.map(step => {
+                      if (state.step.includes("Downloading") && step.name.includes("Downloading")) {
+                          return { ...step, status: state.status === "error" ? "error" : state.status === "completed" ? "completed" : "running", progress: state.progress };
+                      }
+                      if (state.step.includes("Bundling") && step.name.includes("Bundling")) {
+                          // Mark previous as done
+                          if (step.name.includes("Downloading")) return { ...step, status: "completed", progress: 100 };
+                          return { ...step, status: state.status === "running" ? "running" : "completed", progress: state.progress };
+                      }
+                      if (state.status === "completed") {
+                          return { ...step, status: "completed", progress: 100 };
+                      }
+                      return step;
+                  });
+              });
+
+          } catch (e) {
+              console.error("Polling error", e);
+          }
+      };
+
+      if (isRunning) {
+          interval = setInterval(pollProgress, 1000);
+      }
+
+      return () => clearInterval(interval);
+  }, [isRunning]);
 
   return (
     <Card>
@@ -59,7 +96,7 @@ export function ProcessMonitor() {
         <div className="flex items-center justify-between">
             <div className="space-y-1">
                 <CardTitle>Ingestion Engine</CardTitle>
-                <CardDescription>Daily data pipeline status</CardDescription>
+                <CardDescription>Daily data pipeline status {details && `(${details})`}</CardDescription>
             </div>
             <Button size="sm" onClick={handleRunPipeline} disabled={isRunning}>
                 {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
@@ -74,7 +111,7 @@ export function ProcessMonitor() {
               <div className="flex items-center gap-2">
                 {step.status === "completed" && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                 {step.status === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                {step.status === "error" && <Database className="h-4 w-4 text-red-500" />}
+                {step.status === "error" && <AlertTriangle className="h-4 w-4 text-red-500" />}
                 {step.status === "pending" && <div className="h-4 w-4 rounded-full border border-muted-foreground/30" />}
                 <span className={cn(step.status === "pending" && "text-muted-foreground")}>
                   {step.name}

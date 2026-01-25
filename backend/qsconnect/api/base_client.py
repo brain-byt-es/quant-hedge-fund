@@ -5,6 +5,7 @@ Abstract base class for all API clients with rate limiting and error handling.
 """
 
 import time
+import threading
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 
@@ -34,6 +35,7 @@ class BaseAPIClient(ABC):
         self.rate_limit_per_minute = rate_limit_per_minute
         self._last_request_time = 0.0
         self._min_interval = 60.0 / rate_limit_per_minute
+        self._lock = threading.Lock()
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -42,12 +44,24 @@ class BaseAPIClient(ABC):
         })
     
     def _rate_limit(self) -> None:
-        """Enforce rate limiting between requests."""
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self._min_interval:
-            sleep_time = self._min_interval - elapsed
-            time.sleep(sleep_time)
-        self._last_request_time = time.time()
+        """
+        Enforce rate limiting with non-blocking scheduling.
+        Allows multiple threads to calculate their sleep time concurrently.
+        """
+        with self._lock:
+            now = time.time()
+            # If the last request was long ago, reset the clock to now
+            if self._last_request_time < now:
+                self._last_request_time = now
+            
+            # Schedule this request for the next available slot
+            scheduled_time = self._last_request_time + self._min_interval
+            self._last_request_time = scheduled_time
+            
+        # Sleep outside the lock so other threads can schedule themselves
+        sleep_duration = scheduled_time - time.time()
+        if sleep_duration > 0:
+            time.sleep(sleep_duration)
     
     def _make_request(
         self,
@@ -59,18 +73,11 @@ class BaseAPIClient(ABC):
     ) -> Optional[Dict[str, Any]]:
         """
         Make an API request with rate limiting and retries.
-        
-        Args:
-            endpoint: API endpoint path
-            params: Query parameters
-            method: HTTP method
-            retry_count: Number of retries on failure
-            retry_delay: Delay between retries in seconds
-            
-        Returns:
-            JSON response as dictionary or None on failure
         """
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        if endpoint.startswith("http"):
+            url = endpoint
+        else:
+            url = f"{self.base_url}/{endpoint.lstrip('/')}"
         
         # Add API key to params
         if params is None:
@@ -89,7 +96,6 @@ class BaseAPIClient(ABC):
                 response.raise_for_status()
                 
                 data = response.json()
-                logger.debug(f"API request successful: {endpoint}")
                 return data
                 
             except requests.exceptions.HTTPError as e:

@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # MLflow Settings
     # ===================
     mlflow_tracking_uri: str = Field(
-        default="http://127.0.0.1:5050",
+        default="http://127.0.0.1:5000",
         description="MLflow tracking server URI"
     )
     mlflow_experiment_name: str = Field(

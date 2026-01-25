@@ -4,19 +4,21 @@ import { useEffect, useState } from "react"
 import { ConsoleStream } from "@/components/live/console-stream"
 import { OrderTicket } from "@/components/live/order-ticket"
 import { AssetTable, Asset } from "@/components/data/asset-table"
+import { RiskGauge } from "@/components/live/risk-gauge"
 import { api } from "@/lib/api"
 
 export default function LiveOpsPage() {
   const [positions, setPositions] = useState<Asset[]>([])
+  const [liveStatus, setLiveStatus] = useState<any>(null)
 
   useEffect(() => {
-      const fetchPositions = async () => {
+      const fetchData = async () => {
           try {
+              // 1. Positions
               const data = await api.getPortfolio()
-              // Transform to Asset format
               const assets: Asset[] = data.map((p: any) => ({
                   ticker: p.symbol,
-                  name: p.contract?.symbol || p.symbol, // Fallback
+                  name: p.contract?.symbol || p.symbol,
                   sector: p.asset_class || "Equity",
                   price: p.current_price,
                   quantity: p.quantity,
@@ -24,13 +26,18 @@ export default function LiveOpsPage() {
                   status: "OPEN"
               }))
               setPositions(assets)
+
+              // 2. Status / Risk
+              const status = await api.getLiveStatus()
+              setLiveStatus(status)
+
           } catch (e) {
-              console.error("Failed to fetch positions", e)
+              console.error("Failed to fetch live data", e)
           }
       }
 
-      fetchPositions()
-      const interval = setInterval(fetchPositions, 5000)
+      fetchData()
+      const interval = setInterval(fetchData, 3000) // Fast polling for "Live" feel
       return () => clearInterval(interval)
   }, [])
 
@@ -47,9 +54,14 @@ export default function LiveOpsPage() {
             </div>
         </div>
 
-        {/* Right: Order Ticket & Quick Actions */}
+        {/* Right: Controls & Risk */}
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
-            <OrderTicket />
+            <div className="h-48">
+                <RiskGauge var95={liveStatus?.portfolio_var_95_usd} portfolioValue={liveStatus?.net_liquidation} />
+            </div>
+            <div className="flex-1">
+                <OrderTicket />
+            </div>
         </div>
       </div>
     </div>

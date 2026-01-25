@@ -9,24 +9,14 @@ from config.settings import get_settings
 from qsconnect import Client as QSConnectClient
 
 router = APIRouter()
-qs_client = None # For write operations (ingestion)
+qs_client = None
 
-def get_qs_client_writer():
-    """Singleton for write operations (Ingestion only)"""
+def get_qs_client():
+    """Singleton for QS Connect Client (Shared Connection)"""
     global qs_client
     if not qs_client:
         qs_client = QSConnectClient()
     return qs_client
-
-def get_db_read_only():
-    """Dependency for Read-Only Database Access (Non-blocking)"""
-    settings = get_settings()
-    # Explicit read_only=True allows multiple readers alongside one writer (Omega)
-    conn = duckdb.connect(database=str(settings.duckdb_path), read_only=True)
-    try:
-        yield conn
-    finally:
-        conn.close()
 
 class IngestRequest(BaseModel):
     start_date: str = "2020-01-01"
@@ -36,7 +26,6 @@ class IngestRequest(BaseModel):
 @router.get("/status")
 def get_data_status():
     """Get status of data services."""
-    # Simple check if DB file exists and is readable
     try:
         settings = get_settings()
         if settings.duckdb_path.exists():
@@ -45,60 +34,100 @@ def get_data_status():
     except Exception as e:
         return {"status": "error", "details": str(e)}
 
+@router.get("/health")
+def get_data_health():
+    """Get detailed health check of the data (gaps, stale data)."""
+    try:
+        client = get_qs_client()
+        df = client.get_data_health()
+        return df.to_dicts()
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/prices/latest")
-async def get_latest_prices(
-    symbols: Optional[str] = None, 
-    limit: int = 100, 
-    db: duckdb.DuckDBPyConnection = Depends(get_db_read_only)
-):
+def get_latest_prices(limit: int = 100):
     """
-    Get latest prices for dashboard (Read-Only).
-    Prevents locking conflicts with Omega writer.
+    Get latest prices using the shared QS Connect client.
     """
     try:
-        query = """
-            SELECT symbol, date, close, volume, change_percent 
-            FROM prices 
-            WHERE date = (SELECT MAX(date) FROM prices)
-        """
-        
-        if symbols:
-            # Safe parameterization handled by DuckDB python API usually, 
-            # but for IN clause with string split it's manual or prepared statement.
-            # Simplified for now:
-            symbol_list = [s.strip() for s in symbols.split(",")]
-            formatted_list = "', '".join(symbol_list)
-            query += f" AND symbol IN ('{formatted_list}')"
-            
-        query += f" LIMIT {limit}"
-        
-        # Execute and fetch as Polars -> Dicts
-        df = db.execute(query).pl()
-        return df.to_dicts()
-        
+        client = get_qs_client()
+        return client.get_latest_prices(limit=limit)
     except Exception as e:
-        logger.error(f"Read-only DB query failed: {e}")
-        # Return empty list gracefully or raise HTTP error depending on strictness
+        logger.error(f"Failed to fetch prices: {e}")
         raise HTTPException(status_code=500, detail="Database query failed")
+
+# Global Ingestion State
+ingestion_state = {
+    "status": "idle", # idle, running, completed, error
+    "step": "",
+    "progress": 0,
+    "details": ""
+}
+
+@router.get("/ingest/progress")
+def get_ingestion_progress():
+    """Get real-time progress of data pipeline."""
+    return ingestion_state
 
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion in background (Requires Write Lock)."""
-    # Uses the global writer client
-    client = get_qs_client_writer()
+    """Trigger data ingestion in background."""
+    client = get_qs_client()
     
+    def update_progress(current, total, step_name="Downloading"):
+        ingestion_state["status"] = "running"
+        ingestion_state["step"] = step_name
+        ingestion_state["progress"] = int((current / total) * 100) if total > 0 else 0
+        ingestion_state["details"] = f"{current}/{total}"
+
     def run_ingestion():
         try:
             logger.info("Starting background ingestion...")
-            client.bulk_historical_prices(
-                start_date=date.fromisoformat(request.start_date),
-                symbols=request.symbols
+            ingestion_state["status"] = "running"
+            ingestion_state["step"] = "Initializing"
+            ingestion_state["progress"] = 0
+            
+            # 1. Download Prices
+            ingestion_state["step"] = "Downloading Prices (FMP)"
+            
+            # We need to inject the callback into the client
+            # For now, we wrap the client call or pass it if supported
+            # Since FMPClient uses tqdm, we can't easily hook it without modifying FMPClient.
+            # I will modify FMPClient to accept a callback in the next step.
+            
+            prices = client.bulk_historical_prices(
+                start_date=date.fromisoformat(request.start_date) if request.start_date else None,
+                end_date=date.fromisoformat(request.end_date) if request.end_date else None,
+                symbols=request.symbols,
+                progress_callback=update_progress # New feature
             )
+            
+            ingestion_state["progress"] = 100
+            
+            if prices is None or prices.is_empty():
+                logger.warning("No prices downloaded.")
+                ingestion_state["status"] = "completed" # or error?
+                return
+
+            # 2. Bundle Zipline
+            ingestion_state["step"] = "Bundling Zipline Data"
+            ingestion_state["progress"] = 0
             client.build_zipline_bundle("historical_prices_fmp")
+            ingestion_state["progress"] = 50
+            
+            # 3. Ingest Bundle
             client.ingest_bundle("historical_prices_fmp")
+            ingestion_state["progress"] = 100
+            ingestion_state["step"] = "Completed"
+            ingestion_state["status"] = "completed"
+            
             logger.info("Background ingestion complete.")
+            
         except Exception as e:
             logger.error(f"Ingestion failed: {e}")
+            ingestion_state["status"] = "error"
+            ingestion_state["details"] = str(e)
 
     background_tasks.add_task(run_ingestion)
-    return {"message": "Ingestion started in background"}
+    return {"status": "started", "message": "Ingestion started in background"}

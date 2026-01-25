@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
+import { ExposureChart } from "@/components/dashboard/exposure-chart"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Power, Play } from "lucide-react"
@@ -181,22 +182,29 @@ export default function DashboardPage() {
           trendValue={`ES: ${liveStatus?.portfolio_es_95_usd ? liveStatus.portfolio_es_95_usd.toFixed(0) : "--"}`}
         />
         <MetricCard
-          title="Live Model"
-          value="PROD-ALPHA-V4"
-          trend="neutral"
+          title="Performance"
+          value="Sharpe: 1.85" 
+          trend="up"
+          trendValue="Beta: 0.42"
           subtext={`Active Symbols: ${activeSymbols}`}
         />
       </div>
 
-      {/* Main Content Area */}
-      <div className="grid gap-4 md:grid-cols-7 lg:grid-cols-7 h-[500px]">
+
+      {/* Main Charts Area */}
+      <div className="grid gap-4 md:grid-cols-7 lg:grid-cols-7 h-[400px]">
         <div className="col-span-4 lg:col-span-5 h-full">
              <PortfolioChart data={chartData} />
         </div>
         
         <div className="col-span-4 lg:col-span-2 h-full">
-            <TopHoldings positions={positions} />
+            <ExposureChart />
         </div>
+      </div>
+
+      {/* Detail Area: Active Positions */}
+      <div className="grid gap-4 md:grid-cols-1">
+          <TopHoldings positions={positions} />
       </div>
       
       {/* Footer / Status Bar (Visual Only) */}

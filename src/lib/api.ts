@@ -8,14 +8,17 @@ export interface IngestionParams {
 }
 
 export interface BacktestParams {
+  strategy_name?: string;
   bundle_name?: string;
   start_date: string;
   end_date: string;
   capital_base?: number;
+  benchmark?: string;
   experiment_name?: string;
   algorithm?: Record<string, unknown>;
   preprocessing?: Record<string, unknown>[];
   factors?: Record<string, unknown>[];
+  params?: Record<string, unknown>; // For generic params passing
 }
 
 export interface OrderParams {
@@ -24,6 +27,18 @@ export interface OrderParams {
   side: 'BUY' | 'SELL';
   order_type?: string;
   limit_price?: number;
+}
+
+export interface BacktestRun {
+  run_id: string;
+  strategy_name: string;
+  start_time: string;
+  sharpe_ratio: number;
+  annual_return: number;
+  max_drawdown: number;
+  alpha: number;
+  beta: number;
+  status: string;
 }
 
 export const api = {
@@ -57,13 +72,18 @@ export const api = {
     return res.json();
   },
   
-  listBacktests: async (limit: number = 20) => {
+  listBacktests: async (limit: number = 20): Promise<BacktestRun[]> => {
     const res = await fetch(`${API_BASE_URL}/backtest/list?limit=${limit}`);
+    if (!res.ok) return [];
     return res.json();
+  },
+  
+  triggerMockBacktest: async (): Promise<void> => {
+      await fetch(`${API_BASE_URL}/backtest/run_test`, { method: "POST" });
   },
 
   getBacktestResults: async (runId: string) => {
-    const res = await fetch(`${API_BASE_URL}/backtest/${runId}/results`);
+    const res = await fetch(`${API_BASE_URL}/backtest/run/${runId}`);
     return res.json();
   },
 

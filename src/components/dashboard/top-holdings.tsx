@@ -23,12 +23,12 @@ interface TopHoldingsProps {
 
 export function TopHoldings({ positions = [] }: TopHoldingsProps) {
   // Sort by market value descending
-  const sortedPositions = [...positions].sort((a, b) => Math.abs(b.market_value) - Math.abs(a.market_value)).slice(0, 5);
+  const sortedPositions = [...positions].sort((a, b) => Math.abs(b.market_value) - Math.abs(a.market_value)).slice(0, 10); // Show top 10
 
   return (
-    <Card className="col-span-4 lg:col-span-2 h-full">
+    <Card className="h-full min-h-[350px]">
       <CardHeader>
-        <CardTitle>Top Holdings</CardTitle>
+        <CardTitle>Active Positions (Live)</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>

@@ -289,6 +289,18 @@ class DuckDBManager:
             conn.execute("ALTER TABLE realtime_candles ADD COLUMN asset_class VARCHAR")
         except: pass
 
+        # System Logs (Headless execution tracking)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id UUID DEFAULT uuid(),
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                level VARCHAR,
+                component VARCHAR,
+                message TEXT,
+                details JSON
+            )
+        """)
+        
         # Create indexes
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_symbol ON prices(symbol)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
@@ -296,8 +308,58 @@ class DuckDBManager:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_strat ON trades(strategy_hash)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_strategy_audit_stage ON strategy_audit_log(stage)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_index_constituents ON index_constituents(index_symbol, date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON system_logs(timestamp)")
         
         logger.info("Database schema initialized with Governance and Execution logs")
+
+    # =====================
+    # Logging Methods
+    # =====================
+
+    def log_event(self, level: str, component: str, message: str, details: Optional[Dict] = None) -> None:
+        """Log a system event to the database."""
+        conn = self.connect()
+        try:
+            # DuckDB handles dict/json as JSON type if passed correctly, or string
+            import json
+            details_json = json.dumps(details) if details else None
+            
+            conn.execute("""
+                INSERT INTO system_logs (level, component, message, details)
+                VALUES (?, ?, ?, ?)
+            """, [level, component, message, details_json])
+        except Exception as e:
+            # Fallback to logger if DB logging fails
+            logger.error(f"Failed to write to system_logs: {e}")
+        finally:
+            if self.auto_close:
+                self.close()
+
+    def get_logs(self, limit: int = 100) -> pl.DataFrame:
+        """Get recent system logs."""
+        return self.query(f"SELECT * FROM system_logs ORDER BY timestamp DESC LIMIT {limit}")
+
+    # =====================
+    # Health Methods
+    # =====================
+
+    def get_data_health(self) -> pl.DataFrame:
+        """
+        Get health statistics for all symbols.
+        Checks for stale data and gaps.
+        """
+        sql = """
+            SELECT 
+                symbol,
+                MIN(date) as first_date,
+                MAX(date) as last_date,
+                COUNT(*) as count,
+                MAX(date) < (CURRENT_DATE - INTERVAL 3 DAY) as is_stale
+            FROM prices
+            GROUP BY symbol
+            ORDER BY last_date ASC, symbol
+        """
+        return self.query(sql)
     
     def execute(self, sql: str, params: Optional[Any] = None) -> None:
         """
@@ -376,6 +438,16 @@ class DuckDBManager:
         for old, new in column_mapping.items():
             if old in df.columns:
                 df = df.rename({old: new})
+        
+        # Cast volume to Float64 to avoid C long conversion errors with massive numbers
+        # Cast prices to Float64 for consistency
+        df = df.with_columns([
+            pl.col("volume").cast(pl.Float64),
+            pl.col("open").cast(pl.Float64),
+            pl.col("high").cast(pl.Float64),
+            pl.col("low").cast(pl.Float64),
+            pl.col("close").cast(pl.Float64),
+        ])
         
         # Required columns
         required_cols = ["symbol", "date", "open", "high", "low", "close", "volume"]

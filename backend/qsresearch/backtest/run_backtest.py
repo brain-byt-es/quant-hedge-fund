@@ -70,7 +70,13 @@ def run_backtest(
     
     # MLflow setup
     if log_to_mlflow and MLFLOW_AVAILABLE:
-        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+        # Force local file store for robustness (avoids HTTP connection refused)
+        # We assume 'mlruns' is in the backend root or project root
+        mlruns_path = Path.cwd() / "mlruns"
+        mlruns_uri = f"file://{mlruns_path.absolute()}"
+        
+        mlflow.set_tracking_uri(mlruns_uri)
+        logger.info(f"MLflow tracking URI set to: {mlruns_uri}")
         
         experiment_name = config.get("experiment_name", settings.mlflow_experiment_name)
         mlflow.set_experiment(experiment_name)

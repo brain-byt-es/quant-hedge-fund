@@ -1,81 +1,265 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
-from loguru import logger
+"""
+QS Connect - Backtest API Router
+
+Handles interaction with MLflow to retrieve backtest results, metrics, and artifacts.
+"""
+
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+
+from typing import List, Dict, Any, Optional
+
 import mlflow
+
+from mlflow.tracking import MlflowClient
+
+from loguru import logger
+
+import pandas as pd
+
 from datetime import datetime
 
-from config.settings import get_settings
-from qsresearch.backtest import run_backtest
+from pydantic import BaseModel
+
+
+
+from qsresearch.backtest.run_backtest import run_backtest
+
+
 
 router = APIRouter()
 
-class BacktestConfig(BaseModel):
-    bundle_name: str = "historical_prices_fmp"
-    start_date: str
-    end_date: str
+
+
+# Constants
+
+MLFLOW_EXPERIMENT_NAME = "QuantHedgeFund_Strategy_Lab"
+
+
+
+class BacktestParams(BaseModel):
+
+    strategy_name: str = "Momentum_Standard"
+
+    start_date: str = "2020-01-01"
+
+    end_date: str = "2024-12-31"
+
     capital_base: float = 100000.0
-    experiment_name: str = "API_Backtest"
-    algorithm: Dict[str, Any] = {}
-    preprocessing: List[Dict[str, Any]] = []
-    factors: List[Dict[str, Any]] = []
+
+    benchmark: str = "SPY"
+
+    params: Dict[str, Any] = {}
+
+
+
+def get_mlflow_client():
+
+    """Initialize and return MLflow client."""
+
+    try:
+
+        client = MlflowClient()
+
+        return client
+
+    except Exception as e:
+
+        logger.error(f"Failed to connect to MLflow: {e}")
+
+        raise HTTPException(status_code=500, detail="MLflow connection failed")
+
+
+
+def _format_run(run) -> Dict[str, Any]:
+
+    """Helper to format a raw MLflow run object into a clean dictionary."""
+
+    data = run.data
+
+    info = run.info
+
+    
+
+    return {
+
+        "run_id": info.run_id,
+
+        "experiment_id": info.experiment_id,
+
+        "status": info.status,
+
+        "start_time": datetime.fromtimestamp(info.start_time / 1000).isoformat() if info.start_time else None,
+
+        "end_time": datetime.fromtimestamp(info.end_time / 1000).isoformat() if info.end_time else None,
+
+        "metrics": data.metrics,
+
+        "params": data.params,
+
+        "tags": data.tags,
+
+        "strategy_name": data.tags.get("strategy_name", data.tags.get("mlflow.runName", "Unknown Strategy")),
+
+        "annual_return": data.metrics.get("annual_return", 0.0),
+
+        "sharpe_ratio": data.metrics.get("sharpe", 0.0),
+
+        "max_drawdown": data.metrics.get("max_drawdown", 0.0),
+
+        "alpha": data.metrics.get("alpha", 0.0),
+
+        "beta": data.metrics.get("beta", 0.0),
+
+        "volatility": data.metrics.get("volatility", 0.0),
+
+        "mc_stability_score": data.metrics.get("mc_stability_score", 0.0),
+
+    }
+
+
 
 @router.get("/list")
-async def list_backtests(limit: int = 20):
-    """
-    List historical backtests from MLflow.
-    Acts as a proxy to the MLflow tracking server.
-    """
-    settings = get_settings()
-    try:
-        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-        experiment = mlflow.get_experiment_by_name(settings.mlflow_experiment_name)
-        
-        if not experiment:
-            return []
-            
-        runs = mlflow.search_runs(
-            experiment_ids=[experiment.experiment_id],
-            max_results=limit,
-            order_by=["start_time DESC"]
-        )
-        
-        # Convert pandas DataFrame to list of dicts
-        results = []
-        if not runs.empty:
-            for _, run in runs.iterrows():
-                # Extract relevant fields (metrics.*, params.*, tags.*)
-                entry = {
-                    "run_id": run.get("run_id"),
-                    "status": run.get("status"),
-                    "start_time": run.get("start_time"), # Usually timestamp
-                    "metrics": {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.")},
-                    "params": {k.replace("params.", ""): v for k, v in run.items() if k.startswith("params.")},
-                }
-                # Handle NaNs which break JSON
-                import math
-                if "metrics" in entry:
-                     entry["metrics"] = {k: (0 if isinstance(v, float) and math.isnan(v) else v) for k,v in entry["metrics"].items()}
-                
-                results.append(entry)
-                
-        return results
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch MLflow runs: {e}")
-        # Graceful degradation if MLflow is down
+
+def list_backtests(limit: int = 20) -> List[Dict[str, Any]]:
+
+    """List all recorded backtests (MLflow runs)."""
+
+    client = get_mlflow_client()
+
+    
+
+    # Ensure experiment exists
+
+    experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
+
+    if not experiment:
+
         return []
 
-@router.post("/run")
-async def run_backtest_endpoint(config: BacktestConfig):
-    """Run a backtest synchronously."""
-    try:
-        config_dict = config.model_dump()
-        results = run_backtest(config_dict, log_to_mlflow=True) # Enable MLflow logging
         
-        # Sanitize for JSON response
-        metrics = results.get("metrics", {})
-        return {"status": "success", "metrics": metrics, "run_id": "mlflow_logged"} 
+
+    runs = client.search_runs(
+
+        experiment_ids=[experiment.experiment_id],
+
+        max_results=limit,
+
+        order_by=["attribute.start_time DESC"]
+
+    )
+
+    
+
+    return [_format_run(run) for run in runs]
+
+
+
+@router.post("/run")
+
+async def execute_backtest(params: BacktestParams, background_tasks: BackgroundTasks):
+
+    """Trigger a real backtest run via background task."""
+
+    
+
+    # Construct full config for the runner
+
+    config = {
+
+        "experiment_name": MLFLOW_EXPERIMENT_NAME,
+
+        "strategy_name": params.strategy_name,
+
+        "run_name": f"{params.strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+
+        "start_date": params.start_date,
+
+        "end_date": params.end_date,
+
+        "capital_base": params.capital_base,
+
+        "benchmark": params.benchmark,
+
+        "algorithm": {
+
+            "callable": "use_factor_as_signal", # Default for now
+
+            "params": params.params
+
+        },
+
+        "factors": [
+
+            {"name": "momentum", "params": {"window": params.params.get("window", 20)}}
+
+        ]
+
+    }
+
+
+
+    def _task():
+
+        try:
+
+            logger.info(f"Background task starting backtest: {params.strategy_name}")
+
+            run_backtest(config)
+
+            logger.info(f"Background task completed backtest: {params.strategy_name}")
+
+        except Exception as e:
+
+            logger.error(f"Backtest task failed: {e}")
+
+
+
+    background_tasks.add_task(_task)
+
+    
+
+    return {"status": "accepted", "message": "Backtest started in background"}
+
+
+
+@router.get("/run/{run_id}")
+
+def get_backtest_details(run_id: str) -> Dict[str, Any]:
+
+    """Get full details for a specific backtest run."""
+
+    client = get_mlflow_client()
+
+    try:
+
+        run = client.get_run(run_id)
+
+        return _format_run(run)
+
     except Exception as e:
-        logger.error(f"Backtest error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+        raise HTTPException(status_code=404, detail=f"Run not found: {e}")
+
+
+
+@router.post("/run_test")
+
+def trigger_backtest_mock():
+
+    """MOCK Endpoint to simulate a backtest run."""
+
+    # (Same mock logic as before, useful for quick UI tests)
+
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+
+    with mlflow.start_run(run_name="Mock_Momentum_Run") as run:
+
+        mlflow.set_tag("strategy_name", "Momentum_Trend_Follower")
+
+        mlflow.log_metric("sharpe", 1.85)
+
+        mlflow.log_metric("annual_return", 0.15)
+
+        mlflow.log_metric("max_drawdown", -0.12)
+
+    return {"status": "started", "run_id": run.info.run_id}

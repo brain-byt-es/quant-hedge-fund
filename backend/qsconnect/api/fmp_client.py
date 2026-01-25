@@ -51,14 +51,16 @@ class FMPClient(BaseAPIClient):
     
     def get_stock_list(self) -> pd.DataFrame:
         """
-        Get complete list of available stocks.
-        
-        Returns:
-            DataFrame with columns: symbol, name, price, exchange, exchangeShortName, type
+        Get complete list of available stocks using the stable endpoint.
         """
-        data = self._make_request("stock/list")
-        if data:
-            return pd.DataFrame(data)
+        url = "https://financialmodelingprep.com/stable/stock-list"
+        try:
+            data = self._make_request(url)
+            if data:
+                return pd.DataFrame(data)
+        except Exception as e:
+            logger.error(f"Failed to fetch stock list via stable endpoint: {e}")
+            
         return pd.DataFrame()
     
     def get_etf_list(self) -> pd.DataFrame:
@@ -128,67 +130,114 @@ class FMPClient(BaseAPIClient):
             df["symbol"] = symbol
             return df
         return pd.DataFrame()
-    
+
     def get_bulk_historical_prices(
         self,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         symbols: Optional[List[str]] = None,
+        progress_callback: Optional[Any] = None,
+        save_callback: Optional[Any] = None,
+        stop_check: Optional[Any] = None,
     ) -> pl.DataFrame:
         """
-        Get bulk historical prices for multiple symbols.
-        
-        This method fetches data in batches to handle large numbers of symbols.
-        
-        Args:
-            start_date: Start date for data
-            end_date: End date for data
-            symbols: Optional list of specific symbols
-            
-        Returns:
-            Polars DataFrame with all price data
+        Get bulk historical prices with incremental saving and stop signal support.
         """
-        if symbols is None:
-            # Get all symbols from stock list
-            stock_list = self.get_stock_list()
-            symbols = stock_list["symbol"].tolist()
+        import concurrent.futures
         
-        logger.info(f"Fetching bulk prices for {len(symbols)} symbols")
+        if symbols is None:
+            stock_df = self.get_stock_list()
+            if stock_df.empty:
+                return pl.DataFrame()
+            symbols = stock_df["symbol"].tolist()
+        
+        total_symbols = len(symbols)
+        logger.info(f"Starting bulk download for {total_symbols} symbols...")
         
         all_data = []
+        batch_buffer = []
         
-        # Process in batches of 1 symbol per request (Free Tier friendly)
-        batch_size = 1
-        for i in tqdm(range(0, len(symbols), batch_size), desc="Downloading prices"):
-            batch = symbols[i : i + batch_size]
-            symbols_str = ",".join(batch)
-            
-            params = {}
+        # Helper for parallel execution
+        def _fetch_symbol(symbol: str):
+            # Check for stop signal inside worker thread
+            if stop_check and stop_check():
+                return None
+                
+            params = {"symbol": symbol}
             if start_date:
                 params["from"] = start_date.isoformat()
             if end_date:
                 params["to"] = end_date.isoformat()
             
-            data = self._make_request(
-                f"historical-price-full/{symbols_str}",
-                params=params,
-            )
+            url = "https://financialmodelingprep.com/stable/historical-price-eod/full"
             
-            if data:
-                if isinstance(data, dict) and "historicalStockList" in data:
-                    for item in data["historicalStockList"]:
-                        if "historical" in item:
-                            df = pd.DataFrame(item["historical"])
-                            df["symbol"] = item["symbol"]
-                            all_data.append(df)
-                elif isinstance(data, dict) and "historical" in data:
-                    df = pd.DataFrame(data["historical"])
-                    df["symbol"] = data.get("symbol", batch[0])
-                    all_data.append(df)
+            try:
+                # Use self._make_request to benefit from thread-safe rate limiter
+                data = self._make_request(url, params=params)
+                
+                if data:
+                    if isinstance(data, list) and len(data) > 0:
+                        df = pd.DataFrame(data)
+                        df["symbol"] = symbol
+                        return df
+                    elif isinstance(data, dict) and "historical" in data:
+                         df = pd.DataFrame(data["historical"])
+                         df["symbol"] = symbol
+                         return df
+            except Exception:
+                pass
+            return None
+
+        # Parallel Execution
+        max_workers = 15
+        completed_count = 0
         
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_symbol = {executor.submit(_fetch_symbol, sym): sym for sym in symbols}
+            
+            pbar = tqdm(total=total_symbols, desc="Downloading Market Data", leave=True, dynamic_ncols=True)
+            for future in concurrent.futures.as_completed(future_to_symbol):
+                # Check for stop signal in coordinator
+                if stop_check and stop_check():
+                    logger.warning("Stop signal received. Terminating ingestion engine...")
+                    # We can't easily kill threads in flight, but we can stop processing more
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+
+                try:
+                    result = future.result()
+                    if result is not None and not result.empty:
+                        all_data.append(result)
+                        batch_buffer.append(result)
+                except Exception:
+                    pass
+                
+                completed_count += 1
+                pbar.update(1)
+                if progress_callback:
+                    progress_callback(completed_count, total_symbols)
+                
+                # Incremental Save (Every 100 symbols)
+                if save_callback and len(batch_buffer) >= 100:
+                    try:
+                        partial_df = pd.concat(batch_buffer, ignore_index=True)
+                        save_callback(pl.from_pandas(partial_df))
+                        batch_buffer = [] # Clear buffer
+                    except Exception as e:
+                        logger.error(f"Incremental save failed: {e}")
+
+            pbar.close()
+        
+        # Final Save
+        if save_callback and batch_buffer:
+             try:
+                partial_df = pd.concat(batch_buffer, ignore_index=True)
+                save_callback(pl.from_pandas(partial_df))
+             except Exception: pass
+
         if all_data:
             combined = pd.concat(all_data, ignore_index=True)
-            logger.info(f"Downloaded {len(combined)} price records")
+            logger.info(f"Bulk download complete: {len(combined)} records")
             return pl.from_pandas(combined)
         
         return pl.DataFrame()
@@ -333,36 +382,3 @@ class FMPClient(BaseAPIClient):
             return pl.from_pandas(combined)
         
         return pl.DataFrame()
-
-    # =====================
-    # Index Constituents
-    # =====================
-
-    def get_historical_sp500_constituents(self) -> pl.DataFrame:
-        """
-        Get historical S&P 500 constituents (additions/removals).
-        
-        Returns:
-            Polars DataFrame with constituent changes.
-        """
-        data = self._make_request("historical/sp500_constituents")
-        
-        if data:
-            df = pd.DataFrame(data)
-            # FMP returns 'symbol', 'name', 'sector', 'subSector', 'headQuarter', 'dateFirstAdded', 'founded', 'cik'
-            # But the endpoint often returns a list of *current* constituents unless 'historical' implies changes.
-            # Actually, `historical/sp500_constituents` usually returns the full list with `date` if it's the full history endpoint,
-            # OR it returns changes.
-            # Let's standardize the output
-            return pl.from_pandas(df)
-        
-        return pl.DataFrame()
-
-    def get_sp500_constituent_changes(self) -> pl.DataFrame:
-        """
-        Get explicit additions and removals for S&P 500.
-        Often a separate endpoint or structure is needed for Point-in-Time.
-        """
-        # For FMP, `sp500_constituent` gives the current list.
-        # `historical/sp500_constituents` gives the history.
-        return self.get_historical_sp500_constituents()
