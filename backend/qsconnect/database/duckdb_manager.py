@@ -50,7 +50,7 @@ class DuckDBManager:
         logger.info(f"DuckDB manager initialized: {self.db_path} (read_only={self.read_only})")
     
     def connect(self) -> duckdb.DuckDBPyConnection:
-        """Establish database connection with aggressive retries for Windows/OneDrive file locking."""
+        """Establish database connection with aggressive retries."""
         import time
         import random
         if self._conn is None:
@@ -59,21 +59,23 @@ class DuckDBManager:
                 try:
                     config = {
                         "access_mode": "READ_ONLY" if self.read_only else "AUTOMATIC",
-                        "threads": 1 # Reduce overhead in high-concurrency scenarios
+                        "threads": 1 
                     }
-                    self._conn = duckdb.connect(str(self.db_path), read_only=self.read_only, config=config)
-                    return self._conn
+                    conn = duckdb.connect(str(self.db_path), read_only=self.read_only, config=config)
+                    self._conn = conn
+                    return conn
                 except Exception as e:
                     err_msg = str(e).lower()
                     if ("used by another process" in err_msg or "cannot open" in err_msg) and attempt < max_retries - 1:
-                        # Exponential backoff with jitter
                         wait_time = (0.1 * (2 ** attempt)) + (random.random() * 0.1)
-                        if attempt > 5:
-                            logger.warning(f"DB lock contention high, retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
                         time.sleep(wait_time)
                     else:
                         logger.error(f"Failed to connect to DuckDB after {attempt+1} attempts: {e}")
                         raise e
+        
+        if self._conn is None:
+            raise ConnectionError("Failed to initialize DuckDB connection.")
+            
         return self._conn
     
     def close(self) -> None:
@@ -87,7 +89,7 @@ class DuckDBManager:
         """Initialize database schema."""
         conn = self.connect()
         
-        # Prices table
+        # Prices table - Using DOUBLE for volume to handle massive institutional/crypto data
         conn.execute("""
             CREATE TABLE IF NOT EXISTS prices (
                 symbol VARCHAR,
@@ -97,7 +99,7 @@ class DuckDBManager:
                 low DOUBLE,
                 close DOUBLE,
                 adj_close DOUBLE,
-                volume BIGINT,
+                volume DOUBLE,
                 change DOUBLE,
                 change_percent DOUBLE,
                 vwap DOUBLE,
@@ -439,15 +441,11 @@ class DuckDBManager:
             if old in df.columns:
                 df = df.rename({old: new})
         
-        # Cast volume to Float64 to avoid C long conversion errors with massive numbers
-        # Cast prices to Float64 for consistency
-        df = df.with_columns([
-            pl.col("volume").cast(pl.Float64),
-            pl.col("open").cast(pl.Float64),
-            pl.col("high").cast(pl.Float64),
-            pl.col("low").cast(pl.Float64),
-            pl.col("close").cast(pl.Float64),
-        ])
+        # Cast all numeric columns to Float64 to avoid any C-level conversion errors
+        numeric_cols = ["volume", "open", "high", "low", "close", "adj_close", "change", "change_percent", "vwap"]
+        for col in numeric_cols:
+            if col in df.columns:
+                df = df.with_columns(pl.col(col).cast(pl.Float64))
         
         # Required columns
         required_cols = ["symbol", "date", "open", "high", "low", "close", "volume"]
@@ -695,7 +693,7 @@ class DuckDBManager:
         result = self.query("SELECT DISTINCT symbol FROM prices ORDER BY symbol")
         return result["symbol"].to_list()
     
-    def get_date_range(self) -> Dict[str, str]:
+    def get_date_range(self) -> Dict[str, Any]:
         """Get the date range of price data in the database."""
         result = self.query_pandas("""
             SELECT 

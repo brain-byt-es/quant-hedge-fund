@@ -1,0 +1,10 @@
+{
+    "python.defaultInterpreterPath": "/Users/henrik/Documents/VS Code/QuantHedgeFond/app/backend/venv/bin/python3",
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/backend"
+    ],
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}/backend"
+    }
+}

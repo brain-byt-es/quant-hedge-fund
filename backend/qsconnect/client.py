@@ -143,6 +143,9 @@ class Client:
         if start_date is None:
             start_date = date(2000, 1, 1)
         
+        # Reset stop signal for new run
+        self.stop_requested = False
+        
         # 1. Fetch Target Universe
         if symbols is None:
             stock_list = self._fmp_client.get_stock_list()
@@ -153,17 +156,19 @@ class Client:
         
         # 2. Smart Resume: Filter out symbols already in DB
         try:
+            # Query existing symbols from the prices table
             existing_symbols = set(self._db_manager.get_symbols())
             original_count = len(symbols)
-            # Only skip if we are running a "Full History" backfill (e.g. start_date < 2024)
-            # For daily updates, we might want to overwrite. 
-            # Assuming this is the initial backfill pipeline:
+            
+            # Filter
             symbols = [s for s in symbols if s not in existing_symbols]
+            
             skipped_count = original_count - len(symbols)
             if skipped_count > 0:
-                logger.info(f"Smart Resume: Skipping {skipped_count} symbols already in DB. Remaining: {len(symbols)}")
+                logger.info(f"⏭️ Smart Resume: Found {skipped_count} symbols already in database. Skipping...")
+                logger.info(f"📥 Pending workload: {len(symbols)} symbols.")
         except Exception as e:
-            logger.warning(f"Smart Resume check failed: {e}")
+            logger.warning(f"⚠️ Smart Resume check failed: {e}")
 
         if not symbols:
             logger.info("All symbols already downloaded.")

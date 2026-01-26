@@ -189,7 +189,9 @@ class FMPClient(BaseAPIClient):
             return None
 
         # Parallel Execution
-        max_workers = 15
+        # Reduced to 4 workers to ensure the API stays responsive during massive downloads.
+        # This prevents 'socket hang up' errors in the frontend.
+        max_workers = 4
         completed_count = 0
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -197,32 +199,40 @@ class FMPClient(BaseAPIClient):
             
             pbar = tqdm(total=total_symbols, desc="Downloading Market Data", leave=True, dynamic_ncols=True)
             for future in concurrent.futures.as_completed(future_to_symbol):
-                # Check for stop signal in coordinator
+                # Small yield to let the OS/Event loop breathe
+                time.sleep(0.01)
+                
                 if stop_check and stop_check():
                     logger.warning("Stop signal received. Terminating ingestion engine...")
-                    # We can't easily kill threads in flight, but we can stop processing more
                     executor.shutdown(wait=False, cancel_futures=True)
                     break
 
                 try:
                     result = future.result()
                     if result is not None and not result.empty:
+                        # Defensive casting to float to prevent "Python int too large to convert to C long"
+                        for col in ['volume', 'open', 'high', 'low', 'close', 'adj_close']:
+                            if col in result.columns:
+                                result[col] = result[col].astype(float)
+                        
                         all_data.append(result)
                         batch_buffer.append(result)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Error processing batch result: {e}")
                 
                 completed_count += 1
                 pbar.update(1)
                 if progress_callback:
                     progress_callback(completed_count, total_symbols)
                 
-                # Incremental Save (Every 100 symbols)
-                if save_callback and len(batch_buffer) >= 100:
+                # Incremental Save (Every 200 symbols to reduce DB lock contention)
+                if save_callback and len(batch_buffer) >= 200:
                     try:
                         partial_df = pd.concat(batch_buffer, ignore_index=True)
                         save_callback(pl.from_pandas(partial_df))
                         batch_buffer = [] # Clear buffer
+                        # Pause slightly after DB write to let API handle pending requests
+                        time.sleep(0.1)
                     except Exception as e:
                         logger.error(f"Incremental save failed: {e}")
 

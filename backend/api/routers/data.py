@@ -45,6 +45,15 @@ def get_data_health():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/ingest/stop")
+async def stop_ingestion():
+    """Stop the running background ingestion."""
+    client = get_qs_client()
+    client.stop_requested = True
+    ingestion_state["status"] = "idle"
+    ingestion_state["step"] = "Stopped by User"
+    return {"status": "stopping", "message": "Stop signal sent to ingestion engine"}
+
 @router.get("/prices/latest")
 def get_latest_prices(limit: int = 100):
     """
