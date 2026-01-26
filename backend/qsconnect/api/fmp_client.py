@@ -50,18 +50,72 @@ class FMPClient(BaseAPIClient):
     # =====================
     
     def get_stock_list(self) -> pd.DataFrame:
-        """
-        Get complete list of available stocks using the stable endpoint.
-        """
-        url = "https://financialmodelingprep.com/stable/stock-list"
-        try:
-            data = self._make_request(url)
-            if data:
-                return pd.DataFrame(data)
-        except Exception as e:
-            logger.error(f"Failed to fetch stock list via stable endpoint: {e}")
-            
+        """Get stock list and filter for US exchanges (Starter Plan requirement)."""
+        data = self._make_request("https://financialmodelingprep.com/stable/stock-list")
+        if data:
+            df = pd.DataFrame(data)
+            # Filter for major US exchanges only
+            us_exchanges = ["NASDAQ", "NYSE", "AMEX", "New York Stock Exchange"]
+            if "exchange" in df.columns:
+                df = df[df["exchange"].isin(us_exchanges)]
+            elif "exchangeShortName" in df.columns:
+                df = df[df["exchangeShortName"].isin(["NASDAQ", "NYSE", "AMEX"])]
+            return df
         return pd.DataFrame()
+
+    def get_starter_fundamentals(
+        self,
+        symbols: List[str],
+        statement_type: str,
+        limit: int = 5,
+        stop_check: Optional[callable] = None,
+        progress_callback: Optional[callable] = None
+    ) -> pl.DataFrame:
+        """
+        Fetch annual fundamentals for a list of symbols with stop support.
+        """
+        import concurrent.futures
+        all_dfs = []
+        total = len(symbols)
+        
+        def _fetch_one(symbol):
+            # Check for stop signal inside worker
+            if stop_check and stop_check():
+                return "STOP"
+            
+            try:
+                endpoint = f"{statement_type}/{symbol}"
+                data = self._make_request(endpoint, params={"period": "annual", "limit": limit})
+                if data:
+                    return pd.DataFrame(data)
+            except:
+                pass
+            return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # We use as_completed to handle termination better
+            future_to_symbol = {executor.submit(_fetch_one, sym): sym for sym in symbols}
+            
+            completed = 0
+            for future in concurrent.futures.as_completed(future_to_symbol):
+                if stop_check and stop_check():
+                    logger.warning(f"Stop signal received during {statement_type} ingestion.")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                
+                result = future.result()
+                if result == "STOP": break
+                
+                if result is not None and not result.empty:
+                    all_dfs.append(result)
+                
+                completed += 1
+                if progress_callback:
+                    progress_callback(completed, total, f"Ingesting {statement_type}")
+        
+        if all_dfs:
+            return pl.from_pandas(pd.concat(all_dfs, ignore_index=True))
+        return pl.DataFrame()
     
     def get_etf_list(self) -> pd.DataFrame:
         """Get list of available ETFs."""
@@ -361,7 +415,7 @@ class FMPClient(BaseAPIClient):
             ):
                 cache_key = f"bulk-{statement_type}_{year}_{period}"
                 
-                # Use bulk endpoint - dynamically based on statement_type
+                # Use stable bulk endpoint
                 if statement_type == "income-statement":
                     endpoint = "income-statement-bulk"
                 elif statement_type == "balance-sheet-statement":
@@ -370,11 +424,15 @@ class FMPClient(BaseAPIClient):
                     endpoint = "cash-flow-statement-bulk"
                 elif statement_type == "ratios":
                     endpoint = "ratios-bulk"
+                elif statement_type == "key-metrics":
+                    endpoint = "key-metrics-bulk"
                 else:
-                    endpoint = f"{statement_type}-bulk"  # Fallback
+                    endpoint = f"{statement_type}-bulk"
                 
+                # Construct stable URL
+                stable_url = f"https://financialmodelingprep.com/stable/{endpoint}"
                 params = {"year": year, "period": period}
-                data = self._make_request(endpoint, params=params)
+                data = self._make_request(stable_url, params=params)
                 
                 if data:
                     df = pd.DataFrame(data)

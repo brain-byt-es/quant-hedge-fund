@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import date
+from datetime import date, datetime
 from loguru import logger
 import duckdb
 
@@ -94,43 +94,71 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
         try:
             logger.info("Starting background ingestion...")
             ingestion_state["status"] = "running"
-            ingestion_state["step"] = "Initializing"
-            ingestion_state["progress"] = 0
             
-            # 1. Download Prices
+            # Phase 1: Stock List
+            ingestion_state["step"] = "Downloading Stock List"
+            stock_list = client._fmp_client.get_stock_list()
+            client._db_manager.upsert_stock_list(stock_list)
+            
+            # Phase 2: Historical Prices
             ingestion_state["step"] = "Downloading Prices (FMP)"
-            
-            # We need to inject the callback into the client
-            # For now, we wrap the client call or pass it if supported
-            # Since FMPClient uses tqdm, we can't easily hook it without modifying FMPClient.
-            # I will modify FMPClient to accept a callback in the next step.
-            
             prices = client.bulk_historical_prices(
                 start_date=date.fromisoformat(request.start_date) if request.start_date else None,
                 end_date=date.fromisoformat(request.end_date) if request.end_date else None,
                 symbols=request.symbols,
-                progress_callback=update_progress # New feature
+                progress_callback=update_progress
             )
             
-            ingestion_state["progress"] = 100
+            # Phase 3: Annual Fundamentals (Starter Plan Mode)
+            # Fetching fundamentals for all US symbols can take hours due to rate limits.
+            # We fetch for all symbols in the current universe.
+            fundamental_types = ["income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"]
+            us_symbols = client._fmp_client.get_stock_list()["symbol"].tolist()
             
-            if prices is None or prices.is_empty():
-                logger.warning("No prices downloaded.")
-                ingestion_state["status"] = "completed" # or error?
-                return
+            for stmt in fundamental_types:
+                # Check for stop signal between statement types
+                if client.stop_requested:
+                    logger.warning("Ingestion stopped by user between phases.")
+                    break
 
-            # 2. Bundle Zipline
+                ingestion_state["step"] = f"Ingesting: {stmt} (US Annual)"
+                ingestion_state["progress"] = 0
+                
+                # Fetching pro-symbol (No bulk)
+                data = client._fmp_client.get_starter_fundamentals(
+                    symbols=us_symbols,
+                    statement_type=stmt,
+                    limit=5, # Last 5 years
+                    stop_check=lambda: client.stop_requested,
+                    progress_callback=update_progress
+                )
+                
+                if not data.is_empty():
+                    client._db_manager.upsert_fundamentals(stmt, "annual", data)
+            
+            if client.stop_requested:
+                ingestion_state["status"] = "idle"
+                ingestion_state["step"] = "Stopped"
+                return
+            
+            # Phase 4: Zipline Bundle
             ingestion_state["step"] = "Bundling Zipline Data"
-            ingestion_state["progress"] = 0
             client.build_zipline_bundle("historical_prices_fmp")
-            ingestion_state["progress"] = 50
             
-            # 3. Ingest Bundle
+            # Phase 5: Ingest Bundle
             client.ingest_bundle("historical_prices_fmp")
-            ingestion_state["progress"] = 100
-            ingestion_state["step"] = "Completed"
-            ingestion_state["status"] = "completed"
             
+            # Phase 6: Company Profiles
+            ingestion_state["step"] = "Downloading Company Profiles"
+            profiles_json = client._fmp_client._make_request("https://financialmodelingprep.com/stable/profile-bulk?part=0")
+            if profiles_json:
+                import pandas as pd
+                profiles_df = pd.DataFrame(profiles_json)
+                client._db_manager.upsert_company_profiles(profiles_df)
+            
+            ingestion_state["status"] = "completed"
+            ingestion_state["step"] = "All Data Synced"
+            ingestion_state["step"] = "All Data Synced"
             logger.info("Background ingestion complete.")
             
         except Exception as e:

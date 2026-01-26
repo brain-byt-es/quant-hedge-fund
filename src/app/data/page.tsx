@@ -16,6 +16,12 @@ export default function DataHubPage() {
               const res = await fetch("/api/data/health")
               const healthData = await res.json()
               
+              if (!Array.isArray(healthData)) {
+                  console.warn("Health data is not an array:", healthData)
+                  setAssets([])
+                  return
+              }
+              
               const mapped: Asset[] = healthData.map((row: any) => ({
                   ticker: row.symbol,
                   price: row.count, // Using 'price' field to show count for now (hacky, but effective for Health view)

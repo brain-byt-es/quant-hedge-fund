@@ -70,3 +70,12 @@ Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
 - **DB Concurrency:** NEVER open a direct connection to `quant.duckdb` from new scripts; always go through `api.routers.data.get_qs_client()` to use the shared manager.
 - **Type Safety:** All numeric financial data must be cast to `Float64` before DB insertion to prevent C-level overflow errors.
 - **AI Provider:** Update `backend/omega/ai_service.py` if switching primary LLM providers.
+
+### **Developer Experience (DX) / Troubleshooting**
+- **Python Imports:** If VS Code shows red lines for `polars` or `loguru`, ensured `.vscode/settings.json` points to `backend/venv/bin/python3`.
+- **Invalid Interpreter Fix:** If VS Code says the interpreter is invalid:
+    1. Open Command Palette (`Cmd+Shift+P`).
+    2. Run `Python: Select Interpreter`.
+    3. Choose `Enter interpreter path...`.
+    4. Paste: `${workspaceFolder}/backend/venv/bin/python3`.
+    5. Restart VS Code.

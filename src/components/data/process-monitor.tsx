@@ -17,9 +17,10 @@ interface ProcessStep {
 export function ProcessMonitor() {
   const [isRunning, setIsRunning] = React.useState(false);
   const [steps, setSteps] = React.useState<ProcessStep[]>([
-    { name: "Downloading Prices (FMP)", status: "pending", progress: 0 },
-    { name: "Bundling Zipline Data", status: "pending", progress: 0 },
-    { name: "Syncing DuckDB", status: "pending", progress: 0 },
+    { name: "Stock List", status: "pending", progress: 0 },
+    { name: "Daily Prices", status: "pending", progress: 0 },
+    { name: "Annual Financials", status: "pending", progress: 0 },
+    { name: "Zipline Bundling", status: "pending", progress: 0 },
   ]);
   const [details, setDetails] = React.useState("");
   const [stats, setStats] = React.useState({ speed: 0, eta: "" });
@@ -56,15 +57,17 @@ export function ProcessMonitor() {
               if (!res.ok) return;
               const state = await res.json();
               
+              // Sync local state with backend
+              const backendRunning = state.status === "running";
+              setIsRunning(backendRunning);
+
               if (state.status === "idle" || state.status === "completed") {
-                  setIsRunning(false);
                   if (state.status === "completed") {
                       setSteps(s => s.map(step => ({ ...step, status: "completed", progress: 100 })));
                   }
                   return;
               }
               
-              setIsRunning(state.status === "running");
               setDetails(state.details || "");
 
               // Calculate stats
@@ -83,26 +86,47 @@ export function ProcessMonitor() {
               }
 
               setSteps(prev => prev.map(step => {
-                  if (state.step.includes("Downloading") && step.name.includes("Downloading")) {
+                  if (state.step.includes("Stock List") && step.name.includes("Stock List")) {
+                      return { ...step, status: "running", progress: 100 };
+                  }
+                  if (state.step.includes("Downloading Prices") && step.name.includes("Prices")) {
+                      if (step.name.includes("Stock List")) return { ...step, status: "completed", progress: 100 };
                       return { ...step, status: "running", progress: state.progress };
                   }
+                  if (state.step.includes("Ingesting") && step.name.includes("Annual")) {
+                      if (step.name.includes("Prices")) return { ...step, status: "completed", progress: 100 };
+                      return { ...step, status: "running", progress: state.progress || 50 };
+                  }
                   if (state.step.includes("Bundling") && step.name.includes("Bundling")) {
-                      if (step.name.includes("Downloading")) return { ...step, status: "completed", progress: 100 };
+                      if (step.name.includes("Annual")) return { ...step, status: "completed", progress: 100 };
                       return { ...step, status: "running", progress: state.progress };
                   }
                   return step;
               }));
 
-          } catch (e) {
-              console.error("Polling error", e);
-          }
-      };
+                    } catch (e) {
 
-      if (isRunning) {
-          interval = setInterval(pollProgress, 1000);
-      }
-      return () => clearInterval(interval);
-  }, [isRunning]);
+                        console.error("Polling error", e);
+
+                    }
+
+                };
+
+          
+
+                // Start polling immediately and keep it running
+
+                pollProgress(); 
+
+                interval = setInterval(pollProgress, 1000);
+
+          
+
+                return () => clearInterval(interval);
+
+            }, []); // Only run on mount
+
+          
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
