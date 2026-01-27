@@ -93,114 +93,60 @@ export default function ResearchPage() {
       loadSymbolData()
   }, [symbol, lookback])
 
-      return (
+  return (
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
+            <div className="flex justify-between items-center px-2 shrink-0">
+                <div className="flex flex-col">
+                    <h1 className="text-xl font-bold tracking-tight">Research Lab</h1>
+                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
+                </div>
+                <TabsList className="bg-muted/50 border border-border p-1">
+                    <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Signal Charts</TabsTrigger>
+                    <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Governance</TabsTrigger>
+                </TabsList>
+            </div>
 
-        <div className="flex flex-col h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
-
-                <div className="flex justify-between items-center px-2">
-
-                    <div className="flex flex-col">
-
-                        <h1 className="text-xl font-bold tracking-tight">Research Lab</h1>
-
-                        <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
-
+            <TabsContent value="signals" className="flex-1 min-h-0 m-0 outline-none">
+                <div className="flex flex-col gap-4 h-full">
+                    {/* Control Center */}
+                    <div className="shrink-0">
+                        <SignalControlCenter 
+                            symbol={symbol} 
+                            setSymbol={setSymbol} 
+                            lookback={lookback} 
+                            setLookback={setLookback} 
+                        />
                     </div>
 
-                    <TabsList className="bg-muted/50 border border-border p-1">
+                    {/* Main Layout */}
+                    <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
+                        {/* Left Column: Charts */}
+                        <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-hidden">
+                            <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                                <RankScatter data={signals} focusSymbol={symbol} />
+                                <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
+                            </div>
+                            <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                                 <FactorDistributionChart data={signals} />
+                                 <RawRankingsTable data={signals} />
+                            </div>
+                        </div>
 
-                        <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Signal Charts</TabsTrigger>
-
-                        <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Governance</TabsTrigger>
-
-                    </TabsList>
-
+                        {/* Right Column: Profile Sidebar */}
+                        <div className="w-[380px] shrink-0 h-full overflow-hidden">
+                            <CompanyProfile profile={profile} isLoading={loadingProfile} />
+                        </div>
+                    </div>
                 </div>
+            </TabsContent>
 
-    
-
-  
-
-              <TabsContent value="signals" className="flex-1 min-h-0 m-0 outline-none">
-
-                  <div className="flex flex-col gap-4 h-full">
-
-                      {/* Control Center - SaaS Style */}
-
-                      <SignalControlCenter 
-
-                          symbol={symbol} 
-
-                          setSymbol={setSymbol} 
-
-                          lookback={lookback} 
-
-                          setLookback={setLookback} 
-
-                      />
-
-  
-
-                      {/* Main Grid - Balanced Layout */}
-
-                      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
-
-                          
-
-                          {/* Left Col: Charts (8 Units) */}
-
-                          <div className="col-span-8 grid grid-rows-2 gap-4 h-full">
-
-                              <div className="grid grid-cols-2 gap-4">
-
-                                  <RankScatter data={signals} focusSymbol={symbol} />
-
-                                  <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
-
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-
-                                   <FactorDistributionChart data={signals} />
-
-                                   <RawRankingsTable data={signals} />
-
-                              </div>
-
-                          </div>
-
-  
-
-                          {/* Right Col: Profile (4 Units) */}
-
-                          <div className="col-span-4 h-full overflow-hidden">
-
-                              <CompanyProfile profile={profile} isLoading={loadingProfile} />
-
-                          </div>
-
-                      </div>
-
-                  </div>
-
-              </TabsContent>
-
-  
-
-              <TabsContent value="governance" className="flex-1 min-h-0 m-0 outline-none">
-
-                  <StrategyGovernance />
-
-              </TabsContent>
-
-          </Tabs>
-
-      </div>
-
-    )
-
-  }
+            <TabsContent value="governance" className="flex-1 min-h-0 m-0 outline-none">
+                <StrategyGovernance />
+            </TabsContent>
+        </Tabs>
+    </div>
+  )
+}
 
   
