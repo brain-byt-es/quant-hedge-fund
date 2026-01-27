@@ -107,39 +107,39 @@ export default function AIQuantPage() {
   }
 
   return (
-    <div className="grid grid-cols-12 grid-rows-12 gap-4 p-4 h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
+    <div className="grid grid-cols-12 grid-rows-12 gap-4 p-4 h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
       
       {/* --- Q1: THE ARCHITECT (Chat) --- */}
       <div className="col-span-3 row-span-12 flex flex-col">
-        <Card className="h-full flex flex-col border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-            <CardHeader className="py-3 border-b border-zinc-800 bg-zinc-900/80">
-                <CardTitle className="text-xs font-mono uppercase tracking-widest text-emerald-500 flex items-center gap-2">
+        <Card className="h-full flex flex-col border-border bg-card/50 backdrop-blur-sm">
+            <CardHeader className="py-3 border-b border-border bg-muted/80">
+                <CardTitle className="text-xs font-mono uppercase tracking-widest text-primary flex items-center gap-2">
                     <Terminal className="h-3 w-3" /> The Architect
                 </CardTitle>
             </CardHeader>
-            <ScrollArea className="flex-1 p-4 font-mono text-xs">
+            <ScrollArea className="flex-1 p-4 font-mono text-xs text-muted-foreground">
                 <div className="space-y-4">
                     {chatHistory.map((msg, i) => (
                         <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                            <span className="text-[10px] text-zinc-600 mb-1 uppercase">{msg.role}</span>
-                            <div className={`p-2 rounded border max-w-[90%] ${msg.role === 'user' ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-emerald-950/30 border-emerald-900/50 text-emerald-400'}`}>
+                            <span className="text-[10px] text-muted-foreground mb-1 uppercase">{msg.role}</span>
+                            <div className={`p-2 rounded border max-w-[90%] ${msg.role === 'user' ? 'bg-accent border-border text-foreground' : 'bg-primary/10 border-primary/30 text-primary'}`}>
                                 {msg.content}
                             </div>
                         </div>
                     ))}
-                    {loadingChat && <div className="text-emerald-500 animate-pulse">Processing...</div>}
+                    {loadingChat && <div className="text-primary animate-pulse">Processing...</div>}
                 </div>
             </ScrollArea>
-            <div className="p-3 border-t border-zinc-800 bg-zinc-900/80">
+            <div className="p-3 border-t border-border bg-muted/80">
                 <div className="flex gap-2">
                     <Input 
-                        className="bg-zinc-950 border-zinc-800 text-xs font-mono focus-visible:ring-emerald-500/50 h-8"
+                        className="bg-background border-border text-xs font-mono focus-visible:ring-primary/50 h-8"
                         placeholder="Command..." 
                         value={chatInput} 
                         onChange={e => setChatInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleChat()}
                     />
-                    <Button size="icon" className="h-8 w-8 bg-emerald-600 hover:bg-emerald-500 text-black" onClick={handleChat} disabled={loadingChat}>
+                    <Button size="icon" className="h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleChat} disabled={loadingChat}>
                         <ArrowRight className="h-4 w-4"/>
                     </Button>
                 </div>
@@ -149,34 +149,34 @@ export default function AIQuantPage() {
 
       {/* --- Q2: HYPOTHESIS FORGE --- */}
       <div className="col-span-6 row-span-5 flex flex-col min-h-0">
-        <Card className="h-full flex flex-col border-zinc-800 bg-zinc-900/30">
-            <CardHeader className="py-2 px-4 border-b border-zinc-800 flex flex-row items-center justify-between min-h-[40px]">
-                <CardTitle className="text-xs font-mono uppercase tracking-widest text-amber-500 flex items-center gap-2">
+        <Card className="h-full flex flex-col border-border bg-card/30">
+            <CardHeader className="py-2 px-4 border-b border-border flex flex-row items-center justify-between min-h-[40px]">
+                <CardTitle className="text-xs font-mono uppercase tracking-widest text-chart-4 flex items-center gap-2">
                     <Sparkles className="h-3 w-3" /> Hypothesis Forge
                 </CardTitle>
-                <Button variant="outline" size="sm" className="h-6 text-[10px] border-zinc-700 hover:bg-zinc-800 hover:text-amber-500" onClick={generateHypotheses} disabled={loadingHypotheses}>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] border-border hover:bg-accent hover:text-chart-4" onClick={generateHypotheses} disabled={loadingHypotheses}>
                     {loadingHypotheses ? "Scanning..." : "Auto-Generate"}
                 </Button>
             </CardHeader>
             <ScrollArea className="flex-1 w-full whitespace-nowrap p-4">
                 <div className="flex space-x-4">
                     {hypotheses.length === 0 && !loadingHypotheses && (
-                        <div className="w-full flex items-center justify-center text-xs text-zinc-600 italic h-32 border border-dashed border-zinc-800 rounded">
+                        <div className="w-full flex items-center justify-center text-xs text-muted-foreground italic h-32 border border-dashed border-border rounded">
                             Awaiting Regime Scan...
                         </div>
                     )}
                     {hypotheses.map((h, i) => (
-                        <div key={i} className="w-[280px] shrink-0 border border-zinc-800 bg-zinc-950 p-3 rounded hover:border-amber-500/50 transition-colors group relative">
+                        <div key={i} className="w-[280px] shrink-0 border border-border bg-background p-3 rounded hover:border-chart-4/50 transition-colors group relative">
                             <div className="flex justify-between items-start mb-2">
-                                <span className="font-bold text-sm text-zinc-200 truncate pr-2">{h.strategy_name}</span>
-                                <Badge variant="outline" className="text-[10px] h-4 border-amber-900 text-amber-500 bg-amber-950/10">{h.style}</Badge>
+                                <span className="font-bold text-sm text-foreground truncate pr-2">{h.strategy_name}</span>
+                                <Badge variant="outline" className="text-[10px] h-4 border-chart-4/30 text-chart-4 bg-chart-4/10">{h.style}</Badge>
                             </div>
-                            <div className="text-[10px] text-zinc-500 whitespace-normal h-[40px] overflow-hidden line-clamp-3 mb-3">
+                            <div className="text-[10px] text-muted-foreground whitespace-normal h-[40px] overflow-hidden line-clamp-3 mb-3">
                                 {h.reasoning}
                             </div>
                             <Button 
                                 variant="ghost" 
-                                className="w-full h-6 text-[10px] bg-zinc-900 hover:bg-amber-500 hover:text-black transition-colors"
+                                className="w-full h-6 text-[10px] bg-muted hover:bg-chart-4 hover:text-white transition-colors"
                                 onClick={() => loadHypothesis(h)}
                             >
                                 INJECT CONFIG
@@ -190,21 +190,21 @@ export default function AIQuantPage() {
 
       {/* --- Q3: CODE INJECTOR --- */}
       <div className="col-span-6 row-span-7 flex flex-col min-h-0">
-        <Card className="h-full flex flex-col border-zinc-800 bg-zinc-900/30">
-            <CardHeader className="py-2 px-4 border-b border-zinc-800 min-h-[40px]">
-                <CardTitle className="text-xs font-mono uppercase tracking-widest text-purple-500 flex items-center gap-2">
+        <Card className="h-full flex flex-col border-border bg-card/30">
+            <CardHeader className="py-2 px-4 border-b border-border min-h-[40px]">
+                <CardTitle className="text-xs font-mono uppercase tracking-widest text-chart-3 flex items-center gap-2">
                     <Code className="h-3 w-3" /> The Lab (Factor Engine)
                 </CardTitle>
             </CardHeader>
-            <div className="flex-1 relative bg-black font-mono text-xs">
+            <div className="flex-1 relative bg-background font-mono text-xs">
                 <Textarea 
-                    className="w-full h-full resize-none bg-transparent text-zinc-300 border-0 p-4 focus-visible:ring-0 leading-relaxed"
+                    className="w-full h-full resize-none bg-transparent text-foreground border-0 p-4 focus-visible:ring-0 leading-relaxed"
                     value={editorCode}
                     onChange={(e) => setEditorCode(e.target.value)}
                     spellCheck={false}
                 />
                 <div className="absolute bottom-2 right-2 flex gap-2">
-                    <Button size="sm" className="h-6 text-[10px] bg-purple-600 hover:bg-purple-500 text-white gap-1">
+                    <Button size="sm" className="h-6 text-[10px] bg-chart-3 hover:bg-chart-3/90 text-white gap-1">
                         <Save className="h-3 w-3" /> Save to Features
                     </Button>
                 </div>
@@ -214,22 +214,22 @@ export default function AIQuantPage() {
 
       {/* --- Q4: STRATEGY DEFINITION --- */}
       <div className="col-span-3 row-span-12 flex flex-col">
-        <Card className="h-full flex flex-col border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-            <CardHeader className="py-3 border-b border-zinc-800 bg-zinc-900/80">
-                <CardTitle className="text-xs font-mono uppercase tracking-widest text-blue-500 flex items-center gap-2">
+        <Card className="h-full flex flex-col border-border bg-card/50 backdrop-blur-sm">
+            <CardHeader className="py-3 border-b border-border bg-muted/80">
+                <CardTitle className="text-xs font-mono uppercase tracking-widest text-primary flex items-center gap-2">
                     <Settings className="h-3 w-3" /> Config Core
                 </CardTitle>
             </CardHeader>
             <div className="flex-1 p-0 relative">
                 <Textarea 
-                    className="w-full h-full resize-none font-mono text-[10px] bg-zinc-950 text-blue-300 border-0 p-4 focus-visible:ring-0"
+                    className="w-full h-full resize-none font-mono text-[10px] bg-background text-primary border-0 p-4 focus-visible:ring-0"
                     value={strategyConfig}
                     onChange={(e) => setStrategyConfig(e.target.value)}
                     spellCheck={false}
                 />
             </div>
-            <div className="p-4 border-t border-zinc-800 bg-zinc-900/80">
-                <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-mono uppercase tracking-wider text-xs h-10 gap-2" onClick={handleDeploy}>
+            <div className="p-4 border-t border-border bg-muted/80">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider text-xs h-10 gap-2" onClick={handleDeploy}>
                     <Play className="h-3 w-3" /> Deploy to Research
                 </Button>
             </div>

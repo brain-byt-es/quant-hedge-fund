@@ -42,10 +42,10 @@ export function LogViewer() {
   }, [])
 
   return (
-    <Card className="h-full bg-black text-green-500 font-mono border-zinc-800">
-      <CardHeader className="py-3 border-b border-zinc-800 bg-zinc-900/50">
-        <CardTitle className="text-sm flex items-center gap-2">
-            <Terminal className="h-4 w-4" />
+    <Card className="h-full bg-background text-primary font-mono border-border">
+      <CardHeader className="py-3 border-b border-border bg-muted/50">
+        <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+            <Terminal className="h-4 w-4 text-primary" />
             System Execution Logs
         </CardTitle>
       </CardHeader>
@@ -53,26 +53,26 @@ export function LogViewer() {
         <ScrollArea className="h-[300px] p-4">
             <div className="space-y-1">
                 {logs.map((log, i) => (
-                    <div key={i} className="text-xs grid grid-cols-12 gap-2 hover:bg-white/5 p-1 rounded">
-                        <span className="col-span-3 text-zinc-500 truncate">
+                    <div key={i} className="text-xs grid grid-cols-12 gap-2 hover:bg-accent/5 p-1 rounded transition-colors">
+                        <span className="col-span-3 text-muted-foreground truncate opacity-60">
                             {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                         <span className="col-span-2">
-                            <Badge variant="outline" className={`text-[10px] h-5 ${
-                                log.level === "ERROR" ? "text-red-400 border-red-900" : 
-                                log.level === "WARNING" ? "text-yellow-400 border-yellow-900" : 
-                                "text-zinc-400 border-zinc-800"
+                            <Badge variant="outline" className={`text-[10px] h-5 uppercase tracking-tighter ${
+                                log.level === "ERROR" ? "text-destructive border-destructive/50" : 
+                                log.level === "WARNING" ? "text-chart-4 border-chart-4/50" : 
+                                "text-muted-foreground border-border"
                             }`}>
                                 {log.component}
                             </Badge>
                         </span>
-                        <span className="col-span-7 whitespace-pre-wrap break-all">
+                        <span className="col-span-7 whitespace-pre-wrap break-all text-foreground/90">
                             {log.message}
                         </span>
                     </div>
                 ))}
                 {logs.length === 0 && (
-                    <div className="text-zinc-600 italic text-center mt-10">
+                    <div className="text-muted-foreground italic text-center mt-10">
                         Waiting for system activity...
                     </div>
                 )}

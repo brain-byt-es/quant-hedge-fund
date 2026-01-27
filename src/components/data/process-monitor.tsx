@@ -113,11 +113,11 @@ export function ProcessMonitor() {
   }, []);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-      <CardHeader className="pb-3 border-b border-zinc-800">
+    <Card className="border-border bg-card/50 backdrop-blur-sm">
+      <CardHeader className="pb-3 border-b border-border">
         <div className="flex items-center justify-between">
             <div className="space-y-1">
-                <CardTitle className="text-sm font-mono uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                <CardTitle className="text-sm font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                     <Database className="h-4 w-4" /> Ingestion Engine
                 </CardTitle>
                 <CardDescription className="text-[10px]">
@@ -131,10 +131,10 @@ export function ProcessMonitor() {
                     </Button>
                 ) : (
                     <>
-                        <Button size="sm" variant="outline" className="h-7 text-[10px] uppercase font-bold border-zinc-700 hover:bg-zinc-800" onClick={() => handleRunPipeline("daily")}>
-                            <Zap className="mr-1 h-3 w-3 fill-current text-yellow-500" /> Daily Sync
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] uppercase font-bold border-border hover:bg-accent" onClick={() => handleRunPipeline("daily")}>
+                            <Zap className="mr-1 h-3 w-3 fill-current text-amber-500" /> Daily Sync
                         </Button>
-                        <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-emerald-600 hover:bg-emerald-500 text-black" onClick={() => handleRunPipeline("backfill")}>
+                        <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleRunPipeline("backfill")}>
                             <Database className="mr-1 h-3 w-3 fill-current" /> Full Backfill
                         </Button>
                     </>
@@ -147,10 +147,10 @@ export function ProcessMonitor() {
           <div key={step.name} className="space-y-1.5">
             <div className="flex items-center justify-between text-[10px] font-mono">
               <div className="flex items-center gap-2 uppercase tracking-tight">
-                {step.status === "completed" && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                {step.status === "completed" && <CheckCircle2 className="h-3 w-3 text-primary" />}
                 {step.status === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                {step.status === "pending" && <div className="h-3 w-3 rounded-full border border-zinc-800" />}
-                <span className={cn(step.status === "pending" ? "text-zinc-600" : "text-zinc-300")}>
+                {step.status === "pending" && <div className="h-3 w-3 rounded-full border border-muted" />}
+                <span className={cn(step.status === "pending" ? "text-muted-foreground" : "text-foreground")}>
                   {step.name}
                 </span>
               </div>
@@ -158,16 +158,16 @@ export function ProcessMonitor() {
                 {step.progress > 0 ? `${step.progress.toFixed(1)}%` : "0%"}
               </span>
             </div>
-            <Progress value={step.progress} className="h-1 bg-zinc-900" />
+            <Progress value={step.progress} className="h-1 bg-muted" />
           </div>
         ))}
 
         {isRunning && (
-            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-zinc-800 pt-3">
-                <div className="flex items-center gap-2 text-[9px] uppercase text-zinc-500 font-mono">
+            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border pt-3">
+                <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono">
                     <Zap className="h-3 w-3" /> {stats.speed} sym/s
                 </div>
-                <div className="flex items-center gap-2 text-[9px] uppercase text-zinc-500 font-mono justify-end">
+                <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono justify-end">
                     <Timer className="h-3 w-3" /> {stats.eta}
                 </div>
             </div>
