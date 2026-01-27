@@ -12,9 +12,9 @@ interface PriceData {
 export function PriceAnalysisChart({ data, symbol, lookback }: { data: PriceData[], symbol: string, lookback: number }) {
   return (
     <Card className="h-full border-zinc-800/50 bg-zinc-900/40 backdrop-blur-md flex flex-col overflow-hidden shadow-xl">
-        <CardHeader className="py-2 px-3 border-b border-zinc-800/50 flex flex-row items-center justify-between">
-            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-                {symbol} // Price Action // {lookback} Bars
+        <CardHeader className="py-2 px-3 border-b border-border/50 flex flex-row items-center justify-between">
+            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                {symbol} {"//"} Price Action {"//"} {lookback} Bars
             </CardTitle>
             <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" />

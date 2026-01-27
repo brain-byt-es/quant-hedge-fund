@@ -1,10 +1,11 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Globe, Users, DollarSign } from "lucide-react"
 
 interface ProfileData {
+  symbol: string;
   company_name: string;
   sector: string;
   industry: string;
@@ -16,7 +17,7 @@ interface ProfileData {
   ipo_date: string;
   description: string;
   website: string;
-  [key: string]: unknown;
+  [key: string]: string | number | undefined | unknown;
 }
 
 export function CompanyProfile({ profile }: { profile: ProfileData | null }) {
@@ -37,7 +38,7 @@ export function CompanyProfile({ profile }: { profile: ProfileData | null }) {
                     <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 border-border bg-background text-muted-foreground font-mono uppercase">{profile.symbol}</Badge>
                         <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-wider">
-                            {profile.sector} // {profile.industry}
+                            {profile.sector} {"//"} {profile.industry}
                         </span>
                     </div>
                 </div>
