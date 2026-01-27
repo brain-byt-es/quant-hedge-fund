@@ -283,31 +283,48 @@ class DuckDBManager:
             conn.close()
 
     def upsert_stock_list(self, df: pd.DataFrame) -> int:
-        """Upsert stock list data using dynamic schema mirroring."""
+        """Upsert stock list data using persistent schema."""
         if df.empty: return 0
         conn = self.connect()
         try:
+            # Standardize column mapping to match FMP 'stable' keys to our schema
+            mapping = {
+                "exchangeShortName": "exchange_short_name",
+                "type": "asset_type"
+            }
+            df = df.rename(columns=mapping)
+            
             conn.register("temp_stocks", df)
-            # Create or replace the table directly from the dataframe to match its schema exactly
-            conn.execute("CREATE OR REPLACE TABLE stock_list_fmp AS SELECT * FROM temp_stocks")
-            # Re-create index for performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sl_sym ON stock_list_fmp(symbol)")
+            
+            # Use INSERT OR REPLACE to preserve table structure and custom columns
+            conn.execute("""
+                INSERT OR REPLACE INTO stock_list_fmp (
+                    symbol, name, exchange, exchange_short_name, asset_type, price
+                )
+                SELECT symbol, name, exchange, exchange_short_name, asset_type, price FROM temp_stocks
+            """)
             return len(df)
         finally:
-            conn.unregister("temp_stocks")
+            try: conn.unregister("temp_stocks")
+            except: pass
             conn.close()
 
     def upsert_company_profiles(self, df: pd.DataFrame) -> int:
-        """Upsert company profile data using dynamic schema mirroring."""
+        """Upsert company profile data using persistent schema."""
         if df.empty: return 0
         conn = self.connect()
         try:
             conn.register("temp_profiles", df)
-            conn.execute("CREATE OR REPLACE TABLE bulk_company_profiles_fmp AS SELECT * FROM temp_profiles")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_cp_sym ON bulk_company_profiles_fmp(symbol)")
+            conn.execute("""
+                INSERT OR REPLACE INTO bulk_company_profiles_fmp (
+                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees
+                )
+                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees FROM temp_profiles
+            """)
             return len(df)
         finally:
-            conn.unregister("temp_profiles")
+            try: conn.unregister("temp_profiles")
+            except: pass
             conn.close()
 
     # =====================
