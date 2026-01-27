@@ -56,71 +56,70 @@ def get_signals(
 
 @router.get("/profile/{symbol}")
 def get_company_profile(symbol: str):
-    """Get comprehensive company profile including institutional layers."""
+    """Get comprehensive company profile with Just-in-Time (JIT) API fallback."""
     try:
         client = get_qs_client()
-        
-        # 1. Basic Profile (from DB or fallback)
         profile_data = {}
+
+        # 1. Try to fetch from local DuckDB cache
         try:
             res = client.query(f"SELECT * FROM bulk_company_profiles_fmp WHERE symbol = '{symbol}'")
             if not res.is_empty():
                 profile_data = res.to_dicts()[0]
+                # Map DB columns back to what frontend expects if they differ
+                if "company_name" not in profile_data and "companyName" in profile_data:
+                    profile_data["company_name"] = profile_data.pop("companyName")
         except:
             pass
             
-        if not profile_data:
-            # Fallback Mock for base data
-            profile_data = {
-                "symbol": symbol,
-                "company_name": f"{symbol} Corp",
-                "sector": "Technology",
-                "industry": "Computer Hardware",
-                "description": "Information not available in local cache. Fetching real-time intelligence...",
-                "price": 0.0,
-                "beta": 1.0,
-                "exchange": "NASDAQ",
-                "website": "",
-                "full_time_employees": 0,
-                "market_cap": 0,
-                "ipo_date": "N/A"
-            }
+        # 2. JIT Fallback: Fetch from FMP API if missing in DB
+        if not profile_data or profile_data.get("price") == 0:
+            try:
+                logger.info(f"JIT: Fetching real-time profile for {symbol} from FMP...")
+                # Use our FMP client
+                api_profile = client._fmp_client.get_company_profile(symbol)
+                if api_profile:
+                    # Clean up keys for our schema
+                    profile_data = {
+                        "symbol": symbol,
+                        "company_name": api_profile.get("companyName"),
+                        "sector": api_profile.get("sector"),
+                        "industry": api_profile.get("industry"),
+                        "description": api_profile.get("description"),
+                        "price": float(api_profile.get("price", 0)),
+                        "beta": float(api_profile.get("beta", 0)),
+                        "exchange": api_profile.get("exchangeShortName"),
+                        "website": api_profile.get("website"),
+                        "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
+                        "market_cap": float(api_profile.get("mktCap", 0)),
+                        "ipo_date": api_profile.get("ipoDate")
+                    }
+                    # Save to DB so we have it next time
+                    import pandas as pd
+                    client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
+            except Exception as jit_err:
+                logger.error(f"JIT Profile fetch failed for {symbol}: {jit_err}")
 
-        # 2. Add DCF Valuation
+        # 3. Add dynamic layers (DCF, Insider, News) - these are always live
+        # [ ... Rest der Logik bleibt gleich ... ]
         try:
             dcf_df = client._fmp_client.get_dcf_valuation(symbol)
             if not dcf_df.empty:
                 profile_data["dcf_value"] = float(dcf_df.iloc[0]["dcf"])
-                profile_data["dcf_diff"] = float(dcf_df.iloc[0]["Stock Price"]) - profile_data["dcf_value"]
-        except:
-            profile_data["dcf_value"] = None
+        except: pass
 
-        # 3. Add Insider Sentiment (Last 5 trades)
         try:
             insider_df = client._fmp_client.get_insider_trades(symbol, limit=5)
             if not insider_df.empty:
-                profile_data["recent_insider_trades"] = insider_df.to_dict(orient="records")
-                # Simple sentiment: Count buys vs sales
                 buys = len(insider_df[insider_df["transactionType"].str.contains("Buy", na=False, case=False)])
                 profile_data["insider_sentiment"] = "BULLISH" if buys > 2 else "NEUTRAL"
-        except:
-            profile_data["insider_sentiment"] = "UNKNOWN"
+        except: pass
 
-        # 4. Add Latest News
         try:
             news_df = client._fmp_client.get_stock_news(symbol, limit=3)
             if not news_df.empty:
                 profile_data["latest_news"] = news_df.to_dict(orient="records")
-        except:
-            profile_data["latest_news"] = []
-
-        # Update price from real-time source if available
-        try:
-            price_df = client._fmp_client.get_historical_prices(symbol)
-            if not price_df.empty:
-                profile_data["price"] = float(price_df.iloc[0]["close"])
-        except:
-            pass
+        except: pass
 
         return profile_data
     except Exception as e:

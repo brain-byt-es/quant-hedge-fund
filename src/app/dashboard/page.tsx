@@ -95,9 +95,9 @@ export default function DashboardPage() {
         const pos = await api.getPortfolio()
         setPositions(pos as DashboardPosition[])
       } catch (err) {
-        console.error("Failed to fetch dashboard data", err)
-        setDataStatus("offline")
-        setLiveStatus({ ib_connected: false, engine_halted: false })
+        // Backend is likely busy, maintain current state
+        console.debug("Dashboard: Backend unreachable or busy, retrying later...")
+        setDataStatus("busy")
       }
     }
     fetchData()

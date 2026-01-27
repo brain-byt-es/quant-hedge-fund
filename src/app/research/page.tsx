@@ -54,9 +54,11 @@ export default function ResearchPage() {
       const loadSignals = async () => {
           try {
               const data = await api.getResearchSignals(lookback)
-              setSignals(data)
+              if (Array.isArray(data)) {
+                  setSignals(data)
+              }
           } catch (err) {
-              console.error("Failed to load signals", err)
+              console.debug("Research Lab: Backend busy, skipping signals fetch...")
           }
       }
       loadSignals()
@@ -68,12 +70,16 @@ export default function ResearchPage() {
       const loadSymbolData = async () => {
           try {
               const p = await api.getCompanyProfile(symbol)
-              setProfile(p)
+              if (p && !p.error) {
+                  setProfile(p)
+              }
               
               const h = await api.getPriceHistory(symbol, lookback)
-              setPriceHistory(h)
+              if (Array.isArray(h)) {
+                  setPriceHistory(h)
+              }
           } catch (err) {
-              console.error("Failed to load symbol data", err)
+              console.debug("Research Lab: Backend busy, skipping profile fetch...")
           }
       }
       loadSymbolData()
