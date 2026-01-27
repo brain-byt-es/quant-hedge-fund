@@ -10,8 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { ShieldCheck, History, Landmark } from "lucide-react"
 
+interface AuditEntry {
+  approved_at: string;
+  stage: string;
+  human_rationale: string;
+  approved_by: string;
+  [key: string]: unknown;
+}
+
 export function StrategyGovernance() {
-  const [auditLog, setAuditLog] = useState<any[]>([])
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
   const [rationale, setRationale] = useState("")
   const [stage, setStage] = useState("PAPER")
   const [loading, setLoading] = useState(false)
@@ -20,9 +28,9 @@ export function StrategyGovernance() {
     try {
       const res = await fetch("/api/governance/audit-trail")
       const data = await res.json()
-      setAuditLog(data)
-    } catch (e) {
-      console.error("Failed to fetch audit trail", e)
+      setAuditLog(data as AuditEntry[])
+    } catch (err) {
+      console.error("Failed to fetch audit trail", err)
     }
   }
 
@@ -48,7 +56,8 @@ export function StrategyGovernance() {
           fetchAuditTrail()
           alert("Strategy deployment approved.")
       }
-    } catch (e) {
+    } catch (err) {
+      console.error("Approval failed", err)
       alert("Approval failed.")
     } finally {
       setLoading(false)

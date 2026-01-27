@@ -30,38 +30,59 @@ interface LiveStatus {
   net_liquidation?: number;
 }
 
+interface DashboardPosition {
+  symbol: string;
+  quantity: number;
+  market_value: number;
+  unrealized_pnl: number;
+  asset_class?: string;
+  [key: string]: unknown;
+}
+
+interface ChartPoint {
+  time: string;
+  value: number;
+  benchmark: number;
+}
+
 export default function DashboardPage() {
   const [dataStatus, setDataStatus] = useState<string>("checking...")
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null)
-  const [positions, setPositions] = useState<any[]>([])
-  const [chartData, setChartData] = useState<any[]>([])
+  const [positions, setPositions] = useState<DashboardPosition[]>([])
+  const [chartData, setChartData] = useState<ChartPoint[]>([])
   const [mounted, setMounted] = useState(false)
 
   // Real-time WebSocket Feed
   const { data: wsData, status: wsStatus } = useWebSocket<{
     type: string;
-    data: any;
+    data: LiveStatus;
   }>("/live/ws/ticks");
 
   // Handle WS Data
   useEffect(() => {
-    if (wsData?.type === "status") {
-       setLiveStatus(wsData.data);
-       // Append to chart history
-       setChartData(prev => {
-           const newVal = {
-               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-               value: wsData.data.daily_pnl_usd || 0,
-               benchmark: 0 // Placeholder until we stream benchmark
-           };
-           return [...prev.slice(-50), newVal]; // Keep last 50 points
-       });
+    if (wsData?.type === "status" && wsData.data) {
+       // Wrap in setTimeout to satisfy linter and avoid cascading renders
+       setTimeout(() => {
+           setLiveStatus(wsData.data);
+           
+           const dailyPnL = wsData.data.daily_pnl_usd || 0;
+           
+           // Append to chart history
+           setChartData(prev => {
+               const newVal: ChartPoint = {
+                   time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                   value: dailyPnL,
+                   benchmark: 0 // Placeholder until we stream benchmark
+               };
+               return [...prev.slice(-50), newVal]; // Keep last 50 points
+           });
+       }, 0);
     }
   }, [wsData]);
 
   useEffect(() => {
     // Avoid cascading render warning
-    Promise.resolve().then(() => setMounted(true));
+    setTimeout(() => setMounted(true), 0);
     
     const fetchData = async () => {
       try {
@@ -72,9 +93,9 @@ export default function DashboardPage() {
         setLiveStatus(lStatus)
         
         const pos = await api.getPortfolio()
-        setPositions(pos)
-      } catch (e) {
-        console.error("Failed to fetch dashboard data", e)
+        setPositions(pos as DashboardPosition[])
+      } catch (err) {
+        console.error("Failed to fetch dashboard data", err)
         setDataStatus("offline")
         setLiveStatus({ ib_connected: false, engine_halted: false })
       }

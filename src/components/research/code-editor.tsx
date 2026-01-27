@@ -1,9 +1,5 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { Play, Save, FileCode } from "lucide-react"
-import { ScrollArea } from "@/components/ui/scroll-area"
-
 const sampleCode = `from zipline.api import order_target, record, symbol
 
 def initialize(context):

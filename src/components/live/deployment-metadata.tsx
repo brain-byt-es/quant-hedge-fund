@@ -7,7 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
-import { Monitor, Info, History } from "lucide-react"
+import { Monitor, History } from "lucide-react"
 
 export function DeploymentMetadata() {
   return (

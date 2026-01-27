@@ -4,7 +4,7 @@ import * as React from "react"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Loader2, Database, Play, AlertTriangle, Square, Timer, Zap } from "lucide-react"
+import { CheckCircle2, Loader2, Database, Square, Timer, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 
@@ -30,8 +30,8 @@ export function ProcessMonitor() {
       setSteps(s => s.map(step => ({ ...step, status: "pending", progress: 0 })));
       try {
           await api.triggerIngestion({ mode });
-      } catch (e) {
-          console.error(e);
+      } catch (err) {
+          console.error(err);
           setIsRunning(false);
       }
   };
@@ -40,12 +40,77 @@ export function ProcessMonitor() {
       try {
           await fetch("/api/data/ingest/stop", { method: "POST" });
           setIsRunning(false);
-      } catch (e) {
-          console.error("Failed to stop", e);
+      } catch (err) {
+          console.error("Failed to stop", err);
       }
   };
 
-  // ... rest of the code ...
+  // Poll for progress
+  React.useEffect(() => {
+      const startTime = Date.now();
+      
+      const pollProgress = async () => {
+          try {
+              const res = await fetch("/api/data/ingest/progress"); 
+              if (!res.ok) return;
+              const state = await res.json();
+              
+              // Sync local state with backend
+              const backendRunning = state.status === "running";
+              setIsRunning(backendRunning);
+
+              if (state.status === "idle" || state.status === "completed") {
+                  if (state.status === "completed") {
+                      setSteps(s => s.map(step => ({ ...step, status: "completed", progress: 100 })));
+                  }
+                  return;
+              }
+              
+              setDetails(state.details || "");
+
+              // Calculate stats
+              if (state.details && state.details.includes("/")) {
+                  const [curr, total] = state.details.split("/").map(Number);
+                  const elapsedSec = (Date.now() - startTime) / 1000;
+                  const speed = curr / elapsedSec;
+                  const remaining = total - curr;
+                  const etaSec = remaining / speed;
+                  
+                  const etaMin = Math.floor(etaSec / 60);
+                  setStats({ 
+                      speed: parseFloat(speed.toFixed(1)), 
+                      eta: speed > 0 ? `${etaMin}m remaining` : "Calculating..." 
+                  });
+              }
+
+              setSteps(prev => prev.map(step => {
+                  if (state.step.includes("Stock List") && step.name.includes("Stock List")) {
+                      return { ...step, status: "running", progress: 100 };
+                  }
+                  if (state.step.includes("Downloading Prices") && step.name.includes("Prices")) {
+                      if (step.name.includes("Stock List")) return { ...step, status: "completed", progress: 100 };
+                      return { ...step, status: "running", progress: state.progress };
+                  }
+                  if (state.step.includes("Ingesting") && step.name.includes("Annual")) {
+                      if (step.name.includes("Prices")) return { ...step, status: "completed", progress: 100 };
+                      return { ...step, status: "running", progress: state.progress || 50 };
+                  }
+                  if (state.step.includes("Bundling") && step.name.includes("Bundling")) {
+                      if (step.name.includes("Annual")) return { ...step, status: "completed", progress: 100 };
+                      return { ...step, status: "running", progress: state.progress };
+                  }
+                  return step;
+              }));
+
+          } catch (err) {
+              console.error("Polling error", err);
+          }
+      };
+
+      pollProgress(); 
+      const interval = setInterval(pollProgress, 1000);
+      return () => clearInterval(interval);
+  }, []);
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">

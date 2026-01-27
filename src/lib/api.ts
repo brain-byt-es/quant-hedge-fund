@@ -57,11 +57,21 @@ export const api = {
     return res.json();
   },
 
-  getLatestPrices: async (limit: number = 100) => {
+  getDataHealth: async () => {
+    const res = await fetch(`${API_BASE_URL}/data/health`);
+    return res.json();
+  },
+
+  getDataStats: async () => {
+    const res = await fetch(`${API_BASE_URL}/data/stats`);
+    return res.json();
+  },
+
+  getLatestPrices: async (limit = 100) => {
     const res = await fetch(`${API_BASE_URL}/data/prices/latest?limit=${limit}`);
     return res.json();
   },
-  
+
   // Research Layer
   runBacktest: async (params: BacktestParams) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run`, {

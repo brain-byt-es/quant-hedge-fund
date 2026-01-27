@@ -1,15 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card"
+import { useState } from "react"
+import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
-import { Sparkles, BrainCircuit, Code, Play, ArrowRight, Bot, Database, Zap, Terminal, Settings, Save } from "lucide-react"
+import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save } from "lucide-react"
 import { useRouter } from "next/navigation"
+
+interface Hypothesis {
+  strategy_name: string;
+  style: string;
+  reasoning: string;
+  [key: string]: unknown;
+}
 
 export default function AIQuantPage() {
   const router = useRouter()
@@ -21,7 +28,7 @@ export default function AIQuantPage() {
   ])
   const [loadingChat, setLoadingChat] = useState(false)
   
-  const [hypotheses, setHypotheses] = useState<any[]>([])
+  const [hypotheses, setHypotheses] = useState<Hypothesis[]>([])
   const [loadingHypotheses, setLoadingHypotheses] = useState(false)
   
   const [editorCode, setEditorCode] = useState<string>("# Waiting for Alpha Factor code injection...")
@@ -54,7 +61,8 @@ export default function AIQuantPage() {
               setChatHistory(prev => [...prev, { role: 'ai', content: `Configuration built for: ${res.strategy_name}` }])
               setStrategyConfig(JSON.stringify(res, null, 2))
           }
-      } catch (e) {
+      } catch (err) {
+          console.error("Chat error", err)
           setChatHistory(prev => [...prev, { role: 'ai', content: "Command execution failed." }])
       } finally {
           setLoadingChat(false)
@@ -67,20 +75,20 @@ export default function AIQuantPage() {
       try {
           const res = await api.generateHypotheses(3)
           if (Array.isArray(res)) {
-              setHypotheses(res)
+              setHypotheses(res as Hypothesis[])
           } else {
               console.warn("Hypotheses result is not an array:", res)
               setHypotheses([])
           }
-      } catch (e) {
-          console.error("Failed to generate hypotheses", e)
+      } catch (err) {
+          console.error("Failed to generate hypotheses", err)
           setHypotheses([])
       } finally {
           setLoadingHypotheses(false)
       }
   }
 
-  const loadHypothesis = (h: any) => {
+  const loadHypothesis = (h: Hypothesis) => {
       setStrategyConfig(JSON.stringify(h, null, 2))
       setChatHistory(prev => [...prev, { role: 'ai', content: `Loaded hypothesis: ${h.strategy_name}` }])
   }
@@ -93,7 +101,7 @@ export default function AIQuantPage() {
           await api.runBacktest(config)
           alert("Strategy Deployed to Research Lab.")
           router.push("/research")
-      } catch (e) {
+      } catch {
           alert("Invalid JSON Config.")
       }
   }

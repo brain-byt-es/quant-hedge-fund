@@ -45,6 +45,16 @@ def get_data_health():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/stats")
+def get_data_stats():
+    """Get row counts for all tables."""
+    try:
+        client = get_qs_client()
+        return client._db_manager.get_table_stats()
+    except Exception as e:
+        logger.error(f"Stats check failed: {e}")
+        return []
+
 @router.post("/ingest/stop")
 async def stop_ingestion():
     """Stop the running background ingestion."""

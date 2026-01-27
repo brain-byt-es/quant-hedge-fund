@@ -11,16 +11,22 @@ import { RollingReturnTable } from "@/components/live/rolling-return-table"
 import { ActiveWeightsTable } from "@/components/live/active-weights-table"
 import { api } from "@/lib/api"
 
+interface LiveStatus {
+  portfolio_var_95_usd?: number;
+  net_liquidation?: number;
+  [key: string]: unknown;
+}
+
 export default function LiveOpsPage() {
-  const [liveStatus, setLiveStatus] = useState<any>(null)
+  const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null)
 
   useEffect(() => {
       const fetchData = async () => {
           try {
               const status = await api.getLiveStatus()
-              setLiveStatus(status)
-          } catch (e) {
-              console.error("Failed to fetch live data", e)
+              setLiveStatus(status as LiveStatus)
+          } catch (err) {
+              console.error("Failed to fetch live data", err)
           }
       }
 

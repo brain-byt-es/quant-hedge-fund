@@ -1,60 +1,31 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { ProcessMonitor } from "@/components/data/process-monitor"
-import { AssetTable, Asset } from "@/components/data/asset-table"
+import { DataStatusGrid } from "@/components/data/status-grid"
 import { LogViewer } from "@/components/status/log-viewer"
-import { api } from "@/lib/api"
 
 export default function DataHubPage() {
-  const [assets, setAssets] = useState<Asset[]>([])
-
-  useEffect(() => {
-      const fetchData = async () => {
-          try {
-              // Fetch health data which is richer than just prices
-              const res = await fetch("/api/data/health")
-              const healthData = await res.json()
-              
-              if (!Array.isArray(healthData)) {
-                  console.warn("Health data is not an array:", healthData)
-                  setAssets([])
-                  return
-              }
-              
-              const mapped: Asset[] = healthData.map((row: any) => ({
-                  ticker: row.symbol,
-                  price: row.count, // Using 'price' field to show count for now (hacky, but effective for Health view)
-                  sector: row.is_stale ? "STALE" : "HEALTHY",
-                  updated: new Date(row.last_date).toLocaleDateString(),
-                  status: row.is_stale ? "Warning" : "Active"
-              }))
-              setAssets(mapped)
-          } catch (e) {
-              console.error("Failed to load data health", e)
-          }
-      }
-      fetchData()
-      const interval = setInterval(fetchData, 10000)
-      return () => clearInterval(interval)
-  }, [])
-
   return (
-    <div className="flex flex-col gap-6 p-4 h-[calc(100vh-6rem)]">
-      <div className="grid gap-6 md:grid-cols-3 h-full">
-        {/* Left Column: Process Monitor & Logs */}
-        <div className="md:col-span-1 flex flex-col gap-6 h-full">
-          <div className="flex-none">
-            <ProcessMonitor />
-          </div>
-          <div className="flex-1 min-h-0">
-            <LogViewer />
-          </div>
+    <div className="flex flex-col gap-2 p-2 h-[calc(100vh-4rem)] bg-black text-zinc-400 font-mono text-xs">
+      
+      {/* Top Row: Controls & Status Matrix */}
+      <div className="grid grid-cols-12 gap-2 h-1/3">
+        <div className="col-span-3 flex flex-col gap-2 h-full">
+           <ProcessMonitor />
         </div>
+        <div className="col-span-9 h-full overflow-y-auto">
+           <DataStatusGrid />
+        </div>
+      </div>
 
-        {/* Right Column: Data Health Table */}
-        <div className="md:col-span-2 overflow-auto h-full border rounded-xl bg-card">
-          <AssetTable assets={assets} title="Data Health & Coverage" />
+      {/* Bottom Row: Live Terminal */}
+      <div className="flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-950/80 overflow-hidden">
+        <div className="px-2 py-1 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+            <span className="uppercase text-[10px] tracking-widest text-emerald-500">System Logs // Realtime</span>
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        </div>
+        <div className="h-full">
+            <LogViewer />
         </div>
       </div>
     </div>

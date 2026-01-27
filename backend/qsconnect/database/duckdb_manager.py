@@ -422,6 +422,35 @@ class DuckDBManager:
         """
         return self.query(sql)
 
+    def get_table_stats(self) -> List[Dict[str, Any]]:
+        """Get row counts for key tables."""
+        tables = [
+            "stock_list_fmp",
+            "historical_prices_fmp",
+            "bulk_income_statement_annual_fmp",
+            "bulk_balance_sheet_statement_annual_fmp",
+            "bulk_cash_flow_statement_annual_fmp",
+            "bulk_ratios_annual_fmp",
+            "bulk_key_metrics_annual_fmp",
+            "strategy_audit_log",
+            "trades"
+        ]
+        
+        stats = []
+        for table in tables:
+            try:
+                # Check if table exists first
+                exists = self.query(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table}'")[0,0] > 0
+                if exists:
+                    count = self.query(f"SELECT COUNT(*) FROM {table}")[0,0]
+                    stats.append({"name": table, "count": count, "status": "active"})
+                else:
+                    stats.append({"name": table, "count": 0, "status": "missing"})
+            except Exception:
+                stats.append({"name": table, "count": -1, "status": "error"})
+        
+        return stats
+
     # =====================
     # Query Core
     # =====================
