@@ -72,6 +72,21 @@ export const api = {
     return res.json();
   },
 
+  getResearchSignals: async (lookback = 252) => {
+    const res = await fetch(`${API_BASE_URL}/research/signals?lookback=${lookback}`);
+    return res.json();
+  },
+
+  getCompanyProfile: async (symbol: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/profile/${symbol}`);
+    return res.json();
+  },
+
+  getPriceHistory: async (symbol: string, lookback = 252) => {
+    const res = await fetch(`${API_BASE_URL}/research/price-history/${symbol}?lookback=${lookback}`);
+    return res.json();
+  },
+
   // Research Layer
   runBacktest: async (params: BacktestParams) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run`, {

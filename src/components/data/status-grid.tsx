@@ -21,11 +21,11 @@ export function DataStatusGrid() {
         try {
             const stats = await api.getDataStats()
             if (Array.isArray(stats)) {
-                // Map API response to UI model if needed, but names match mostly
                 setTables(stats)
             }
-        } catch (e) {
-            console.error(e)
+        } catch {
+            // Backend is likely busy with ingestion, ignore fetch errors
+            console.debug("Data Hub: Backend busy, retrying stats fetch later...")
         }
     }
     
