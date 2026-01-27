@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,8 +8,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
-import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save } from "lucide-react"
+import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 
 interface Hypothesis {
   strategy_name: string;
@@ -61,7 +62,7 @@ export default function AIQuantPage() {
                   mlflow: { ...prev.mlflow, active: mlRes.ok },
                   prefect: { ...prev.prefect, active: prefRes.ok }
               }))
-          } catch (err) {
+          } catch {
               console.debug("Service check failed (CORS or Down)")
           }
       }
@@ -87,7 +88,7 @@ export default function AIQuantPage() {
           if (input.toLowerCase().includes("mlflow") || input.toLowerCase().includes("research")) {
               setAgentStatus("Querying MLflow Registry...")
               await new Promise(r => setTimeout(r, 800))
-              const res = await api.getResearchSignals() // Using research API as a tool
+              await api.getResearchSignals() // Using research API as a tool
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
                   content: "I have analyzed the recent research signals. There is a strong momentum clustering in the technology sector.",
@@ -324,10 +325,6 @@ export default function AIQuantPage() {
             </div>
         </Card>
       </div>
-
-    </div>
-  )
-}
 
     </div>
   )
