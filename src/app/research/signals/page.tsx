@@ -52,13 +52,13 @@ export default function SignalDashboardPage() {
   }, [fetchData])
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white p-4 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-background text-foreground p-4 overflow-hidden font-sans">
       
       {/* 1. HEADER / CONTROL BAR */}
-      <div className="flex items-center justify-between mb-6 border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between mb-6 border-b border-border pb-4">
         <div className="flex items-center gap-4">
             <Link href="/research">
-                <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-white">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground transition-colors">
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
             </Link>
@@ -68,7 +68,7 @@ export default function SignalDashboardPage() {
         <div className="flex items-center gap-2">
             {/* Symbol Selector */}
             <Select value={symbol} onValueChange={setSymbol}>
-                <SelectTrigger className="w-32 h-8 bg-zinc-900 border-zinc-800 text-xs font-mono">
+                <SelectTrigger className="w-32 h-8 bg-card border-border text-xs font-mono">
                     <SelectValue placeholder="Symbol" />
                 </SelectTrigger>
                 <SelectContent>
@@ -77,11 +77,11 @@ export default function SignalDashboardPage() {
             </Select>
 
             {/* Window Selector */}
-            <div className="flex bg-zinc-900 rounded-md p-0.5 border border-zinc-800">
+            <div className="flex bg-card rounded-md p-0.5 border border-border shadow-sm">
                 {TIME_WINDOWS.map(w => (
                     <button 
                         key={w}
-                        className={`px-3 py-1 text-[10px] font-bold rounded uppercase transition-all ${window === w ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        className={`px-3 py-1 text-[10px] font-bold rounded uppercase transition-all ${window === w ? 'bg-accent text-accent-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                         onClick={() => setTimeWindow(w)}
                     >
                         {w}
@@ -92,7 +92,7 @@ export default function SignalDashboardPage() {
             <Button 
                 variant="ghost" 
                 size="icon" 
-                className={`h-8 w-8 text-zinc-500 ${loading ? 'animate-spin' : ''}`}
+                className={`h-8 w-8 text-muted-foreground hover:text-primary transition-colors ${loading ? 'animate-spin' : ''}`}
                 onClick={fetchData}
             >
                 <RefreshCw className="h-4 w-4" />
@@ -113,7 +113,7 @@ export default function SignalDashboardPage() {
       </div>
 
       {/* FOOTER */}
-      <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-600 font-mono uppercase tracking-[0.2em]">
+      <div className="mt-4 flex justify-between items-center text-[10px] text-muted-foreground font-mono uppercase tracking-[0.2em] opacity-50">
           <div>Status: Realtime Signal Stream // Buffer: Verified</div>
           <div>Auth: Institutional Grade Alpha // Source: FMP Stable</div>
       </div>
