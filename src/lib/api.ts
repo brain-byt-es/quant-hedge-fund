@@ -41,6 +41,14 @@ export interface BacktestRun {
   status: string;
 }
 
+const handleResponse = async (res: Response) => {
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP error! status: ${res.status}`);
+  }
+  return res.json();
+};
+
 export const api = {
   // Data Layer
       triggerIngestion: async (params: { mode: "daily" | "backfill", start_date?: string }) => {
@@ -49,42 +57,42 @@ export const api = {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(params)
           })
-          return res.json()
+          return handleResponse(res)
       },
     
   getIngestionStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/data/status`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getDataHealth: async () => {
     const res = await fetch(`${API_BASE_URL}/data/health`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getDataStats: async () => {
     const res = await fetch(`${API_BASE_URL}/data/stats`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getLatestPrices: async (limit = 100) => {
     const res = await fetch(`${API_BASE_URL}/data/prices/latest?limit=${limit}`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getResearchSignals: async (lookback = 252) => {
     const res = await fetch(`${API_BASE_URL}/research/signals?lookback=${lookback}`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getCompanyProfile: async (symbol: string) => {
     const res = await fetch(`${API_BASE_URL}/research/profile/${symbol}`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getPriceHistory: async (symbol: string, lookback = 252) => {
     const res = await fetch(`${API_BASE_URL}/research/price-history/${symbol}?lookback=${lookback}`);
-    return res.json();
+    return handleResponse(res);
   },
 
   // Research Layer
@@ -94,22 +102,22 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
-    return res.json();
+    return handleResponse(res);
   },
   
   listBacktests: async (limit: number = 20): Promise<BacktestRun[]> => {
     const res = await fetch(`${API_BASE_URL}/backtest/list?limit=${limit}`);
-    if (!res.ok) return [];
-    return res.json();
+    return handleResponse(res);
   },
   
   triggerMockBacktest: async (): Promise<void> => {
-      await fetch(`${API_BASE_URL}/backtest/run_test`, { method: "POST" });
+      const res = await fetch(`${API_BASE_URL}/backtest/run_test`, { method: "POST" });
+      return handleResponse(res);
   },
 
   getBacktestResults: async (runId: string) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run/${runId}`);
-    return res.json();
+    return handleResponse(res);
   },
 
   // AI Layer
@@ -119,7 +127,7 @@ export const api = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ run_id: runId }),
       });
-      return res.json();
+      return handleResponse(res);
   },
 
   generateStrategyConfig: async (prompt: string) => {
@@ -128,7 +136,7 @@ export const api = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
       });
-      return res.json();
+      return handleResponse(res);
   },
 
   generateFactorCode: async (prompt: string) => {
@@ -137,7 +145,7 @@ export const api = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
       });
-      return res.json();
+      return handleResponse(res);
   },
 
   generateHypotheses: async (n: number = 3) => {
@@ -146,18 +154,18 @@ export const api = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ n }),
       });
-      return res.json();
+      return handleResponse(res);
   },
 
   // Live Execution Layer
   getLiveStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/live/status`);
-    return res.json();
+    return handleResponse(res);
   },
 
   getPortfolio: async () => {
     const res = await fetch(`${API_BASE_URL}/live/positions`);
-    return res.json();
+    return handleResponse(res);
   },
   
   submitOrder: async (order: OrderParams) => {
@@ -166,17 +174,17 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(order),
     });
-    return res.json();
+    return handleResponse(res);
   },
 
   haltSystem: async () => {
     const res = await fetch(`${API_BASE_URL}/live/halt`, { method: "POST" });
-    return res.json();
+    return handleResponse(res);
   },
 
   resumeSystem: async () => {
     const res = await fetch(`${API_BASE_URL}/live/resume`, { method: "POST" });
-    return res.json();
+    return handleResponse(res);
   },
 
   configureBroker: async (active_broker: string) => {
@@ -185,7 +193,7 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active_broker }),
     });
-    return res.json();
+    return handleResponse(res);
   }
 };
 
