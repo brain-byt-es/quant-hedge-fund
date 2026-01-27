@@ -290,18 +290,42 @@ class DuckDBManager:
             # Standardize column mapping to match FMP 'stable' keys to our schema
             mapping = {
                 "exchangeShortName": "exchange_short_name",
-                "type": "asset_type"
+                "type": "asset_type",
+                "companyName": "name"
             }
             df = df.rename(columns=mapping)
             
+            # Ensure ALL required columns exist
+            required_cols = ["symbol", "name", "exchange", "exchange_short_name", "asset_type", "price"]
+            for col in required_cols:
+                if col not in df.columns:
+                    # Fallback logic
+                    if col == "exchange" and "exchange_short_name" in df.columns:
+                        df[col] = df["exchange_short_name"]
+                    else:
+                        df[col] = None # Default to NULL for missing columns
+            
+            # Add updated_at timestamp from Python to avoid SQL binder errors
+            df["updated_at"] = datetime.now()
+
             conn.register("temp_stocks", df)
             
-            # Use INSERT OR REPLACE to preserve table structure and custom columns
+            # Self-healing: Ensure unique constraint exists for ON CONFLICT
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_sl_pk ON stock_list_fmp(symbol)")
+            
+            # Use explicit Upsert with ON CONFLICT for robustness
             conn.execute("""
-                INSERT OR REPLACE INTO stock_list_fmp (
-                    symbol, name, exchange, exchange_short_name, asset_type, price
+                INSERT INTO stock_list_fmp (
+                    symbol, name, exchange, exchange_short_name, asset_type, price, updated_at
                 )
-                SELECT symbol, name, exchange, exchange_short_name, asset_type, price FROM temp_stocks
+                SELECT symbol, name, exchange, exchange_short_name, asset_type, price, updated_at FROM temp_stocks
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    exchange = EXCLUDED.exchange,
+                    exchange_short_name = EXCLUDED.exchange_short_name,
+                    asset_type = EXCLUDED.asset_type,
+                    price = EXCLUDED.price,
+                    updated_at = EXCLUDED.updated_at
             """)
             return len(df)
         finally:
@@ -314,12 +338,28 @@ class DuckDBManager:
         if df.empty: return 0
         conn = self.connect()
         try:
+            # Add updated_at timestamp
+            df["updated_at"] = datetime.now()
+            
             conn.register("temp_profiles", df)
+            
+            # Self-healing: Ensure unique constraint exists for ON CONFLICT
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_pk ON bulk_company_profiles_fmp(symbol)")
+            
             conn.execute("""
-                INSERT OR REPLACE INTO bulk_company_profiles_fmp (
-                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees
+                INSERT INTO bulk_company_profiles_fmp (
+                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees, updated_at
                 )
-                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees FROM temp_profiles
+                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, updated_at FROM temp_profiles
+                ON CONFLICT (symbol) DO UPDATE SET
+                    company_name = EXCLUDED.company_name,
+                    sector = EXCLUDED.sector,
+                    industry = EXCLUDED.industry,
+                    description = EXCLUDED.description,
+                    website = EXCLUDED.website,
+                    ceo = EXCLUDED.ceo,
+                    full_time_employees = EXCLUDED.full_time_employees,
+                    updated_at = EXCLUDED.updated_at
             """)
             return len(df)
         finally:
