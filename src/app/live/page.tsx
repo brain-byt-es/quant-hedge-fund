@@ -36,7 +36,7 @@ export default function LiveOpsPage() {
   }, [])
 
   return (
-    <div className="flex flex-col bg-black min-h-screen text-zinc-300">
+    <div className="flex flex-col bg-background min-h-screen text-muted-foreground">
       
       {/* 1. Run Snapshot Header (Sticky-ish) */}
       <div className="sticky top-0 z-30">

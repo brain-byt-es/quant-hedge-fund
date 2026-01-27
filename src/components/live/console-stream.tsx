@@ -35,19 +35,36 @@ export function ConsoleStream() {
       }, 0)
   }, [])
 
-  return (
-    <Card className="h-full border-zinc-800 bg-black flex flex-col font-mono text-[10px]">
-        <CardHeader className="py-2 border-b border-zinc-800 bg-zinc-950/50">
-            <CardTitle className="text-xs uppercase tracking-widest text-zinc-500">System Logs</CardTitle>
-        </CardHeader>
-        <div className="flex-1 overflow-auto p-2 space-y-1">
-            {logs.map((log, i) => (
-                <div key={i} className="text-zinc-400 border-l-2 border-transparent hover:border-zinc-700 pl-2">
-                    {log}
-                </div>
-            ))}
-            <div ref={bottomRef} />
-        </div>
-    </Card>
-  )
-}
+    return (
+
+      <Card className="h-full border-border bg-background flex flex-col font-mono text-[10px]">
+
+          <CardHeader className="py-2 border-b border-border bg-muted/50">
+
+              <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">System Logs</CardTitle>
+
+          </CardHeader>
+
+          <div className="flex-1 overflow-auto p-2 space-y-1">
+
+              {logs.map((log, i) => (
+
+                  <div key={i} className="text-muted-foreground border-l-2 border-transparent hover:border-border pl-2">
+
+                      {log}
+
+                  </div>
+
+              ))}
+
+              <div ref={bottomRef} />
+
+          </div>
+
+      </Card>
+
+    )
+
+  }
+
+  

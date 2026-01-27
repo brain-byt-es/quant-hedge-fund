@@ -1,0 +1,47 @@
+Für ein „Monster-Dashboard“, das einen echten Hedgefonds-Vibe haben soll, fehlen dir momentan noch einige institutionelle Datenlayer. Die FMP-API bietet spezialisierte Datensätze, die über die reinen Preis- und Bilanzdaten hinausgehen und deine „Detailed Security View“ sowie die „Signal Charts“ massiv aufwerten würden.
+
+Hier ist die Analyse, welche zusätzlichen Datensätze für dein Projekt den größten Hebel bieten:
+
+1. Alternative Daten & Sentiment (Der "Smart Money" Layer)
+Diese Daten zeigen dir, was die Insider und Politiker machen – oft ein starkes Vorlaufsignal für Quant-Strategien.
+
+Insider Trades API: Zeigt Käufe/Verkäufe von CEOs und Direktoren. Im Dashboard könntest du ein „Insider Sentiment“ Badge für jeden Stock anzeigen.
+
+Senate & House Trading API: Ein absoluter Favorit für moderne Quant-Dashboards. Zeigt, welche Aktien US-Politiker handeln.
+
+Stock News API: Für dein „AI Quant Team“ Modul unverzichtbar. Du kannst die News-Headlines per LLM analysieren lassen, um ein „Sentiment Score“ Signal zu generieren.
+
+2. Institutionelles Positioning (Der "Ownership" Layer)
+Ein Hedgefonds will wissen, wer sonst noch im Boot sitzt.
+
+Institutional Ownership (13F Filings): Erlaubt es dir zu sehen, ob große Player wie BlackRock oder Berkshire Hathaway ihre Positionen in einem Stock auf- oder abbauen.
+
+ETF Holdings API: Zeigt dir, in welchen ETFs eine Aktie gewichtet ist. Das ist wichtig für die Analyse von „Passiven Flows“ (wenn ein ETF gekauft wird, steigt deine Aktie mit).
+
+3. Makro & Regime-Analyse (Der "Market Context" Layer)
+Deine Strategien im „Research Lab“ brauchen Kontext, um zu wissen, ob wir in einer Hochzinsphase oder Rezession sind.
+
+Treasury Rates API: Unverzichtbar für die Berechnung der Equity Risk Premium und für DCF-Modelle.
+
+Economic Indicators API: Daten zu GDP, Inflation (CPI) und Arbeitslosigkeit. Diese kannst du als Filter in dein „AI Quant Team“ Modul einbauen (z.B. „Handle diese Strategie nur, wenn die Inflation sinkt“).
+
+4. Fortgeschrittene Bewertung (Der "Pro-Valuation" Layer)
+Statt nur KGVs zu zeigen, kannst du echte institutionelle Metriken einblenden.
+
+DCF Valuation API: FMP berechnet den „Inneren Wert“ einer Aktie basierend auf Cashflows. Das ist ein extrem starker Faktor für deine „Signal Charts“.
+
+Enterprise Values API: Berechnet den Gesamtwert inklusive Schulden (EV). Für Quants ist EV/EBITDA oft aussagekräftiger als das normale P/E (KGV).
+
+Company Executive Compensation: Ein Geheimtipp für Qualitäts-Faktoren. Hohe Boni bei sinkenden Kursen sind oft ein schlechtes Signal.
+
+5. Technische Marktstruktur
+Stock Price Change API: Liefert Performance-Daten über verschiedene Zeiträume (1W, 1M, 1Y) direkt mit einem Call. Das spart Rechenpower in deiner DuckDB für die „Rolling Return Table“.
+
+Delisted Companies API: Extrem wichtig für dein Research Lab! Wenn du Backtests machst, darfst du nur Firmen einbeziehen, die damals existierten (Survivorship Bias). Ohne diese Daten sind deine Backtest-Ergebnisse oft zu optimistisch („zu schön um wahr zu sein“).
+
+🛠️ Strategischer Implementierungs-Plan für deine Devs:
+Detailed View Upgrade: Füge Sektionen für „Insider Activity“ und „Institutional Ownership“ hinzu.
+
+Signal Charts Enhancement: Nutze den DCF-Score als zusätzliche Achse im Scatter-Plot.
+
+AI Advisor Knowledge: Füttere die News-Snippets in den „AI Architect“ Chat, damit die KI Strategien basierend auf aktuellen Ereignissen vorschlagen kann.

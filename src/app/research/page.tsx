@@ -75,31 +75,33 @@ export default function ResearchPage() {
       loadSymbolData()
   }, [symbol, lookback])
 
-    return (
+      return (
 
-      <div className="flex flex-col h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
 
-              <div className="flex justify-between items-center px-2">
+                <div className="flex justify-between items-center px-2">
 
-                  <div className="flex flex-col">
+                    <div className="flex flex-col">
 
-                      <h1 className="text-xl font-bold tracking-tight text-white">Research Lab</h1>
+                        <h1 className="text-xl font-bold tracking-tight">Research Lab</h1>
 
-                      <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
+                        <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
 
-                  </div>
+                    </div>
 
-                  <TabsList className="bg-zinc-900/50 border border-zinc-800 p-1">
+                    <TabsList className="bg-muted/50 border border-border p-1">
 
-                      <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-zinc-800 data-[state=active]:text-emerald-400">Signal Charts</TabsTrigger>
+                        <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Signal Charts</TabsTrigger>
 
-                      <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-zinc-800 data-[state=active]:text-blue-400">Governance</TabsTrigger>
+                        <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Governance</TabsTrigger>
 
-                  </TabsList>
+                    </TabsList>
 
-              </div>
+                </div>
+
+    
 
   
 

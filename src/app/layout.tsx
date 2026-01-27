@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme/theme-provider"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Separator } from "@/components/ui/separator"
+import { ThemeToggle } from "@/components/theme/theme-toggle"
 
 
 const robotoFlex = Roboto_Flex({
@@ -41,6 +42,9 @@ export default function RootLayout({
                      <span className="text-muted-foreground">Platform</span>
                      <span className="text-muted-foreground">/</span>
                      <span className="text-foreground">Dashboard</span>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <ThemeToggle />
                   </div>
               </header>
               <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

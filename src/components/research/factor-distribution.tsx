@@ -34,24 +34,24 @@ export function FactorDistributionChart({ data }: { data: DistributionData[] }) 
   }, [data])
 
   return (
-    <Card className="h-full border-zinc-800/50 bg-zinc-900/40 backdrop-blur-md flex flex-col overflow-hidden">
-        <CardHeader className="py-2 px-3 border-b border-zinc-800/50 flex flex-row items-center justify-between">
-            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Factor Distribution</CardTitle>
+    <Card className="h-full border-border/50 bg-card/40 backdrop-blur-md flex flex-col overflow-hidden">
+        <CardHeader className="py-2 px-3 border-b border-border/50 flex flex-row items-center justify-between">
+            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Factor Distribution</CardTitle>
             <div className="flex gap-1">
-                <div className="h-1 w-3 rounded-full bg-zinc-700" />
-                <div className="h-1 w-3 rounded-full bg-zinc-800" />
+                <div className="h-1 w-3 rounded-full bg-muted" />
+                <div className="h-1 w-3 rounded-full bg-border" />
             </div>
         </CardHeader>
         <CardContent className="flex-1 p-0 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={histogramData} margin={{ top: 15, right: 10, bottom: 5, left: -35 }}>
-                    <XAxis dataKey="binStart" tick={{fontSize: 8, fill: '#52525b'}} interval={3} stroke="#3f3f46" axisLine={false} tickLine={false} />
+                    <XAxis dataKey="binStart" tick={{fontSize: 8, fill: 'var(--muted-foreground)'}} interval={3} stroke="var(--muted)" axisLine={false} tickLine={false} />
                     <YAxis hide />
                     <Tooltip 
-                        contentStyle={{backgroundColor: '#09090b', borderColor: '#27272a', fontSize: '10px', borderRadius: '4px'}}
-                        cursor={{fill: '#27272a', opacity: 0.4}}
+                        contentStyle={{backgroundColor: 'var(--popover)', borderColor: 'var(--border)', fontSize: '10px', borderRadius: '4px'}}
+                        cursor={{fill: 'var(--muted)', opacity: 0.4}}
                     />
-                    <Bar dataKey="count" fill="#27272a" stroke="#3f3f46" strokeWidth={0.5} radius={[1, 1, 0, 0]} />
+                    <Bar dataKey="count" fill="var(--chart-1)" stroke="var(--border)" strokeWidth={0.5} radius={[1, 1, 0, 0]} />
                 </BarChart>
             </ResponsiveContainer>
         </CardContent>
