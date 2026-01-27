@@ -118,7 +118,7 @@ class FMPClient(BaseAPIClient):
                     break
                 
                 result = future.result()
-                if result == "STOP": break
+                if isinstance(result, str) and result == "STOP": break
                 
                 if result is not None and not result.empty:
                     all_dfs.append(result)
