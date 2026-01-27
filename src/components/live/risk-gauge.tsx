@@ -1,57 +1,48 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle, ShieldCheck } from "lucide-react"
 
-interface RiskGaugeProps {
-  var95?: number; // Value at Risk (95%)
-  portfolioValue?: number;
-}
-
-export function RiskGauge({ var95 = 0, portfolioValue = 100000 }: RiskGaugeProps) {
-  // Calculate VaR %
-  const varPercent = portfolioValue > 0 ? (var95 / portfolioValue) * 100 : 0;
+export function RiskGauge({ var95, portfolioValue }: { var95?: number, portfolioValue?: number }) {
+  // Mock calculate percentage
+  const varValue = var95 || 4500;
+  const total = portfolioValue || 100000;
+  const riskPct = (varValue / total) * 100;
   
-  // Risk Levels
-  const isSafe = varPercent < 1.5;
-  const isWarning = varPercent >= 1.5 && varPercent < 3.0;
-  const isCritical = varPercent >= 3.0;
-
-  // Determine color and rotation for simple gauge
-  const color = isSafe ? "text-emerald-500" : isWarning ? "text-yellow-500" : "text-rose-500";
-  const statusText = isSafe ? "SAFE" : isWarning ? "ELEVATED" : "CRITICAL";
-  
-  // Simple CSS gauge rotation
-  const rotation = Math.min(varPercent * 30, 180); // Scale percentage to degrees (approx)
+  // Angle for gauge (0 to 180 degrees)
+  // Max risk e.g. 10%
+  const maxRisk = 10;
+  const angle = Math.min((riskPct / maxRisk) * 180, 180);
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-            Risk Monitor (VaR 95%)
-            {isCritical ? <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center pt-6">
-        <div className="relative w-40 h-20 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-muted rounded-t-full border-t border-l border-r border-border"></div>
-            <div 
-                className={`absolute top-0 left-0 w-full h-full rounded-t-full origin-bottom transition-transform duration-1000 ${isCritical ? "bg-rose-500" : isWarning ? "bg-yellow-500" : "bg-emerald-500"}`}
-                style={{ transform: `rotate(${rotation - 180}deg)`, opacity: 0.3 }}
-            ></div>
-             <div 
-                className="absolute bottom-0 left-1/2 w-1 h-full bg-foreground origin-bottom transition-transform duration-1000"
-                style={{ transform: `rotate(${rotation - 90}deg)` }}
-            ></div>
-        </div>
-        <div className="mt-4 text-center">
-            <div className={`text-3xl font-mono font-bold ${color}`}>
-                {varPercent.toFixed(2)}%
+    <Card className="h-full border-zinc-800 bg-zinc-950 flex flex-col">
+        <CardHeader className="py-3 border-b border-zinc-800">
+            <CardTitle className="text-xs font-mono uppercase tracking-widest text-zinc-400">Risk (95% VaR)</CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col items-center justify-center relative p-4">
+            <div className="relative w-40 h-20 overflow-hidden mb-2">
+                {/* Background Arc */}
+                <div className="absolute w-40 h-40 rounded-full border-[12px] border-zinc-900 top-0 left-0 box-border border-b-0 border-l-0 border-r-0" 
+                     style={{ clipPath: 'polygon(0 0, 100% 0, 100% 50%, 0 50%)', borderRadius: '50%' }}
+                />
+                
+                {/* Value Arc (CSS rotation hack) */}
+                {/* Simplified: Just use a needle */}
+                <div className="absolute bottom-0 left-1/2 w-1 h-20 bg-zinc-800 origin-bottom transform -translate-x-1/2" 
+                     style={{ transform: `translateX(-50%) rotate(${angle - 90}deg)` }}
+                >
+                    <div className="w-2 h-2 bg-red-500 rounded-full absolute top-0 left-1/2 -translate-x-1/2 shadow-[0_0_10px_red]" />
+                </div>
             </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-widest">{statusText}</div>
-            <div className="text-xs text-muted-foreground mt-1">-${var95.toFixed(2)} Potential Loss</div>
-        </div>
-      </CardContent>
+            
+            <div className="text-center mt-[-10px]">
+                <div className="text-2xl font-mono font-bold text-zinc-200">
+                    ${varValue.toLocaleString()}
+                </div>
+                <div className="text-xs text-zinc-600 font-mono">
+                    {riskPct.toFixed(2)}% of Equity
+                </div>
+            </div>
+        </CardContent>
     </Card>
   )
 }

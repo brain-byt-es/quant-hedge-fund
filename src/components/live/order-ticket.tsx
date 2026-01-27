@@ -1,112 +1,82 @@
 "use client"
 
-import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { api, OrderParams } from "@/lib/api"
+import { useState } from "react"
+import { api } from "@/lib/api"
 
 export function OrderTicket() {
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY')
   const [symbol, setSymbol] = useState("")
-  const [quantity, setQuantity] = useState("")
-  const [orderType, setOrderType] = useState("MKT")
-  const [limitPrice, setLimitPrice] = useState("")
+  const [qty, setQty] = useState("")
+  const [side, setSide] = useState("BUY")
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
-    if (!symbol || !quantity) return;
-    setLoading(true);
-    try {
-        const order: OrderParams = {
-            symbol: symbol.toUpperCase(),
-            quantity: parseInt(quantity),
-            side,
-            order_type: orderType,
-            limit_price: orderType === 'LMT' ? parseFloat(limitPrice) : undefined
-        };
-        await api.submitOrder(order);
-        alert(`Order Submitted: ${side} ${quantity} ${symbol}`);
-        setQuantity(""); // Reset simple fields
-    } catch (e) {
-        alert("Order Failed: " + String(e));
-    } finally {
-        setLoading(false);
-    }
+      if (!symbol || !qty) return
+      setLoading(true)
+      try {
+          await api.submitOrder({
+              symbol: symbol.toUpperCase(),
+              quantity: parseInt(qty),
+              side: side as 'BUY' | 'SELL'
+          })
+          alert("Order Placed")
+          setSymbol("")
+          setQty("")
+      } catch {
+          alert("Order Failed")
+      } finally {
+          setLoading(false)
+      }
   }
 
   return (
-    <Card className="h-full border-border">
-      <CardHeader>
-        <CardTitle>Manual Execution</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Tabs value={side.toLowerCase()} onValueChange={(v) => setSide(v.toUpperCase() as 'BUY' | 'SELL')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="buy" className="data-[state=active]:bg-emerald-900 data-[state=active]:text-emerald-100">BUY</TabsTrigger>
-                <TabsTrigger value="sell" className="data-[state=active]:bg-rose-900 data-[state=active]:text-rose-100">SELL</TabsTrigger>
-            </TabsList>
-        </Tabs>
-
-        <div className="grid gap-2">
-            <Label>Symbol</Label>
-            <Input 
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                placeholder="e.g. AAPL" 
-                className="uppercase font-mono" 
-            />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-                <Label>Quantity</Label>
+    <Card className="h-full border-zinc-800 bg-zinc-950">
+        <CardHeader className="py-3 border-b border-zinc-800">
+            <CardTitle className="text-xs font-mono uppercase tracking-widest text-zinc-400">Manual Execution</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
                 <Input 
-                    type="number" 
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="100" 
+                    placeholder="SYMBOL" 
+                    className="bg-black border-zinc-800 font-mono text-xs uppercase"
+                    value={symbol}
+                    onChange={(e) => setSymbol(e.target.value)}
+                />
+                <Input 
+                    placeholder="QTY" 
+                    type="number"
+                    className="bg-black border-zinc-800 font-mono text-xs"
+                    value={qty}
+                    onChange={(e) => setQty(e.target.value)}
                 />
             </div>
-            <div className="grid gap-2">
-                <Label>Order Type</Label>
-                <Select value={orderType} onValueChange={setOrderType}>
-                    <SelectTrigger>
+            <div className="grid grid-cols-2 gap-2">
+                <Select value={side} onValueChange={setSide}>
+                    <SelectTrigger className="bg-black border-zinc-800 h-9 text-xs font-mono">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="MKT">Market</SelectItem>
-                        <SelectItem value="LMT">Limit</SelectItem>
+                        <SelectItem value="BUY">BUY</SelectItem>
+                        <SelectItem value="SELL">SELL</SelectItem>
                     </SelectContent>
                 </Select>
+                <Select disabled>
+                    <SelectTrigger className="bg-black border-zinc-800 h-9 text-xs font-mono opacity-50">
+                        <SelectValue placeholder="MARKET" />
+                    </SelectTrigger>
+                </Select>
             </div>
-        </div>
-
-        <div className="grid gap-2">
-             <Label>Limit Price</Label>
-             <Input 
-                type="number" 
-                placeholder="0.00" 
-                value={limitPrice}
-                onChange={(e) => setLimitPrice(e.target.value)}
-                disabled={orderType !== "LMT"} 
-                className={orderType !== "LMT" ? "bg-muted" : ""} 
-             />
-        </div>
-
-        <Button 
-            className="w-full mt-4" 
-            size="lg" 
-            variant={side === "BUY" ? "default" : "destructive"}
-            onClick={handleSubmit}
-            disabled={loading}
-        >
-            {loading ? "Sending..." : `Submit ${side} Order`}
-        </Button>
-      </CardContent>
+            <Button 
+                className={`w-full font-mono uppercase tracking-widest text-xs h-9 ${side === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'}`}
+                onClick={handleSubmit}
+                disabled={loading}
+            >
+                {loading ? "Transmitting..." : `Submit ${side} Order`}
+            </Button>
+        </CardContent>
     </Card>
   )
 }
