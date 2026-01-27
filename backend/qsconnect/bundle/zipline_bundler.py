@@ -167,8 +167,45 @@ def custom_csv_ingest(environ,
         df = pd.read_csv(os.path.join(path, file), index_col='date', parse_dates=['date'])
         df = df.sort_index()
         
+        # Localize if naive to match Zipline calendar (UTC)
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        else:
+            df.index = df.index.tz_convert('UTC')
+        
         if df.empty: continue
         
+        # FIX: Reindex to calendar to prevent "Missing sessions" error
+        # Get start/end from data
+        start_dt = df.index[0]
+        end_dt = df.index[-1]
+        
+        # Pass NAIVE timestamps to sessions_in_range to avoid timezone attribution errors
+        # exchange_calendars assumes naive = UTC
+        start_naive = start_dt.tz_localize(None)
+        end_naive = end_dt.tz_localize(None)
+        
+        # Get relevant sessions from calendar (returns UTC index)
+        sessions = calendar.sessions_in_range(start_naive, end_naive)
+        
+        # Reindex (df.index is UTC, sessions is UTC -> Alignment works)
+        df = df.reindex(sessions)
+        
+        # Forward fill prices (if data missing for a day)
+        df['close'] = df['close'].ffill()
+        df['open'] = df['open'].fillna(df['close'])
+        df['high'] = df['high'].fillna(df['close'])
+        df['low'] = df['low'].fillna(df['close'])
+        
+        # Fill volume with 0
+        df['volume'] = df['volume'].fillna(0)
+        
+        # Drop any remaining NaNs (if start date was before data actually started due to calendar mismatch)
+        df = df.dropna()
+        
+        if df.empty: continue
+        
+        # Update start/end after cleaning
         start_date = df.index[0]
         end_date = df.index[-1]
         

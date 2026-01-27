@@ -79,92 +79,36 @@ def get_ingestion_progress():
     """Get real-time progress of data pipeline."""
     return ingestion_state
 
+class IngestRequest(BaseModel):
+    mode: str = "daily" # 'daily' or 'backfill'
+    start_date: Optional[str] = None
+    symbols: Optional[List[str]] = None
+
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion in background."""
-    client = get_qs_client()
+    """Trigger data ingestion via Prefect Flow (Daily or Backfill)."""
+    from automation.prefect_flows import daily_sync_flow, historical_backfill_flow
     
-    def update_progress(current, total, step_name="Downloading"):
-        ingestion_state["status"] = "running"
-        ingestion_state["step"] = step_name
-        ingestion_state["progress"] = int((current / total) * 100) if total > 0 else 0
-        ingestion_state["details"] = f"{current}/{total}"
-
-    def run_ingestion():
+    def run_prefect_flow():
         try:
-            logger.info("Starting background ingestion...")
+            # Clear any previous stop signal
+            client = get_qs_client()
+            client.stop_requested = False
+            
             ingestion_state["status"] = "running"
-            
-            # Phase 1: Stock List
-            ingestion_state["step"] = "Downloading Stock List"
-            stock_list = client._fmp_client.get_stock_list()
-            client._db_manager.upsert_stock_list(stock_list)
-            
-            # Phase 2: Historical Prices
-            ingestion_state["step"] = "Downloading Prices (FMP)"
-            prices = client.bulk_historical_prices(
-                start_date=date.fromisoformat(request.start_date) if request.start_date else None,
-                end_date=date.fromisoformat(request.end_date) if request.end_date else None,
-                symbols=request.symbols,
-                progress_callback=update_progress
-            )
-            
-            # Phase 3: Annual Fundamentals (Starter Plan Mode)
-            # Fetching fundamentals for all US symbols can take hours due to rate limits.
-            # We fetch for all symbols in the current universe.
-            fundamental_types = ["income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"]
-            us_symbols = client._fmp_client.get_stock_list()["symbol"].tolist()
-            
-            for stmt in fundamental_types:
-                # Check for stop signal between statement types
-                if client.stop_requested:
-                    logger.warning("Ingestion stopped by user between phases.")
-                    break
-
-                ingestion_state["step"] = f"Ingesting: {stmt} (US Annual)"
-                ingestion_state["progress"] = 0
+            if request.mode == "backfill":
+                ingestion_state["step"] = "Backfill: Full History"
+                historical_backfill_flow()
+            else:
+                ingestion_state["step"] = "Daily Sync: EOD"
+                daily_sync_flow()
                 
-                # Fetching pro-symbol (No bulk)
-                data = client._fmp_client.get_starter_fundamentals(
-                    symbols=us_symbols,
-                    statement_type=stmt,
-                    limit=5, # Last 5 years
-                    stop_check=lambda: client.stop_requested,
-                    progress_callback=update_progress
-                )
-                
-                if not data.is_empty():
-                    client._db_manager.upsert_fundamentals(stmt, "annual", data)
-            
-            if client.stop_requested:
-                ingestion_state["status"] = "idle"
-                ingestion_state["step"] = "Stopped"
-                return
-            
-            # Phase 4: Zipline Bundle
-            ingestion_state["step"] = "Bundling Zipline Data"
-            client.build_zipline_bundle("historical_prices_fmp")
-            
-            # Phase 5: Ingest Bundle
-            client.ingest_bundle("historical_prices_fmp")
-            
-            # Phase 6: Company Profiles
-            ingestion_state["step"] = "Downloading Company Profiles"
-            profiles_json = client._fmp_client._make_request("https://financialmodelingprep.com/stable/profile-bulk?part=0")
-            if profiles_json:
-                import pandas as pd
-                profiles_df = pd.DataFrame(profiles_json)
-                client._db_manager.upsert_company_profiles(profiles_df)
-            
             ingestion_state["status"] = "completed"
-            ingestion_state["step"] = "All Data Synced"
-            ingestion_state["step"] = "All Data Synced"
-            logger.info("Background ingestion complete.")
-            
+            ingestion_state["step"] = f"Finished: {request.mode}"
         except Exception as e:
-            logger.error(f"Ingestion failed: {e}")
+            logger.error(f"Prefect Flow failed: {e}")
             ingestion_state["status"] = "error"
             ingestion_state["details"] = str(e)
 
-    background_tasks.add_task(run_ingestion)
-    return {"status": "started", "message": "Ingestion started in background"}
+    background_tasks.add_task(run_prefect_flow)
+    return {"status": "started", "message": f"Ingestion ({request.mode}) started via Prefect"}

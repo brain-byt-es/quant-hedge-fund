@@ -50,16 +50,27 @@ class FMPClient(BaseAPIClient):
     # =====================
     
     def get_stock_list(self) -> pd.DataFrame:
-        """Get stock list and filter for US exchanges (Starter Plan requirement)."""
+        """Get filtered tradable US stock universe (Price > $5, Type: Stock)."""
         data = self._make_request("https://financialmodelingprep.com/stable/stock-list")
         if data:
             df = pd.DataFrame(data)
-            # Filter for major US exchanges only
-            us_exchanges = ["NASDAQ", "NYSE", "AMEX", "New York Stock Exchange"]
-            if "exchange" in df.columns:
-                df = df[df["exchange"].isin(us_exchanges)]
-            elif "exchangeShortName" in df.columns:
-                df = df[df["exchangeShortName"].isin(["NASDAQ", "NYSE", "AMEX"])]
+            
+            # 1. Exchange Filter (US Majors)
+            us_exchanges = ["NASDAQ", "NYSE", "AMEX"]
+            if "exchangeShortName" in df.columns:
+                df = df[df["exchangeShortName"].isin(us_exchanges)]
+            
+            # 2. Asset Type Filter (Stocks only, no ETFs/Funds)
+            if "type" in df.columns:
+                df = df[df["type"] == "stock"]
+            
+            # 3. Price Filter (Quality threshold: > $5)
+            if "price" in df.columns:
+                # Ensure price is numeric
+                df["price"] = pd.to_numeric(df["price"], errors='coerce')
+                df = df[df["price"] >= 5.0]
+            
+            logger.info(f"Filtered universe to {len(df)} tradable US stocks.")
             return df
         return pd.DataFrame()
 
@@ -84,8 +95,11 @@ class FMPClient(BaseAPIClient):
                 return "STOP"
             
             try:
-                endpoint = f"{statement_type}/{symbol}"
-                data = self._make_request(endpoint, params={"period": "annual", "limit": limit})
+                # Use STABLE endpoint format: stable/income-statement?symbol=AAPL
+                endpoint = f"https://financialmodelingprep.com/stable/{statement_type}"
+                params = {"symbol": symbol, "period": "annual", "limit": limit}
+                
+                data = self._make_request(endpoint, params=params)
                 if data:
                     return pd.DataFrame(data)
             except:
@@ -171,13 +185,13 @@ class FMPClient(BaseAPIClient):
         Returns:
             DataFrame with OHLCV data
         """
-        params = {}
+        params = {"symbol": symbol}
         if start_date:
             params["from"] = start_date.isoformat()
         if end_date:
             params["to"] = end_date.isoformat()
         
-        data = self._make_request(f"historical-price-full/{symbol}", params=params)
+        data = self._make_request(f"https://financialmodelingprep.com/stable/historical-price-full", params=params)
         
         if data and "historical" in data:
             df = pd.DataFrame(data["historical"])
@@ -242,10 +256,8 @@ class FMPClient(BaseAPIClient):
                 pass
             return None
 
-        # Parallel Execution
-        # Reduced to 4 workers to ensure the API stays responsive during massive downloads.
-        # This prevents 'socket hang up' errors in the frontend.
-        max_workers = 4
+        # Use 5 workers to perfectly hit the 300 calls/min limit (5 * 60 = 300)
+        max_workers = 5
         completed_count = 0
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -282,22 +294,37 @@ class FMPClient(BaseAPIClient):
                 # Incremental Save (Every 200 symbols to reduce DB lock contention)
                 if save_callback and len(batch_buffer) >= 200:
                     try:
+                        # Check stop signal before writing to DB
+                        if stop_check and stop_check():
+                            logger.warning("Stop signal detected. Skipping batch save.")
+                            break
+
                         partial_df = pd.concat(batch_buffer, ignore_index=True)
                         save_callback(pl.from_pandas(partial_df))
-                        batch_buffer = [] # Clear buffer
+                        batch_buffer = [] # Clear buffer on success
+                        
                         # Pause slightly after DB write to let API handle pending requests
                         time.sleep(0.1)
                     except Exception as e:
-                        logger.error(f"Incremental save failed: {e}")
+                        logger.error(f"Incremental save failed (Retrying next tick): {e}")
+                        # If locked, cool down longer
+                        if "lock" in str(e).lower():
+                            time.sleep(2.0)
+                        else:
+                            time.sleep(0.5)
 
             pbar.close()
         
-        # Final Save
+        # Final Save (flush remaining buffer)
         if save_callback and batch_buffer:
              try:
-                partial_df = pd.concat(batch_buffer, ignore_index=True)
-                save_callback(pl.from_pandas(partial_df))
-             except Exception: pass
+                # One last check
+                if not (stop_check and stop_check()):
+                    partial_df = pd.concat(batch_buffer, ignore_index=True)
+                    save_callback(pl.from_pandas(partial_df))
+                    logger.info("Final batch saved.")
+             except Exception as e:
+                 logger.error(f"Final save failed: {e}")
 
         if all_data:
             combined = pd.concat(all_data, ignore_index=True)
@@ -317,8 +344,8 @@ class FMPClient(BaseAPIClient):
         limit: int = 100,
     ) -> pd.DataFrame:
         """Get income statements for a symbol."""
-        params = {"period": period, "limit": limit}
-        data = self._make_request(f"income-statement/{symbol}", params=params)
+        params = {"symbol": symbol, "period": period, "limit": limit}
+        data = self._make_request(f"https://financialmodelingprep.com/stable/income-statement", params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()
@@ -330,8 +357,8 @@ class FMPClient(BaseAPIClient):
         limit: int = 100,
     ) -> pd.DataFrame:
         """Get balance sheet statements for a symbol."""
-        params = {"period": period, "limit": limit}
-        data = self._make_request(f"balance-sheet-statement/{symbol}", params=params)
+        params = {"symbol": symbol, "period": period, "limit": limit}
+        data = self._make_request(f"https://financialmodelingprep.com/stable/balance-sheet-statement", params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()
@@ -343,8 +370,8 @@ class FMPClient(BaseAPIClient):
         limit: int = 100,
     ) -> pd.DataFrame:
         """Get cash flow statements for a symbol."""
-        params = {"period": period, "limit": limit}
-        data = self._make_request(f"cash-flow-statement/{symbol}", params=params)
+        params = {"symbol": symbol, "period": period, "limit": limit}
+        data = self._make_request(f"https://financialmodelingprep.com/stable/cash-flow-statement", params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()
@@ -356,8 +383,8 @@ class FMPClient(BaseAPIClient):
         limit: int = 100,
     ) -> pd.DataFrame:
         """Get financial ratios for a symbol."""
-        params = {"period": period, "limit": limit}
-        data = self._make_request(f"ratios/{symbol}", params=params)
+        params = {"symbol": symbol, "period": period, "limit": limit}
+        data = self._make_request(f"https://financialmodelingprep.com/stable/ratios", params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()
@@ -369,8 +396,8 @@ class FMPClient(BaseAPIClient):
         limit: int = 100,
     ) -> pd.DataFrame:
         """Get key metrics for a symbol."""
-        params = {"period": period, "limit": limit}
-        data = self._make_request(f"key-metrics/{symbol}", params=params)
+        params = {"symbol": symbol, "period": period, "limit": limit}
+        data = self._make_request(f"https://financialmodelingprep.com/stable/key-metrics", params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()

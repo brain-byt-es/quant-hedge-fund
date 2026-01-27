@@ -11,6 +11,7 @@ Located in `/backend`, providing core logic via a modular **FastAPI** monorepo:
     - **Institutional Scalability:** `volume` and price columns use `DOUBLE` precision to handle 40k+ symbols and massive crypto/aggregate data volumes.
     - **Reliability:** Implements **Smart Resume** and **Incremental Saving** (every 200 symbols) to prevent data loss during interruptions.
     - **Stability:** Centralized DB access via shared client to prevent write-lock conflicts.
+    - **FMP API Migration:** For all accounts created after August 2025, use the `/stable/` endpoints (e.g., `stable/income-statement?symbol=AAPL`) instead of the legacy `/api/v3/{symbol}` path to avoid 403 Forbidden errors.
 - **Research Layer (QS Research):** Strategy development and backtesting.
     - **MLflow Integration:** Automated experiment tracking for every run (Sharpe, Alpha, Beta, Max Drawdown).
     - **Monte Carlo:** Statistical validation of strategy significance (P-Value check).

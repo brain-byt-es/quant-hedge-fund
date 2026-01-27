@@ -43,15 +43,15 @@ export interface BacktestRun {
 
 export const api = {
   // Data Layer
-  triggerIngestion: async (params: IngestionParams = { start_date: "2020-01-01" }) => {
-    const res = await fetch(`${API_BASE_URL}/data/ingest`, { 
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params)
-    });
-    return res.json();
-  },
-  
+      triggerIngestion: async (params: { mode: "daily" | "backfill", start_date?: string }) => {
+          const res = await fetch(`${API_BASE_URL}/data/ingest`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(params)
+          })
+          return res.json()
+      },
+    
   getIngestionStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/data/status`);
     return res.json();

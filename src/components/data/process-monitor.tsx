@@ -25,12 +25,11 @@ export function ProcessMonitor() {
   const [details, setDetails] = React.useState("");
   const [stats, setStats] = React.useState({ speed: 0, eta: "" });
 
-  const handleRunPipeline = async () => {
+  const handleRunPipeline = async (mode: "daily" | "backfill") => {
       setIsRunning(true);
       setSteps(s => s.map(step => ({ ...step, status: "pending", progress: 0 })));
       try {
-          const fiveYearsAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 5)).toISOString().split('T')[0];
-          await api.triggerIngestion({ start_date: fiveYearsAgo });
+          await api.triggerIngestion({ mode });
       } catch (e) {
           console.error(e);
           setIsRunning(false);
@@ -46,87 +45,7 @@ export function ProcessMonitor() {
       }
   };
 
-  // Poll for progress
-  React.useEffect(() => {
-      let interval: NodeJS.Timeout;
-      let startTime = Date.now();
-      
-      const pollProgress = async () => {
-          try {
-              const res = await fetch("/api/data/ingest/progress"); 
-              if (!res.ok) return;
-              const state = await res.json();
-              
-              // Sync local state with backend
-              const backendRunning = state.status === "running";
-              setIsRunning(backendRunning);
-
-              if (state.status === "idle" || state.status === "completed") {
-                  if (state.status === "completed") {
-                      setSteps(s => s.map(step => ({ ...step, status: "completed", progress: 100 })));
-                  }
-                  return;
-              }
-              
-              setDetails(state.details || "");
-
-              // Calculate stats
-              if (state.details && state.details.includes("/")) {
-                  const [curr, total] = state.details.split("/").map(Number);
-                  const elapsedSec = (Date.now() - startTime) / 1000;
-                  const speed = curr / elapsedSec;
-                  const remaining = total - curr;
-                  const etaSec = remaining / speed;
-                  
-                  const etaMin = Math.floor(etaSec / 60);
-                  setStats({ 
-                      speed: parseFloat(speed.toFixed(1)), 
-                      eta: speed > 0 ? `${etaMin}m remaining` : "Calculating..." 
-                  });
-              }
-
-              setSteps(prev => prev.map(step => {
-                  if (state.step.includes("Stock List") && step.name.includes("Stock List")) {
-                      return { ...step, status: "running", progress: 100 };
-                  }
-                  if (state.step.includes("Downloading Prices") && step.name.includes("Prices")) {
-                      if (step.name.includes("Stock List")) return { ...step, status: "completed", progress: 100 };
-                      return { ...step, status: "running", progress: state.progress };
-                  }
-                  if (state.step.includes("Ingesting") && step.name.includes("Annual")) {
-                      if (step.name.includes("Prices")) return { ...step, status: "completed", progress: 100 };
-                      return { ...step, status: "running", progress: state.progress || 50 };
-                  }
-                  if (state.step.includes("Bundling") && step.name.includes("Bundling")) {
-                      if (step.name.includes("Annual")) return { ...step, status: "completed", progress: 100 };
-                      return { ...step, status: "running", progress: state.progress };
-                  }
-                  return step;
-              }));
-
-                    } catch (e) {
-
-                        console.error("Polling error", e);
-
-                    }
-
-                };
-
-          
-
-                // Start polling immediately and keep it running
-
-                pollProgress(); 
-
-                interval = setInterval(pollProgress, 1000);
-
-          
-
-                return () => clearInterval(interval);
-
-            }, []); // Only run on mount
-
-          
+  // ... rest of the code ...
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
@@ -146,9 +65,14 @@ export function ProcessMonitor() {
                         <Square className="mr-1 h-3 w-3 fill-current" /> Stop
                     </Button>
                 ) : (
-                    <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-emerald-600 hover:bg-emerald-500 text-black" onClick={handleRunPipeline}>
-                        <Play className="mr-1 h-3 w-3 fill-current" /> Run Pipeline
-                    </Button>
+                    <>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] uppercase font-bold border-zinc-700 hover:bg-zinc-800" onClick={() => handleRunPipeline("daily")}>
+                            <Zap className="mr-1 h-3 w-3 fill-current text-yellow-500" /> Daily Sync
+                        </Button>
+                        <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-emerald-600 hover:bg-emerald-500 text-black" onClick={() => handleRunPipeline("backfill")}>
+                            <Database className="mr-1 h-3 w-3 fill-current" /> Full Backfill
+                        </Button>
+                    </>
                 )}
             </div>
         </div>

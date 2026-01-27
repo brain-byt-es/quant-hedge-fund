@@ -76,9 +76,39 @@ class Client:
         self._bundler = ZiplineBundler(db_manager=self._db_manager)
         
         # Stop Signal for background tasks
-        self.stop_requested = False
+        self._stop_requested = False
         
         logger.info(f"QS Connect client initialized. Cache: {self._cache_dir}")
+
+    @property
+    def stop_requested(self) -> bool:
+        """Check if stop is requested via flag or file."""
+        if self._stop_requested:
+            return True
+        
+        # Check for global signal file (for multi-process support)
+        # We use duckdb_path parent which is guaranteed to be the data directory
+        signal_file = self._duckdb_path.parent / "ingest_stop.signal"
+        return signal_file.exists()
+
+    @stop_requested.setter
+    def stop_requested(self, value: bool):
+        self._stop_requested = value
+        # Also create/remove file to broadcast to other processes
+        signal_file = self._duckdb_path.parent / "ingest_stop.signal"
+        if value:
+            try:
+                signal_file.touch()
+                logger.warning(f"🛑 Stop signal file created at {signal_file}")
+            except Exception as e:
+                logger.error(f"Failed to create stop signal: {e}")
+        else:
+            try:
+                if signal_file.exists():
+                    signal_file.unlink()
+                    logger.info("🟢 Stop signal file cleared.")
+            except Exception as e:
+                logger.error(f"Failed to clear stop signal: {e}")
     
     # =====================
     # Stock Universe

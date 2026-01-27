@@ -330,6 +330,26 @@ class DuckDBManager:
         """Get recent system logs."""
         return self.query(f"SELECT * FROM system_logs ORDER BY timestamp DESC LIMIT {limit}")
 
+    def get_prices(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pl.DataFrame:
+        """
+        Get historical prices for all symbols within a date range.
+        Used by ZiplineBundler.
+        """
+        query = "SELECT symbol, date, open, high, low, close, volume FROM historical_prices_fmp"
+        conditions = []
+        
+        if start_date:
+            conditions.append(f"date >= '{start_date}'")
+        if end_date:
+            conditions.append(f"date <= '{end_date}'")
+            
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+            
+        query += " ORDER BY symbol, date"
+        
+        return self.query(query)
+
     def get_data_health(self) -> pl.DataFrame:
         """Get health statistics for all symbols."""
         sql = """
