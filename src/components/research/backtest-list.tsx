@@ -97,11 +97,11 @@ export function BacktestList() {
                         {new Date(run.start_time).toLocaleTimeString()}
                     </TableCell>
                     <TableCell className="font-medium">{run.strategy_name}</TableCell>
-                    <TableCell className={`text-right font-mono ${run.sharpe_ratio > 1.5 ? "text-emerald-500 font-bold" : ""}`}>
+                    <TableCell className={`text-right font-mono ${run.sharpe_ratio > 1.5 ? "text-primary font-bold" : ""}`}>
                         {run.sharpe_ratio?.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right font-mono">{(run.annual_return * 100).toFixed(1)}%</TableCell>
-                    <TableCell className="text-right font-mono text-rose-500">{(run.max_drawdown * 100).toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-destructive">{(run.max_drawdown * 100).toFixed(1)}%</TableCell>
                     <TableCell className="text-right font-mono">{run.alpha?.toFixed(3)}</TableCell>
                     <TableCell className="text-right font-mono">{run.beta?.toFixed(2)}</TableCell>
                     <TableCell>

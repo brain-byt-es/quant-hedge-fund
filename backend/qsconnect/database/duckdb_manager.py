@@ -222,6 +222,70 @@ class DuckDBManager:
                     details JSON
                 )
             """)
+
+            # 20. Alternative Data: Insider Trades
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS insider_trades (
+                    symbol VARCHAR,
+                    transaction_date DATE,
+                    reporting_name VARCHAR,
+                    type_of_owner VARCHAR,
+                    transaction_type VARCHAR,
+                    securities_transacted DOUBLE,
+                    price DOUBLE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 21. Alternative Data: Senate Trades
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS senate_trades (
+                    symbol VARCHAR,
+                    transaction_date DATE,
+                    representative VARCHAR,
+                    house VARCHAR, -- Senate or House
+                    type VARCHAR, -- Purchase or Sale
+                    amount VARCHAR,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 22. Ownership: Institutional & ETF
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS institutional_ownership (
+                    symbol VARCHAR,
+                    date DATE,
+                    investor_name VARCHAR,
+                    change DOUBLE,
+                    change_percent DOUBLE,
+                    total_shares DOUBLE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 23. Macro: Economic Indicators
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS economic_indicators (
+                    name VARCHAR,
+                    date DATE,
+                    value DOUBLE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (name, date)
+                )
+            """)
+
+            # 24. AI: News Sentiment
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS news_sentiment (
+                    symbol VARCHAR,
+                    published_date TIMESTAMP,
+                    title TEXT,
+                    sentiment_score DOUBLE,
+                    sentiment_label VARCHAR,
+                    url TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_sym ON historical_prices_fmp(symbol)")

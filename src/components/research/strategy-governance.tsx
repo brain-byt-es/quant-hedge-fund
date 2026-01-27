@@ -71,9 +71,9 @@ export function StrategyGovernance() {
   return (
     <div className="grid grid-cols-12 gap-6 h-full">
       {/* Left: Approval Form */}
-      <Card className="col-span-12 lg:col-span-4 border-emerald-900/30 bg-emerald-950/5">
+      <Card className="col-span-12 lg:col-span-4 border-primary/30 bg-primary/5">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-emerald-500">
+          <CardTitle className="flex items-center gap-2 text-primary">
             <ShieldCheck className="h-5 w-5" /> Deployment Approval
           </CardTitle>
           <CardDescription>Authorize strategy transitions to live stages.</CardDescription>
@@ -102,31 +102,31 @@ export function StrategyGovernance() {
                 onChange={(e) => setRationale(e.target.value)}
             />
           </div>
-          <Button className="w-full bg-emerald-600 hover:bg-emerald-500" onClick={handleApprove} disabled={loading}>
+          <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest h-10" onClick={handleApprove} disabled={loading}>
             {loading ? "Logging..." : "Log & Approve Strategy"}
           </Button>
         </CardContent>
       </Card>
 
       {/* Right: Audit Trail */}
-      <Card className="col-span-12 lg:col-span-8">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="col-span-12 lg:col-span-8 border-border bg-card/20">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border/50">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-foreground">
                 <History className="h-5 w-5 text-muted-foreground" /> Immutable Audit Trail
             </CardTitle>
-            <CardDescription>History of all approved model changes.</CardDescription>
+            <CardDescription className="text-xs">History of all approved model changes.</CardDescription>
           </div>
-          <Landmark className="h-8 w-8 text-zinc-800" />
+          <Landmark className="h-8 w-8 text-muted-foreground/20" />
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Rationale</TableHead>
-                <TableHead>Approved By</TableHead>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="px-4">Timestamp</TableHead>
+                <TableHead className="px-4">Stage</TableHead>
+                <TableHead className="px-4">Rationale</TableHead>
+                <TableHead className="px-4">Approved By</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -138,17 +138,17 @@ export function StrategyGovernance() {
                   </TableRow>
               ) : (
                   auditLog.map((log, i) => (
-                    <TableRow key={i} className="text-xs">
-                      <TableCell className="font-mono text-zinc-500">
+                    <TableRow key={i} className="text-xs hover:bg-muted/50 border-border/30">
+                      <TableCell className="font-mono text-muted-foreground px-4">
                         {new Date(log.approved_at).toLocaleString()}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={log.stage === "FULL" ? "default" : "secondary"}>
+                      <TableCell className="px-4">
+                        <Badge variant={log.stage === "FULL" ? "default" : "secondary"} className="text-[10px] h-5">
                             {log.stage}
                         </Badge>
                       </TableCell>
-                      <TableCell className="max-w-xs truncate">{log.human_rationale}</TableCell>
-                      <TableCell className="font-medium text-primary">{log.approved_by}</TableCell>
+                      <TableCell className="max-w-xs truncate px-4">{log.human_rationale}</TableCell>
+                      <TableCell className="font-bold text-primary px-4">{log.approved_by}</TableCell>
                     </TableRow>
                   ))
               )}

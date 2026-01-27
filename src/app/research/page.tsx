@@ -33,7 +33,11 @@ interface ProfileData {
   ipo_date: string;
   exchange: string;
   website: string;
-  [key: string]: unknown;
+  dcf_value?: number;
+  insider_sentiment?: string;
+  latest_news?: { title: string, publishedDate: string, url: string, text: string }[];
+  recent_insider_trades?: { filingDate: string, transactionType: string, securitiesTransacted: number, price: number, reportingName: string }[];
+  [key: string]: string | number | undefined | unknown;
 }
 
 export default function ResearchPage() {

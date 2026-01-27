@@ -170,14 +170,14 @@ export default function AIQuantPage() {
           <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-4 tracking-widest">Inference Hub</h3>
           <div className="space-y-2">
               <div className={cn("p-2 rounded border transition-all", services.mlflow.active ? "bg-emerald-500/10 border-emerald-500/20" : "bg-muted/50 border-border")}>
-                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.mlflow.active ? "text-emerald-500" : "text-muted-foreground")}>
-                   <span className={cn("h-1.5 w-1.5 rounded-full", services.mlflow.active ? "bg-emerald-500 animate-pulse" : "bg-zinc-700")} /> 
+                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.mlflow.active ? "text-primary" : "text-muted-foreground")}>
+                   <span className={cn("h-1.5 w-1.5 rounded-full", services.mlflow.active ? "bg-primary animate-pulse" : "bg-muted")} /> 
                    MLFLOW LIVE: 5000
                  </p>
               </div>
-              <div className={cn("p-2 rounded border transition-all", services.prefect.active ? "bg-amber-500/10 border-amber-500/20" : "bg-muted/50 border-border")}>
-                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.prefect.active ? "text-amber-500" : "text-muted-foreground")}>
-                   <span className={cn("h-1.5 w-1.5 rounded-full", services.prefect.active ? "bg-amber-500 animate-pulse" : "bg-zinc-700")} /> 
+              <div className={cn("p-2 rounded border transition-all", services.prefect.active ? "bg-chart-4/10 border-chart-4/20" : "bg-muted/50 border-border")}>
+                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.prefect.active ? "text-chart-4" : "text-muted-foreground")}>
+                   <span className={cn("h-1.5 w-1.5 rounded-full", services.prefect.active ? "bg-chart-4 animate-pulse" : "bg-muted")} /> 
                    PREFECT SYNC: 4200
                  </p>
               </div>
@@ -256,7 +256,7 @@ export default function AIQuantPage() {
                             <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
                             <div className="flex-1 space-y-2 py-1">
                                 <div className="h-2 bg-primary/10 rounded w-1/4"></div>
-                                <div className="h-4 bg-primary/5 rounded w-3/4"></div>
+                                <div className="text-[10px] text-primary uppercase tracking-widest font-mono">{agentStatus || "Processing..."}</div>
                             </div>
                         </div>
                      )}
@@ -279,9 +279,23 @@ export default function AIQuantPage() {
                   <div className="mt-6 space-y-3">
                       <Accordion type="multiple" className="w-full space-y-3">
                         <AccordionItem value="hypotheses" className="border border-border rounded-xl px-4 bg-background/40">
-                          <AccordionTrigger className="hover:no-underline py-3 text-[10px] font-mono uppercase tracking-widest text-chart-4">
-                              <span className="flex items-center gap-2"><Sparkles className="h-3 w-3" /> Hypothesis Forge (Inference Results)</span>
-                          </AccordionTrigger>
+                          <div className="flex items-center justify-between">
+                            <AccordionTrigger className="hover:no-underline py-3 text-[10px] font-mono uppercase tracking-widest text-chart-4 flex-1">
+                                <span className="flex items-center gap-2"><Sparkles className="h-3 w-3" /> Hypothesis Forge (Inference Results)</span>
+                            </AccordionTrigger>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-6 text-[9px] border-border hover:bg-accent hover:text-chart-4 uppercase tracking-tighter" 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    generateHypotheses();
+                                }} 
+                                disabled={loadingHypotheses}
+                            >
+                                {loadingHypotheses ? "Scanning..." : "Execute Scan"}
+                            </Button>
+                          </div>
                           <AccordionContent>
                             <div className="flex gap-4 overflow-x-auto py-4 no-scrollbar">
                                 {hypotheses.length === 0 && !loadingHypotheses && (

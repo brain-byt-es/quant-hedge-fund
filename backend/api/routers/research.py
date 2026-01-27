@@ -56,32 +56,73 @@ def get_signals(
 
 @router.get("/profile/{symbol}")
 def get_company_profile(symbol: str):
-    """Get company profile from bulk_company_profiles_fmp."""
+    """Get comprehensive company profile including institutional layers."""
     try:
         client = get_qs_client()
-        # Try fetch from DB
+        
+        # 1. Basic Profile (from DB or fallback)
+        profile_data = {}
         try:
             res = client.query(f"SELECT * FROM bulk_company_profiles_fmp WHERE symbol = '{symbol}'")
             if not res.is_empty():
-                return res.to_dicts()[0]
+                profile_data = res.to_dicts()[0]
         except:
             pass
             
-        # Fallback Mock if DB empty/busy
-        return {
-            "symbol": symbol,
-            "company_name": f"{symbol} Corp (Mock)",
-            "sector": "Technology",
-            "industry": "Computer Hardware",
-            "description": "Mock description for UI development. This company specializes in quantum computing and cloud services.",
-            "price": 25.38,
-            "beta": 1.69,
-            "exchange": "NASDAQ",
-            "website": "https://example.com",
-            "full_time_employees": 137,
-            "market_cap": 8380000000,
-            "ipo_date": "2021-04-22"
-        }
+        if not profile_data:
+            # Fallback Mock for base data
+            profile_data = {
+                "symbol": symbol,
+                "company_name": f"{symbol} Corp",
+                "sector": "Technology",
+                "industry": "Computer Hardware",
+                "description": "Information not available in local cache. Fetching real-time intelligence...",
+                "price": 0.0,
+                "beta": 1.0,
+                "exchange": "NASDAQ",
+                "website": "",
+                "full_time_employees": 0,
+                "market_cap": 0,
+                "ipo_date": "N/A"
+            }
+
+        # 2. Add DCF Valuation
+        try:
+            dcf_df = client._fmp_client.get_dcf_valuation(symbol)
+            if not dcf_df.empty:
+                profile_data["dcf_value"] = float(dcf_df.iloc[0]["dcf"])
+                profile_data["dcf_diff"] = float(dcf_df.iloc[0]["Stock Price"]) - profile_data["dcf_value"]
+        except:
+            profile_data["dcf_value"] = None
+
+        # 3. Add Insider Sentiment (Last 5 trades)
+        try:
+            insider_df = client._fmp_client.get_insider_trades(symbol, limit=5)
+            if not insider_df.empty:
+                profile_data["recent_insider_trades"] = insider_df.to_dict(orient="records")
+                # Simple sentiment: Count buys vs sales
+                buys = len(insider_df[insider_df["transactionType"].str.contains("Buy", na=False, case=False)])
+                profile_data["insider_sentiment"] = "BULLISH" if buys > 2 else "NEUTRAL"
+        except:
+            profile_data["insider_sentiment"] = "UNKNOWN"
+
+        # 4. Add Latest News
+        try:
+            news_df = client._fmp_client.get_stock_news(symbol, limit=3)
+            if not news_df.empty:
+                profile_data["latest_news"] = news_df.to_dict(orient="records")
+        except:
+            profile_data["latest_news"] = []
+
+        # Update price from real-time source if available
+        try:
+            price_df = client._fmp_client.get_historical_prices(symbol)
+            if not price_df.empty:
+                profile_data["price"] = float(price_df.iloc[0]["close"])
+        except:
+            pass
+
+        return profile_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

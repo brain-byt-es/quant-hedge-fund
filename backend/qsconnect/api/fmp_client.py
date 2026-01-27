@@ -403,6 +403,45 @@ class FMPClient(BaseAPIClient):
         return pd.DataFrame()
     
     # =====================
+    # Institutional Data Layers
+    # =====================
+
+    def get_insider_trades(self, symbol: str, limit: int = 100) -> pd.DataFrame:
+        """Get recent insider trades for a symbol."""
+        url = f"https://financialmodelingprep.com/stable/insider-trading"
+        params = {"symbol": symbol, "limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_senate_trades(self, symbol: str) -> pd.DataFrame:
+        """Get recent senate/house trading for a symbol."""
+        url = f"https://financialmodelingprep.com/stable/senate-trading"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_stock_news(self, symbol: str, limit: int = 50) -> pd.DataFrame:
+        """Get recent news for a symbol (for AI sentiment analysis)."""
+        url = f"https://financialmodelingprep.com/stable/stock_news"
+        params = {"symbol": symbol, "limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_economic_indicator(self, name: str = "GDP") -> pd.DataFrame:
+        """Get economic indicators (GDP, CPI, Unemployment, etc.)."""
+        url = f"https://financialmodelingprep.com/stable/economic"
+        params = {"name": name}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_dcf_valuation(self, symbol: str) -> pd.DataFrame:
+        """Get Discounted Cash Flow (DCF) valuation."""
+        url = f"https://financialmodelingprep.com/stable/discounted-cash-flow"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    # =====================
     # Bulk Financial Data
     # =====================
     

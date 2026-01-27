@@ -19,17 +19,17 @@ export function ResultsView() {
       <TabsContent value="tearsheet" className="flex-1 min-h-0">
          <div className="grid gap-4 h-full overflow-auto pb-4">
              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                 <Card>
+                 <Card className="bg-primary/5 border-primary/20 shadow-sm">
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Total Return</CardTitle></CardHeader>
-                    <CardContent className="p-4 pt-0 text-2xl font-mono text-emerald-500">+45.2%</CardContent>
+                    <CardContent className="p-4 pt-0 text-2xl font-mono text-primary">+45.2%</CardContent>
                  </Card>
                  <Card>
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Sharpe</CardTitle></CardHeader>
                     <CardContent className="p-4 pt-0 text-2xl font-mono">1.82</CardContent>
                  </Card>
-                 <Card>
+                 <Card className="bg-destructive/5 border-destructive/20 shadow-sm">
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Max Drawdown</CardTitle></CardHeader>
-                    <CardContent className="p-4 pt-0 text-2xl font-mono text-rose-500">-12.4%</CardContent>
+                    <CardContent className="p-4 pt-0 text-2xl font-mono text-destructive">-12.4%</CardContent>
                  </Card>
                  <Card>
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Beta</CardTitle></CardHeader>
