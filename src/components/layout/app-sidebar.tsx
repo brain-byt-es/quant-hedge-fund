@@ -6,6 +6,7 @@ import {
   Database,
   FlaskConical,
   Zap,
+  Bot,
   Settings,
 } from "lucide-react"
 import Link from "next/link"
@@ -35,6 +36,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       title: "Data Hub",
       url: "/data",
       icon: Database,
+    },
+    {
+      title: "AI Quant Team",
+      url: "/ai-quant",
+      icon: Bot,
     },
     {
       title: "Research Lab",
