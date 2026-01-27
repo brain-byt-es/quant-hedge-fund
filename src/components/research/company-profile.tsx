@@ -58,7 +58,7 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                 <div className="text-right flex flex-col items-end">
                     <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter mb-1">Quote</span>
                     <div className="text-2xl font-mono font-black text-primary leading-none tracking-tighter">
-                        ${profile.price.toFixed(2)}
+                        ${profile.price?.toFixed(2) || "0.00"}
                     </div>
                     <span className="text-[8px] text-muted-foreground font-mono uppercase mt-1 bg-muted px-1 rounded border border-border">
                         {profile.exchange}
@@ -74,7 +74,7 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                     <span className="text-[9px] text-primary/60 uppercase font-black tracking-widest block mb-1">DCF Valuation</span>
                     <div className="text-sm font-mono font-bold text-primary">
-                        {profile.dcf_value ? `${profile.dcf_value.toFixed(2)}` : "N/A"}
+                        {profile.dcf_value ? `$${profile.dcf_value.toFixed(2)}` : "N/A"}
                     </div>
                     <span className="text-[8px] text-muted-foreground uppercase font-mono">Intrinsic Value</span>
                 </div>
@@ -120,7 +120,7 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                     <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest block group-hover:text-foreground transition-colors">Market Cap</span>
                     <div className="text-xs font-mono text-foreground flex items-center gap-1.5 bg-background/20 p-1.5 rounded border border-transparent group-hover:border-border transition-all">
                         <DollarSign className="h-3 w-3 text-primary/50" />
-                        {(profile.market_cap / 1e9).toFixed(2)}B
+                        {profile.market_cap ? `${(profile.market_cap / 1e9).toFixed(2)}B` : "N/A"}
                     </div>
                 </div>
                 <div className="space-y-1 group">
