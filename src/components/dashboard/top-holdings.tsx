@@ -48,7 +48,7 @@ export function TopHoldings({ positions = [] }: TopHoldingsProps) {
             ) : (
                 sortedPositions.map((pos) => {
                   const side = pos.quantity > 0 ? "Long" : "Short";
-                  const pnlColor = pos.unrealized_pnl >= 0 ? "text-emerald-500" : "text-rose-500";
+                  const pnlColor = pos.unrealized_pnl >= 0 ? "text-primary font-bold" : "text-destructive font-bold";
                   const pnlSign = pos.unrealized_pnl >= 0 ? "+" : "";
                   
                   return (

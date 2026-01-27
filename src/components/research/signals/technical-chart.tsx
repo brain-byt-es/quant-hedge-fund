@@ -43,8 +43,6 @@ export function TechnicalChart({ data }: TechnicalChartProps) {
 
     const prices = data.map(d => d.close)
     
-    // Technical Indicators (SMA, EMA, BB, RSI, MACD)
-    // [ ... existing indicator logic ... ]
     const sma = (arr: number[], period: number) => arr.map((_, i) => i < period - 1 ? null : arr.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period)
     const ema = (arr: number[], period: number) => {
       const k = 2 / (period + 1); const emaArr = [arr[0]];
@@ -86,74 +84,81 @@ export function TechnicalChart({ data }: TechnicalChartProps) {
   }, [data])
 
   return (
-    <div className="flex flex-col gap-1.5 h-full font-mono bg-black p-1">
+    <div className="flex flex-col gap-2 h-full font-mono bg-background p-2">
       {/* 1. MAIN PRICE PANE (60%) */}
-      <div className="flex-[6] min-h-0 border border-zinc-800 rounded-sm bg-[#050505] relative group shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+      <div className="flex-[6] min-h-0 border border-border rounded-xl bg-card/30 relative group shadow-2xl overflow-hidden">
         {/* Chart Legend Overlay */}
-        <div className="absolute top-2 right-3 z-20 flex flex-col items-end gap-0.5 pointer-events-none select-none">
-            <span className="text-[7px] text-zinc-600 uppercase tracking-[0.3em] font-black mb-1">Overlay Matrix</span>
-            <div className="flex gap-3">
-                <span className="text-[8px] text-white flex items-center gap-1"><div className="h-1 w-2 bg-white" /> Price</span>
-                <span className="text-[8px] text-yellow-500 flex items-center gap-1"><div className="h-1 w-2 bg-yellow-500" /> SMA 20</span>
-                <span className="text-[8px] text-blue-500 flex items-center gap-1"><div className="h-1 w-2 bg-blue-500" /> SMA 50</span>
-                <span className="text-[8px] text-purple-500 flex items-center gap-1"><div className="h-1 w-2 bg-purple-500" /> SMA 200</span>
-                <span className="text-[8px] text-red-500 flex items-center gap-1"><div className="h-1 w-2 bg-red-500" /> EMA 21</span>
+        <div className="absolute top-3 right-4 z-20 flex flex-col items-end gap-1 pointer-events-none select-none bg-background/40 backdrop-blur-md p-2 rounded-lg border border-border/50">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.3em] font-black mb-1">Overlay Matrix</span>
+            <div className="flex gap-4">
+                <span className="text-xs text-foreground flex items-center gap-1.5 font-bold"><div className="h-1.5 w-3 bg-foreground rounded-full" /> Price</span>
+                <span className="text-xs text-chart-4 flex items-center gap-1.5 font-bold"><div className="h-1.5 w-3 bg-chart-4 rounded-full" /> SMA 20</span>
+                <span className="text-xs text-chart-1 flex items-center gap-1.5 font-bold"><div className="h-1.5 w-3 bg-chart-1 rounded-full" /> SMA 50</span>
+                <span className="text-xs text-chart-3 flex items-center gap-1.5 font-bold"><div className="h-1.5 w-3 bg-chart-3 rounded-full" /> SMA 200</span>
+                <span className="text-xs text-destructive flex items-center gap-1.5 font-bold"><div className="h-1.5 w-3 bg-destructive rounded-full" /> EMA 21</span>
             </div>
         </div>
 
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={technicals} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="1 4" stroke="#1a1a1a" vertical={false} />
+          <ComposedChart data={technicals} margin={{ top: 15, right: 15, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="1 4" stroke="var(--border)" vertical={false} />
             <XAxis dataKey="date" hide />
-            <YAxis domain={['auto', 'auto']} orientation="right" tick={{fontSize: 9, fill: '#444'}} axisLine={false} tickLine={false} />
+            <YAxis 
+                domain={['auto', 'auto']} 
+                orientation="right" 
+                tick={{fontSize: 11, fill: 'var(--muted-foreground)', fontWeight: 'bold'}} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => `$${v}`}
+            />
             <Tooltip 
-                contentStyle={{backgroundColor: '#000', borderColor: '#333', fontSize: '9px', padding: '4px'}}
-                itemStyle={{padding: '0px'}}
+                contentStyle={{backgroundColor: 'var(--popover)', borderColor: 'var(--border)', fontSize: '11px', padding: '8px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                itemStyle={{padding: '2px 0'}}
             />
             
-            <Area type="monotone" dataKey="bbUpper" stroke="none" fill="#3b82f6" fillOpacity={0.03} />
-            <Area type="monotone" dataKey="bbLower" stroke="none" fill="#3b82f6" fillOpacity={0.03} />
+            <Area type="monotone" dataKey="bbUpper" stroke="none" fill="var(--chart-1)" fillOpacity={0.05} />
+            <Area type="monotone" dataKey="bbLower" stroke="none" fill="var(--chart-1)" fillOpacity={0.05} />
             
-            <Line type="monotone" dataKey="close" stroke="#ffffff" strokeWidth={1.5} dot={false} animationDuration={0} isAnimationActive={false} />
-            <Line type="monotone" dataKey="sma20" stroke="#eab308" strokeWidth={0.8} dot={false} animationDuration={0} isAnimationActive={false} />
-            <Line type="monotone" dataKey="sma50" stroke="#3b82f6" strokeWidth={0.8} dot={false} animationDuration={0} isAnimationActive={false} />
-            <Line type="monotone" dataKey="sma200" stroke="#a855f7" strokeWidth={0.8} dot={false} animationDuration={0} isAnimationActive={false} />
-            <Line type="monotone" dataKey="ema21" stroke="#ef4444" strokeWidth={1.2} dot={false} animationDuration={0} isAnimationActive={false} />
+            <Line type="monotone" dataKey="close" stroke="var(--foreground)" strokeWidth={2} dot={false} animationDuration={0} isAnimationActive={false} />
+            <Line type="monotone" dataKey="sma20" stroke="var(--chart-4)" strokeWidth={1} dot={false} animationDuration={0} isAnimationActive={false} />
+            <Line type="monotone" dataKey="sma50" stroke="var(--chart-1)" strokeWidth={1} dot={false} animationDuration={0} isAnimationActive={false} />
+            <Line type="monotone" dataKey="sma200" stroke="var(--chart-3)" strokeWidth={1} dot={false} animationDuration={0} isAnimationActive={false} />
+            <Line type="monotone" dataKey="ema21" stroke="var(--destructive)" strokeWidth={1.5} dot={false} animationDuration={0} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       {/* 2. VOLUME PANE (10%) */}
-      <div className="flex-[1] min-h-[60px] border border-zinc-800 rounded-sm bg-[#050505] overflow-hidden">
+      <div className="flex-[1] min-h-[70px] border border-border rounded-xl bg-card/20 overflow-hidden shadow-inner">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={technicals} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-            <YAxis orientation="right" tick={{fontSize: 7, fill: '#444'}} axisLine={false} tickLine={false} domain={[0, 'dataMax']} />
-            <Bar dataKey="volume" fill="#222" />
+          <ComposedChart data={technicals} margin={{ top: 5, right: 15, left: -20, bottom: 0 }}>
+            <YAxis orientation="right" tick={{fontSize: 9, fill: 'var(--muted-foreground)'}} axisLine={false} tickLine={false} domain={[0, 'dataMax']} />
+            <Bar dataKey="volume" fill="var(--muted-foreground)" opacity={0.2} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       {/* 3. MACD PANE (15%) */}
-      <div className="flex-[1.5] min-h-[80px] border border-zinc-800 rounded-sm bg-[#050505] overflow-hidden">
+      <div className="flex-[1.5] min-h-[90px] border border-border rounded-xl bg-card/20 overflow-hidden shadow-inner">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={technicals} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-            <YAxis orientation="right" tick={{fontSize: 7, fill: '#444'}} axisLine={false} tickLine={false} />
-            <Bar dataKey="macdHist" fill="#333" />
-            <Line type="monotone" dataKey="macd" stroke="#3b82f6" strokeWidth={1} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="macdSignal" stroke="#f97316" strokeWidth={1} dot={false} isAnimationActive={false} />
+          <ComposedChart data={technicals} margin={{ top: 5, right: 15, left: -20, bottom: 0 }}>
+            <YAxis orientation="right" tick={{fontSize: 9, fill: 'var(--muted-foreground)'}} axisLine={false} tickLine={false} />
+            <Bar dataKey="macdHist" fill="var(--muted-foreground)" opacity={0.3} />
+            <Line type="monotone" dataKey="macd" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="macdSignal" stroke="var(--chart-4)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       {/* 4. RSI PANE (15%) */}
-      <div className="flex-[1.5] min-h-[80px] border border-zinc-800 rounded-sm bg-[#050505] overflow-hidden">
+      <div className="flex-[1.5] min-h-[90px] border border-border rounded-xl bg-card/20 overflow-hidden shadow-inner">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={technicals} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
-            <XAxis dataKey="date" tick={{fontSize: 7, fill: '#444'}} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis domain={[0, 100]} orientation="right" tick={{fontSize: 7, fill: '#444'}} axisLine={false} tickLine={false} />
-            <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="2 2" opacity={0.5} />
-            <ReferenceLine y={30} stroke="#10b981" strokeDasharray="2 2" opacity={0.5} />
-            <Line type="monotone" dataKey="rsi" stroke="#a855f7" strokeWidth={1} dot={false} isAnimationActive={false} />
+          <ComposedChart data={technicals} margin={{ top: 5, right: 15, left: -20, bottom: 25 }}>
+            <XAxis dataKey="date" tick={{fontSize: 9, fill: 'var(--muted-foreground)', fontWeight: 'bold'}} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+            <YAxis domain={[0, 100]} orientation="right" tick={{fontSize: 9, fill: 'var(--muted-foreground)'}} axisLine={false} tickLine={false} />
+            <ReferenceLine y={70} stroke="var(--destructive)" strokeDasharray="3 3" opacity={0.6} />
+            <ReferenceLine y={30} stroke="var(--primary)" strokeDasharray="3 3" opacity={0.6} />
+            <Line type="monotone" dataKey="rsi" stroke="var(--chart-3)" strokeWidth={2} dot={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

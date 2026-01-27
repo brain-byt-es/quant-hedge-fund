@@ -30,7 +30,7 @@ export function ThemeToggle() {
       className="h-9 w-9 rounded-md border border-border/50 hover:bg-accent hover:text-accent-foreground"
     >
       {theme === "dark" ? (
-        <Sun className="h-[1.2rem] w-[1.2rem] text-amber-400 transition-all" />
+        <Sun className="h-[1.2rem] w-[1.2rem] text-chart-4 transition-all" />
       ) : (
         <Moon className="h-[1.2rem] w-[1.2rem] text-slate-700 transition-all" />
       )}

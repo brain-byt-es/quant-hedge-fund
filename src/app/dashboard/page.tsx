@@ -7,7 +7,18 @@ import { TopHoldings } from "@/components/dashboard/top-holdings"
 import { ExposureChart } from "@/components/dashboard/exposure-chart"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import { Power, Play } from "lucide-react"
+import { 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Activity, 
+  AlertTriangle, 
+  TrendingUp, 
+  Zap, 
+  ShieldCheck, 
+  Clock,
+  Play,
+  Pause
+} from "lucide-react"
 import { useWebSocket } from "@/hooks/use-websocket"
 
 import {
@@ -160,20 +171,19 @@ export default function DashboardPage() {
                 </SelectContent>
             </Select>
 
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isHalted ? "bg-red-500/10 border-red-500 text-red-500" : "bg-emerald-500/10 border-emerald-500 text-emerald-500"}`}>
-                <span className={`flex h-2 w-2 rounded-full ${isHalted ? "bg-red-500 animate-none" : "bg-emerald-500 animate-pulse"}`} />
-                <span className="text-sm font-medium">{isHalted ? "SYSTEM HALTED" : "SYSTEM NORMAL"}</span>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isHalted ? "bg-destructive/10 border-destructive/50 text-destructive" : "bg-primary/10 border-primary/50 text-primary"}`}>
+                <span className={`flex h-2 w-2 rounded-full ${isHalted ? "bg-destructive animate-none shadow-[0_0_8px_var(--destructive)]" : "bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]"}`} />
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest leading-none">
+                    {isHalted ? "System Halted" : "Live Execution"}
+                </span>
             </div>
-            
             {isHalted ? (
-                <Button variant="outline" size="sm" className="ml-4 gap-2 text-emerald-500 border-emerald-500 hover:bg-emerald-500/10" onClick={handleResume}>
-                    <Play className="h-4 w-4" />
-                    Resume
+                <Button variant="outline" size="sm" className="ml-4 gap-2 text-primary border-primary hover:bg-primary/10 font-bold uppercase tracking-widest h-8" onClick={handleResume}>
+                    <Play className="h-3 w-3" /> Resume Engine
                 </Button>
             ) : (
-                <Button variant="outline" size="sm" className="ml-4 gap-2 text-red-500 border-red-500 hover:bg-red-500/10" onClick={handleHalt}>
-                    <Power className="h-4 w-4" />
-                    Emergency Halt
+                <Button variant="destructive" size="sm" className="ml-4 gap-2 font-bold uppercase tracking-widest h-8" onClick={handleHalt}>
+                    <Pause className="h-3 w-3" /> Halt System
                 </Button>
             )}
         </div>
@@ -239,7 +249,7 @@ export default function DashboardPage() {
         <div>Stream: {wsStatus.toUpperCase()}</div>
         <div className="h-3 w-[1px] bg-border" />
         <div className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-chart-4" />
             Janitor (Prefect): ONLINE
         </div>
       </div>

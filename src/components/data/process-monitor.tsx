@@ -132,7 +132,7 @@ export function ProcessMonitor() {
                 ) : (
                     <>
                         <Button size="sm" variant="outline" className="h-7 text-[10px] uppercase font-bold border-border hover:bg-accent" onClick={() => handleRunPipeline("daily")}>
-                            <Zap className="mr-1 h-3 w-3 fill-current text-amber-500" /> Daily Sync
+                            <Zap className="mr-1 h-3 w-3 fill-current text-chart-4" /> Daily Sync
                         </Button>
                         <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleRunPipeline("backfill")}>
                             <Database className="mr-1 h-3 w-3 fill-current" /> Full Backfill

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { api } from "@/lib/api"
-import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Database, Bot } from "lucide-react"
+import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Database, Bot, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -167,31 +167,31 @@ export default function AIQuantPage() {
         </div>
 
         <div>
-          <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-4 tracking-widest">Inference Hub</h3>
-          <div className="space-y-2">
-              <div className={cn("p-2 rounded border transition-all", services.mlflow.active ? "bg-emerald-500/10 border-emerald-500/20" : "bg-muted/50 border-border")}>
-                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.mlflow.active ? "text-primary" : "text-muted-foreground")}>
-                   <span className={cn("h-1.5 w-1.5 rounded-full", services.mlflow.active ? "bg-primary animate-pulse" : "bg-muted")} /> 
+          <h3 className="text-sm font-bold uppercase text-muted-foreground mb-4 tracking-widest">Inference Hub</h3>
+          <div className="space-y-2.5">
+              <div className={cn("p-3 rounded-lg border transition-all", services.mlflow.active ? "bg-primary/10 border-primary/20 shadow-sm shadow-primary/5" : "bg-muted/50 border-border")}>
+                 <p className={cn("text-xs font-mono flex items-center gap-2 uppercase tracking-tight font-bold", services.mlflow.active ? "text-primary" : "text-muted-foreground")}>
+                   <span className={cn("h-2 w-2 rounded-full", services.mlflow.active ? "bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/30")} /> 
                    MLFLOW LIVE: 5000
                  </p>
               </div>
-              <div className={cn("p-2 rounded border transition-all", services.prefect.active ? "bg-chart-4/10 border-chart-4/20" : "bg-muted/50 border-border")}>
-                 <p className={cn("text-[9px] font-mono flex items-center gap-2 uppercase tracking-tight", services.prefect.active ? "text-chart-4" : "text-muted-foreground")}>
-                   <span className={cn("h-1.5 w-1.5 rounded-full", services.prefect.active ? "bg-chart-4 animate-pulse" : "bg-muted")} /> 
+              <div className={cn("p-3 rounded-lg border transition-all", services.prefect.active ? "bg-chart-4/10 border-chart-4/20 shadow-sm shadow-chart-4/5" : "bg-muted/50 border-border")}>
+                 <p className={cn("text-xs font-mono flex items-center gap-2 uppercase tracking-tight font-bold", services.prefect.active ? "text-chart-4" : "text-muted-foreground")}>
+                   <span className={cn("h-2 w-2 rounded-full", services.prefect.active ? "bg-chart-4 animate-pulse shadow-[0_0_8px_var(--chart-4)]" : "bg-muted-foreground/30")} /> 
                    PREFECT SYNC: 4200
                  </p>
               </div>
           </div>
         </div>
 
-        <div className="pt-4 border-t border-border/50">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-4 tracking-widest">Active Model</h3>
-            <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                    <Bot className="h-4 w-4 text-primary" />
-                    <span className="text-xs font-bold text-primary">ALPHA_V2</span>
+        <div className="pt-6 border-t border-border/50">
+            <h3 className="text-sm font-bold uppercase text-muted-foreground mb-4 tracking-widest">Active Model</h3>
+            <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                <div className="flex items-center gap-3 mb-2.5">
+                    <Bot className="h-5 w-5 text-primary" />
+                    <span className="text-sm font-black text-primary tracking-tight">ALPHA_V2</span>
                 </div>
-                <div className="text-[10px] text-muted-foreground leading-relaxed">
+                <div className="text-xs text-muted-foreground leading-relaxed font-medium">
                     Agent-driven research is active. The supervisor is routing work across Hypothesis Forge and The Lab.
                 </div>
             </div>
@@ -201,49 +201,49 @@ export default function AIQuantPage() {
       {/* MAIN CONTENT: Chat & Agent-Flow */}
       <main className="flex-1 flex flex-col min-w-0 bg-background/50">
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="max-w-4xl mx-auto p-6 space-y-8">
+            <div className="max-w-4xl mx-auto p-8 space-y-10">
                 
                 {/* Header Section */}
-                <section className="space-y-2 border-b border-border/50 pb-6">
-                  <h1 className="text-3xl font-bold tracking-tight">AI Quant Team</h1>
-                  <p className="text-muted-foreground text-sm max-w-2xl">
-                    Conversational interface for the supervisor-led LangGraph agents. 
+                <section className="space-y-3 border-b border-border/50 pb-8">
+                  <h1 className="text-4xl font-black tracking-tighter italic">AI QUANT TEAM</h1>
+                  <p className="text-muted-foreground text-base max-w-2xl leading-relaxed">
+                    Conversational interface for supervisor-led LangGraph agents. 
                     Connecting the FastAPI bridge with MLflow research logs and Prefect orchestration.
                   </p>
                 </section>
 
                 {/* The Chat Area */}
-                <section className="space-y-4 bg-card/30 rounded-2xl p-6 border border-border shadow-2xl relative">
-                  <div className="flex justify-between items-center border-b border-border/50 pb-3 mb-4">
-                    <div className="flex items-center gap-2">
-                        <Terminal className="h-4 w-4 text-primary" />
-                        <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Neural Terminal // Supervisor</h2>
+                <section className="space-y-6 bg-card/30 rounded-3xl p-8 border border-border shadow-2xl relative">
+                  <div className="flex justify-between items-center border-b border-border/50 pb-4 mb-6">
+                    <div className="flex items-center gap-3">
+                        <Terminal className="h-5 w-5 text-primary" />
+                        <h2 className="text-sm font-mono uppercase tracking-[0.3em] text-muted-foreground font-bold">Neural Terminal // Supervisor</h2>
                     </div>
-                    <div className="flex gap-2">
-                       <Button variant="ghost" className="h-6 text-[9px] uppercase tracking-tighter hover:bg-accent" onClick={() => setChatHistory([{role: 'ai', content: "Memory cleared. Architect ready."}])}>Reset Chat</Button>
-                       <Button variant="ghost" className="h-6 text-[9px] uppercase tracking-tighter hover:bg-accent">Telemetry</Button>
+                    <div className="flex gap-3">
+                       <Button variant="ghost" className="h-8 text-xs uppercase tracking-widest font-bold hover:bg-accent" onClick={() => setChatHistory([{role: 'ai', content: "Memory cleared. Architect ready."}])}>Reset Chat</Button>
+                       <Button variant="ghost" className="h-8 text-xs uppercase tracking-widest font-bold hover:bg-accent">Telemetry</Button>
                     </div>
                   </div>
 
-                  <div className="space-y-6 min-h-[300px]">
+                  <div className="space-y-8 min-h-[400px]">
                      {chatHistory.map((msg, i) => (
-                        <div key={i} className={cn("flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300", msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
+                        <div key={i} className={cn("flex gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500", msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
                           <div className={cn(
-                              "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-lg",
-                              msg.role === 'ai' ? 'bg-primary text-primary-foreground' : 'bg-muted border border-border text-muted-foreground'
+                              "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-xl border border-border/50",
+                              msg.role === 'ai' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                           )}>
-                            {msg.role === 'ai' ? <Terminal className="h-4 w-4" /> : 'U'}
+                            {msg.role === 'ai' ? <Terminal className="h-5 w-5" /> : <Users className="h-5 w-5" />}
                           </div>
-                          <div className={cn("flex-1 space-y-1.5", msg.role === 'user' ? 'text-right' : 'text-left')}>
-                            <div className="flex items-center gap-2 mb-1 justify-start">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                          <div className={cn("flex-1 space-y-2", msg.role === 'user' ? 'text-right' : 'text-left')}>
+                            <div className={cn("flex items-center gap-3 mb-1.5", msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                                <span className="text-xs font-black text-muted-foreground uppercase tracking-widest opacity-70">
                                     {msg.role === 'ai' ? 'Supervisor Agent' : 'Institutional User'}
                                 </span>
-                                {msg.tool && <Badge variant="secondary" className="text-[8px] h-3.5 px-1.5 uppercase tracking-tighter">{msg.tool}</Badge>}
+                                {msg.tool && <Badge variant="secondary" className="text-[10px] h-5 px-2 uppercase tracking-widest font-bold border-primary/20 bg-primary/5 text-primary">{msg.tool}</Badge>}
                             </div>
                             <div className={cn(
-                                "p-3 rounded-2xl text-sm leading-relaxed inline-block max-w-[90%] border shadow-sm",
-                                msg.role === 'ai' ? 'bg-primary/5 border-primary/20 text-foreground' : 'bg-muted/50 border-border text-foreground'
+                                "p-4 rounded-2xl text-sm md:text-base leading-relaxed inline-block max-w-[85%] border shadow-md antialiased",
+                                msg.role === 'ai' ? 'bg-primary/5 border-primary/20 text-foreground' : 'bg-muted/50 border-border text-foreground font-medium'
                             )}>
                                 {msg.content}
                             </div>
@@ -263,30 +263,30 @@ export default function AIQuantPage() {
                   </div>
 
                   {/* QUICK ACTIONS */}
-                  <div className="flex flex-wrap gap-2 pt-6 border-t border-border/50">
-                    <Button variant="secondary" size="sm" className="h-7 text-[10px] uppercase font-bold tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30" onClick={() => handleChat("Analyze current MLflow Research")}>
-                        <Search className="h-3 w-3 mr-2" /> Strategy Research
+                  <div className="flex flex-wrap gap-3 pt-8 border-t border-border/50">
+                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Analyze current MLflow Research")}>
+                        <Search className="h-4 w-4 mr-2" /> Strategy Research
                     </Button>
-                    <Button variant="secondary" size="sm" className="h-7 text-[10px] uppercase font-bold tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30" onClick={() => handleChat("Build new Alpha Factor code")}>
-                        <Code className="h-3 w-3 mr-2" /> Strategy Builder
+                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Build new Alpha Factor code")}>
+                        <Code className="h-4 w-4 mr-2" /> Strategy Builder
                     </Button>
-                    <Button variant="secondary" size="sm" className="h-7 text-[10px] uppercase font-bold tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30" onClick={() => handleChat("Run Prefect Ingestion Check")}>
-                        <Database className="h-3 w-3 mr-2" /> Ingestion Status
+                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Run Prefect Ingestion Check")}>
+                        <Database className="h-4 w-4 mr-2" /> Ingestion Status
                     </Button>
                   </div>
 
                   {/* AGENT TOOLS: Accordions for Results & Code */}
-                  <div className="mt-6 space-y-3">
-                      <Accordion type="multiple" className="w-full space-y-3">
-                        <AccordionItem value="hypotheses" className="border border-border rounded-xl px-4 bg-background/40">
+                  <div className="mt-8 space-y-4">
+                      <Accordion type="multiple" className="w-full space-y-4">
+                        <AccordionItem value="hypotheses" className="border border-border rounded-2xl px-6 bg-background/40 shadow-sm">
                           <div className="flex items-center justify-between">
-                            <AccordionTrigger className="hover:no-underline py-3 text-[10px] font-mono uppercase tracking-widest text-chart-4 flex-1">
-                                <span className="flex items-center gap-2"><Sparkles className="h-3 w-3" /> Hypothesis Forge (Inference Results)</span>
+                            <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-chart-4 flex-1 font-bold">
+                                <span className="flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4" /> Hypothesis Forge (Inference Results)</span>
                             </AccordionTrigger>
                             <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className="h-6 text-[9px] border-border hover:bg-accent hover:text-chart-4 uppercase tracking-tighter" 
+                                className="h-8 text-xs border-border hover:bg-accent hover:text-chart-4 uppercase tracking-widest font-black" 
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     generateHypotheses();
@@ -296,25 +296,25 @@ export default function AIQuantPage() {
                                 {loadingHypotheses ? "Scanning..." : "Execute Scan"}
                             </Button>
                           </div>
-                          <AccordionContent>
-                            <div className="flex gap-4 overflow-x-auto py-4 no-scrollbar">
+                          <AccordionContent className="pt-2 pb-6">
+                            <div className="flex gap-5 overflow-x-auto py-4 no-scrollbar">
                                 {hypotheses.length === 0 && !loadingHypotheses && (
-                                    <div className="w-full flex items-center justify-center text-[10px] text-muted-foreground italic h-32 border border-dashed border-border rounded uppercase tracking-[0.3em]">
+                                    <div className="w-full flex items-center justify-center text-xs text-muted-foreground italic h-32 border border-dashed border-border rounded-xl uppercase tracking-[0.3em] opacity-50">
                                         Awaiting Agent Trigger...
                                     </div>
                                 )}
                                 {hypotheses.map((h, i) => (
-                                    <div key={i} className="w-[280px] shrink-0 border border-border bg-card p-4 rounded-xl hover:border-chart-4/50 transition-all group relative shadow-lg">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <span className="font-bold text-sm text-foreground truncate pr-2 uppercase tracking-tight">{h.strategy_name}</span>
-                                            <Badge variant="outline" className="text-[8px] h-4 border-chart-4/30 text-chart-4 bg-chart-4/5 uppercase tracking-widest">{h.style}</Badge>
+                                    <div key={i} className="w-[320px] shrink-0 border border-border bg-card p-5 rounded-2xl hover:border-chart-4/50 transition-all group relative shadow-xl">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <span className="font-black text-sm text-foreground truncate pr-2 uppercase tracking-tight">{h.strategy_name}</span>
+                                            <Badge variant="outline" className="text-[10px] h-5 border-chart-4/30 text-chart-4 bg-chart-4/5 uppercase tracking-widest font-bold">{h.style}</Badge>
                                         </div>
-                                        <div className="text-[10px] text-muted-foreground leading-relaxed h-[45px] overflow-hidden line-clamp-3 mb-4 font-mono italic">
+                                        <div className="text-xs text-muted-foreground leading-relaxed h-[50px] overflow-hidden line-clamp-3 mb-5 font-medium italic">
                                             {h.reasoning}
                                         </div>
                                         <Button 
                                             variant="secondary" 
-                                            className="w-full h-8 text-[9px] bg-muted hover:bg-chart-4 hover:text-white transition-all uppercase tracking-[0.2em] font-black border-none"
+                                            className="w-full h-10 text-xs bg-muted hover:bg-chart-4 hover:text-white transition-all uppercase tracking-[0.2em] font-black border-none shadow-sm"
                                             onClick={() => loadHypothesis(h)}
                                         >
                                             Commit to Core
@@ -325,51 +325,51 @@ export default function AIQuantPage() {
                           </AccordionContent>
                         </AccordionItem>
 
-                        <AccordionItem value="code" className="border border-border rounded-xl px-4 bg-background/40">
-                          <AccordionTrigger className="hover:no-underline py-3 text-[10px] font-mono uppercase tracking-widest text-chart-3">
-                              <span className="flex items-center gap-2"><Code className="h-3 w-3" /> Agent Trace (Code Lab)</span>
+                        <AccordionItem value="code" className="border border-border rounded-2xl px-6 bg-background/40 shadow-sm">
+                          <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-chart-3 font-bold">
+                              <span className="flex items-center gap-2 text-sm"><Code className="h-4 w-4" /> Agent Trace (Code Lab)</span>
                           </AccordionTrigger>
-                          <AccordionContent className="pb-4">
-                            <div className="relative rounded-lg overflow-hidden border border-border bg-black/40">
-                                <div className="absolute top-0 left-0 right-0 h-6 bg-muted flex items-center px-3 justify-between">
-                                    <span className="text-[8px] text-muted-foreground uppercase font-mono">strategy_injected.py</span>
-                                    <div className="flex gap-1">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-red-500/50" />
-                                        <div className="h-1.5 w-1.5 rounded-full bg-amber-500/50" />
-                                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/50" />
+                          <AccordionContent className="pb-6">
+                            <div className="relative rounded-xl overflow-hidden border border-border bg-black/40 shadow-2xl">
+                                <div className="absolute top-0 left-0 right-0 h-8 bg-muted flex items-center px-4 justify-between">
+                                    <span className="text-[10px] text-muted-foreground uppercase font-mono font-bold tracking-widest">strategy_injected.py</span>
+                                    <div className="flex gap-1.5">
+                                        <div className="h-2 w-2 rounded-full bg-destructive/30" />
+                                        <div className="h-2 w-2 rounded-full bg-chart-4/30" />
+                                        <div className="h-2 w-2 rounded-full bg-primary/30" />
                                     </div>
                                 </div>
                                 <Textarea 
-                                    className="font-mono text-[10px] bg-transparent border-none h-64 pt-8 focus-visible:ring-0 text-chart-3/90 leading-relaxed" 
+                                    className="font-mono text-xs bg-transparent border-none h-80 pt-10 focus-visible:ring-0 text-chart-3/90 leading-relaxed font-medium" 
                                     value={editorCode} 
                                     onChange={(e) => setEditorCode(e.target.value)}
                                     spellCheck={false}
                                 />
-                                <div className="p-2 border-t border-border/50 bg-muted/20 flex justify-end">
-                                    <Button size="sm" className="h-6 text-[8px] uppercase tracking-widest bg-chart-3 hover:bg-chart-3/80 text-white font-bold">
-                                        <Save className="h-3 w-3 mr-1" /> Deploy Factors
+                                <div className="p-3 border-t border-border/50 bg-muted/20 flex justify-end">
+                                    <Button size="sm" className="h-8 text-xs uppercase tracking-widest bg-chart-3 hover:bg-chart-3/80 text-white font-black px-6 shadow-lg">
+                                        <Save className="h-4 w-4 mr-2" /> Deploy Factors
                                     </Button>
                                 </div>
                             </div>
                           </AccordionContent>
                         </AccordionItem>
 
-                        <AccordionItem value="config" className="border border-border rounded-xl px-4 bg-background/40">
-                          <AccordionTrigger className="hover:no-underline py-3 text-[10px] font-mono uppercase tracking-widest text-primary">
-                              <span className="flex items-center gap-2"><Settings className="h-3 w-3" /> Final Configuration (JSON)</span>
+                        <AccordionItem value="config" className="border border-border rounded-2xl px-6 bg-background/40 shadow-sm">
+                          <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-primary font-bold">
+                              <span className="flex items-center gap-2 text-sm"><Settings className="h-4 w-4" /> Final Configuration (JSON)</span>
                           </AccordionTrigger>
-                          <AccordionContent className="pb-4">
-                            <div className="relative rounded-lg overflow-hidden border border-border bg-black/40">
+                          <AccordionContent className="pb-6">
+                            <div className="relative rounded-xl overflow-hidden border border-border bg-black/40 shadow-2xl">
                                 <Textarea 
-                                    className="font-mono text-[10px] bg-transparent border-none h-48 focus-visible:ring-0 text-primary/80 leading-relaxed" 
+                                    className="font-mono text-xs bg-transparent border-none h-64 focus-visible:ring-0 text-primary/80 leading-relaxed font-bold" 
                                     value={strategyConfig} 
                                     onChange={(e) => setStrategyConfig(e.target.value)}
                                     spellCheck={false}
                                 />
-                                <div className="p-3 border-t border-border/50 bg-muted/20 flex justify-between items-center">
-                                    <span className="text-[8px] text-muted-foreground uppercase font-mono tracking-widest italic">Auth: Quant Science Supervisor</span>
-                                    <Button size="sm" className="h-8 text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/80 text-primary-foreground font-black px-6 shadow-xl" onClick={handleDeploy}>
-                                        <Play className="h-3 w-3 mr-2 fill-current" /> Execute Run
+                                <div className="p-4 border-t border-border/50 bg-muted/20 flex justify-between items-center">
+                                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-[0.3em] italic font-bold">Auth: Quant Science Supervisor</span>
+                                    <Button size="sm" className="h-10 text-xs uppercase tracking-widest bg-primary hover:bg-primary/80 text-primary-foreground font-black px-8 shadow-2xl" onClick={handleDeploy}>
+                                        <Play className="h-4 w-4 mr-3 fill-current" /> Execute Run
                                     </Button>
                                 </div>
                             </div>
@@ -382,25 +382,25 @@ export default function AIQuantPage() {
         </div>
 
         {/* Input Bar am Boden des Feeds */}
-        <div className="sticky bottom-0 bg-background/80 backdrop-blur-xl border-t border-border pt-4 pb-8 px-6">
+        <div className="sticky bottom-0 bg-background/80 backdrop-blur-2xl border-t border-border pt-6 pb-10 px-8">
           <div className="max-w-4xl mx-auto relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-chart-4/20 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+            <div className="absolute -inset-1.5 bg-gradient-to-r from-primary/30 to-chart-4/30 rounded-3xl blur-md opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
             <Input 
-              className="relative w-full bg-muted/50 border-border h-14 pl-6 pr-14 text-sm font-mono focus-visible:ring-primary/30 rounded-2xl shadow-inner placeholder:text-muted-foreground/50" 
+              className="relative w-full bg-muted/50 border-border h-16 pl-8 pr-16 text-base font-mono focus-visible:ring-primary/30 rounded-2xl shadow-inner placeholder:text-muted-foreground/40 font-bold" 
               placeholder="Describe the task for the neural supervisor..." 
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleChat()}
             />
             <Button 
-                className="absolute right-3 top-3 h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
+                className="absolute right-4 top-3.5 h-9 w-9 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-xl transition-all hover:scale-110 active:scale-90"
                 onClick={() => handleChat()}
                 disabled={loadingChat}
             >
-               {loadingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+               {loadingChat ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
             </Button>
           </div>
-          <p className="max-w-4xl mx-auto text-center mt-2 text-[8px] uppercase tracking-[0.5em] text-muted-foreground opacity-40">
+          <p className="max-w-4xl mx-auto text-center mt-3 text-[10px] uppercase tracking-[0.6em] text-muted-foreground opacity-50 font-black">
             Powered by LangGraph // GPT-4o Agent Orchestration
           </p>
         </div>

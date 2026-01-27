@@ -98,12 +98,12 @@ export default function ResearchPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
             <div className="flex justify-between items-center px-2 shrink-0">
                 <div className="flex flex-col">
-                    <h1 className="text-xl font-bold tracking-tight">Research Lab</h1>
-                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
+                    <h1 className="text-2xl font-black tracking-tight italic">RESEARCH LAB</h1>
+                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-[0.3em] font-bold">Signals // Alpha Discovery</p>
                 </div>
-                <TabsList className="bg-muted/50 border border-border p-1">
-                    <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Signal Charts</TabsTrigger>
-                    <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-background data-[state=active]:text-primary">Governance</TabsTrigger>
+                <TabsList className="bg-muted/50 border border-border p-1.5 h-10">
+                    <TabsTrigger value="signals" className="text-xs font-bold px-6 data-[state=active]:bg-background data-[state=active]:text-primary uppercase tracking-widest">Signal Charts</TabsTrigger>
+                    <TabsTrigger value="governance" className="text-xs font-bold px-6 data-[state=active]:bg-background data-[state=active]:text-primary uppercase tracking-widest">Governance</TabsTrigger>
                 </TabsList>
             </div>
 
