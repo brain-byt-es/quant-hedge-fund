@@ -1,8 +1,8 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Globe, Users, DollarSign } from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { Globe, Users, DollarSign, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface ProfileData {
@@ -24,10 +24,19 @@ interface ProfileData {
   [key: string]: string | number | undefined | unknown;
 }
 
-export function CompanyProfile({ profile }: { profile: ProfileData | null }) {
+export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | null, isLoading?: boolean }) {
+  if (isLoading) return (
+    <Card className="h-full border-border/50 bg-card/40 backdrop-blur-md flex items-center justify-center p-8 border-dashed">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            <div className="text-muted-foreground font-mono text-[10px] uppercase tracking-[0.2em]">Intercepting Intelligence...</div>
+        </div>
+    </Card>
+  )
+
   if (!profile) return (
     <Card className="h-full border-border/50 bg-card/40 backdrop-blur-md flex items-center justify-center p-8 border-dashed">
-        <div className="text-muted-foreground font-mono text-[10px] uppercase tracking-[0.2em] animate-pulse">Awaiting Selection...</div>
+        <div className="text-muted-foreground font-mono text-[10px] uppercase tracking-[0.2em]">Awaiting Selection...</div>
     </Card>
   )
 

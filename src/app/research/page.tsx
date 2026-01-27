@@ -48,6 +48,7 @@ export default function ResearchPage() {
   const [signals, setSignals] = useState<SignalData[]>([])
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [priceHistory, setPriceHistory] = useState<{date: string, close: number, [key: string]: unknown}[]>([])
+  const [loadingProfile, setLoadingProfile] = useState(false)
 
   // Fetch Signals (Rank vs Score)
   useEffect(() => {
@@ -68,18 +69,25 @@ export default function ResearchPage() {
   useEffect(() => {
       if (!symbol) return
       const loadSymbolData = async () => {
+          setLoadingProfile(true)
           try {
-              const p = await api.getCompanyProfile(symbol)
+              // Fetch profile and prices in parallel
+              const [p, h] = await Promise.all([
+                  api.getCompanyProfile(symbol),
+                  api.getPriceHistory(symbol, lookback)
+              ])
+
               if (p && !p.error) {
                   setProfile(p)
               }
               
-              const h = await api.getPriceHistory(symbol, lookback)
               if (Array.isArray(h)) {
                   setPriceHistory(h)
               }
           } catch (err) {
-              console.debug("Research Lab: Backend busy, skipping profile fetch...")
+              console.debug("Research Lab: Backend busy or symbol missing, skipping profile fetch...")
+          } finally {
+              setLoadingProfile(false)
           }
       }
       loadSymbolData()
@@ -169,7 +177,7 @@ export default function ResearchPage() {
 
                           <div className="col-span-4 h-full overflow-hidden">
 
-                              <CompanyProfile profile={profile} />
+                              <CompanyProfile profile={profile} isLoading={loadingProfile} />
 
                           </div>
 

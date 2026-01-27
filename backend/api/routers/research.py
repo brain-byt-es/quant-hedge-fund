@@ -2,7 +2,9 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
+import polars as pl
 from datetime import datetime, timedelta
+from loguru import logger
 
 from api.routers.data import get_qs_client
 
@@ -66,46 +68,61 @@ def get_company_profile(symbol: str):
             res = client.query(f"SELECT * FROM bulk_company_profiles_fmp WHERE symbol = '{symbol}'")
             if not res.is_empty():
                 profile_data = res.to_dicts()[0]
-                # Map DB columns back to what frontend expects if they differ
+                # Consistency mapping
                 if "company_name" not in profile_data and "companyName" in profile_data:
                     profile_data["company_name"] = profile_data.pop("companyName")
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"DB Fetch failed for {symbol}: {e}")
             
-        # 2. JIT Fallback: Fetch from FMP API if missing in DB
-        if not profile_data or profile_data.get("price") == 0:
+        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete
+        if not profile_data or not profile_data.get("company_name"):
             try:
                 logger.info(f"JIT: Fetching real-time profile for {symbol} from FMP...")
-                # Use our FMP client
                 api_profile = client._fmp_client.get_company_profile(symbol)
+                
                 if api_profile:
-                    # Clean up keys for our schema
+                    # Map API keys to our internal schema
                     profile_data = {
                         "symbol": symbol,
-                        "company_name": api_profile.get("companyName"),
-                        "sector": api_profile.get("sector"),
-                        "industry": api_profile.get("industry"),
-                        "description": api_profile.get("description"),
+                        "company_name": api_profile.get("companyName", f"{symbol} Corp"),
+                        "sector": api_profile.get("sector", "Technology"),
+                        "industry": api_profile.get("industry", "N/A"),
+                        "description": api_profile.get("description", "No description available."),
                         "price": float(api_profile.get("price", 0)),
                         "beta": float(api_profile.get("beta", 0)),
-                        "exchange": api_profile.get("exchangeShortName"),
-                        "website": api_profile.get("website"),
+                        "exchange": api_profile.get("exchangeShortName", "NASDAQ"),
+                        "website": api_profile.get("website", ""),
                         "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
                         "market_cap": float(api_profile.get("mktCap", 0)),
-                        "ipo_date": api_profile.get("ipoDate")
+                        "ipo_date": api_profile.get("ipoDate", "N/A")
                     }
-                    # Save to DB so we have it next time
+                    # Save to DB for caching (using original FMP keys for the upsert method)
                     import pandas as pd
                     client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
+                else:
+                    # Emergency Fallback if API also fails
+                    profile_data = {
+                        "symbol": symbol,
+                        "company_name": f"{symbol} (Real-time Pending)",
+                        "sector": "Scanning...",
+                        "industry": "Pending",
+                        "description": "Fetching intelligence from FMP Hub...",
+                        "price": 0.0,
+                        "beta": 1.0,
+                        "exchange": "NASDAQ",
+                        "website": "",
+                        "full_time_employees": 0,
+                        "market_cap": 0,
+                        "ipo_date": "N/A"
+                    }
             except Exception as jit_err:
                 logger.error(f"JIT Profile fetch failed for {symbol}: {jit_err}")
 
         # 3. Add dynamic layers (DCF, Insider, News) - these are always live
-        # [ ... Rest der Logik bleibt gleich ... ]
         try:
             dcf_df = client._fmp_client.get_dcf_valuation(symbol)
             if not dcf_df.empty:
-                profile_data["dcf_value"] = float(dcf_df.iloc[0]["dcf"])
+                profile_data["dcf_value"] = float(dcf_df.iloc[0].get("dcf", 0))
         except: pass
 
         try:
@@ -121,8 +138,16 @@ def get_company_profile(symbol: str):
                 profile_data["latest_news"] = news_df.to_dict(orient="records")
         except: pass
 
+        # Update price from real-time source if available
+        try:
+            price_df = client._fmp_client.get_historical_prices(symbol)
+            if not price_df.empty:
+                profile_data["price"] = float(price_df.iloc[0]["close"])
+        except: pass
+
         return profile_data
     except Exception as e:
+        logger.error(f"Error in get_company_profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/price-history/{symbol}")

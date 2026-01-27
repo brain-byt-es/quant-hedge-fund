@@ -150,8 +150,10 @@ class FMPClient(BaseAPIClient):
     # =====================
     
     def get_company_profile(self, symbol: str) -> Dict[str, Any]:
-        """Get company profile for a symbol."""
-        data = self._make_request(f"profile/{symbol}")
+        """Get company profile for a symbol using stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/profile"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
         if data and len(data) > 0:
             return data[0]
         return {}

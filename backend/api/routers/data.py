@@ -96,29 +96,50 @@ class IngestRequest(BaseModel):
 
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion via Prefect Flow (Daily or Backfill)."""
-    from automation.prefect_flows import daily_sync_flow, historical_backfill_flow
-    
-    def run_prefect_flow():
+    """Trigger data ingestion via separate process to prevent API freezing."""
+    import subprocess
+    import sys
+    import os
+
+    def run_ingestion_process():
         try:
-            # Clear any previous stop signal
-            client = get_qs_client()
-            client.stop_requested = False
+            # Use the same python interpreter as the current process
+            python_exe = sys.executable
+            # Path to a script that runs the flow
+            # For simplicity, we can use a small inline script or just run prefect_flows.py
+            env = os.environ.copy()
+            env["PYTHONPATH"] = f"{os.getcwd()}:{env.get('PYTHONPATH', '')}"
             
+            # Create stop signal path
+            from config.settings import get_settings
+            signal_file = get_settings().duckdb_path.parent / "ingest_stop.signal"
+            if signal_file.exists():
+                signal_file.unlink()
+
+            logger.info(f"Starting ingestion process: {request.mode}")
             ingestion_state["status"] = "running"
-            if request.mode == "backfill":
-                ingestion_state["step"] = "Backfill: Full History"
-                historical_backfill_flow()
+            ingestion_state["step"] = f"Initializing {request.mode}..."
+            
+            # Simple wrapper to run the flow
+            cmd = [
+                python_exe, "-c", 
+                f"from automation.prefect_flows import {request.mode}_sync_flow; {request.mode}_sync_flow()" if request.mode == "daily" else f"from automation.prefect_flows import historical_backfill_flow; historical_backfill_flow()"
+            ]
+            
+            process = subprocess.Popen(cmd, env=env)
+            process.wait()
+            
+            if process.returncode == 0:
+                ingestion_state["status"] = "completed"
+                ingestion_state["step"] = f"Finished: {request.mode}"
             else:
-                ingestion_state["step"] = "Daily Sync: EOD"
-                daily_sync_flow()
+                ingestion_state["status"] = "error"
+                ingestion_state["details"] = f"Process exited with code {process.returncode}"
                 
-            ingestion_state["status"] = "completed"
-            ingestion_state["step"] = f"Finished: {request.mode}"
         except Exception as e:
-            logger.error(f"Prefect Flow failed: {e}")
+            logger.error(f"Ingestion process failed: {e}")
             ingestion_state["status"] = "error"
             ingestion_state["details"] = str(e)
 
-    background_tasks.add_task(run_prefect_flow)
-    return {"status": "started", "message": f"Ingestion ({request.mode}) started via Prefect"}
+    background_tasks.add_task(run_ingestion_process)
+    return {"status": "started", "message": f"Ingestion ({request.mode}) started in background process"}

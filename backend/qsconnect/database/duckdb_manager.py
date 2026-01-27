@@ -35,30 +35,27 @@ class DuckDBManager:
         
         logger.info(f"DuckDB manager initialized: {self.db_path} (read_only={self.read_only})")
     
-    def connect(self) -> duckdb.DuckDBPyConnection:
-        """Establish a NEW database connection with absolute path resolution."""
+    def connect(self, read_only: Optional[bool] = None) -> duckdb.DuckDBPyConnection:
+        """Establish a database connection with robust retry logic."""
         import time
         import random
-        max_retries = 15
+        max_retries = 10
         db_path_str = str(self.db_path.absolute().resolve())
+        
+        # Use instance default if not specified
+        r_only = read_only if read_only is not None else self.read_only
         
         for attempt in range(max_retries):
             try:
-                # Direct connection without complex config to avoid name auto-generation conflicts
-                conn = duckdb.connect(
-                    database=db_path_str, 
-                    read_only=self.read_only
-                )
-                # Set performance pragmas immediately
+                conn = duckdb.connect(database=db_path_str, read_only=r_only)
                 conn.execute("PRAGMA threads=1")
                 return conn
             except Exception as e:
                 err_msg = str(e).lower()
-                if ("used by another process" in err_msg or "cannot open" in err_msg or "unique file handle" in err_msg) and attempt < max_retries - 1:
-                    wait_time = (0.1 * (2 ** attempt)) + (random.random() * 0.1)
+                if ("used by another process" in err_msg or "cannot open" in err_msg) and attempt < max_retries - 1:
+                    wait_time = (0.05 * (2 ** attempt)) + (random.random() * 0.05)
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"Failed to connect to DuckDB: {e}")
                     raise e
         
         raise ConnectionError("Failed to initialize DuckDB connection.")
@@ -520,12 +517,21 @@ class DuckDBManager:
     # =====================
     
     def query(self, sql: str) -> pl.DataFrame:
-        """Execute a SQL query and return results as Polars DataFrame."""
-        conn = self.connect()
+        """Execute a SQL query. Attempts read-only first for maximum concurrency."""
         try:
-            return conn.execute(sql).pl()
-        finally:
-            conn.close()
+            # Try read-only connection first
+            conn = self.connect(read_only=True)
+            try:
+                return conn.execute(sql).pl()
+            finally:
+                conn.close()
+        except Exception:
+            # Fallback to instance default (might be read-write)
+            conn = self.connect()
+            try:
+                return conn.execute(sql).pl()
+            finally:
+                conn.close()
     
     def query_pandas(self, sql: str) -> pd.DataFrame:
         """Execute a SQL query and return results as Pandas DataFrame."""
