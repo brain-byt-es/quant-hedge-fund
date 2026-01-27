@@ -17,44 +17,40 @@ interface SignalControlCenterProps {
 
 export function SignalControlCenter({ symbol, setSymbol, lookback, setLookback }: SignalControlCenterProps) {
   return (
-    <Card className="border-zinc-800 bg-zinc-950">
-        <CardHeader className="py-2 border-b border-zinc-800">
-            <CardTitle className="text-xs font-mono uppercase tracking-widest text-zinc-400">Signal Control Center</CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-4">
-            <div className="space-y-2">
-                <label className="text-[10px] uppercase text-zinc-600 font-bold">Quick Focus</label>
-                <div className="flex flex-wrap gap-1">
+    <Card className="border-zinc-800/50 bg-zinc-900/40 backdrop-blur-md shadow-xl">
+        <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-zinc-800/50">
+            {/* Quick Focus Section */}
+            <div className="p-3 flex-1">
+                <label className="text-[10px] uppercase text-zinc-500 font-bold tracking-widest block mb-2">Quick Universe Focus</label>
+                <div className="flex flex-wrap gap-1.5">
                     {QUICK_TICKERS.map(t => (
-                        <Button 
+                        <button 
                             key={t} 
-                            variant="outline" 
-                            size="sm" 
-                            className={`h-6 text-[10px] px-2 font-mono ${symbol === t ? 'border-emerald-500 text-emerald-500 bg-emerald-950/20' : 'border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
+                            className={`h-6 text-[10px] px-2 font-mono rounded transition-all border ${symbol === t ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-zinc-950/50 border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'}`}
                             onClick={() => setSymbol(t)}
                         >
                             {t}
-                        </Button>
+                        </button>
                     ))}
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-zinc-600 font-bold">Focus Symbol</label>
-                    <div className="relative">
-                        <Search className="absolute left-2 top-1.5 h-3 w-3 text-zinc-500" />
-                        <Input 
-                            className="h-7 text-xs font-mono pl-7 bg-black border-zinc-800 uppercase" 
-                            value={symbol}
-                            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                        />
-                    </div>
+            {/* Selection Section */}
+            <div className="p-3 w-full md:w-[400px] flex items-center gap-4">
+                <div className="flex-1 space-y-1.5">
+                    <label className="text-[10px] uppercase text-zinc-500 font-bold tracking-widest flex items-center gap-1">
+                        <Search className="h-2.5 w-2.5" /> Focus Symbol
+                    </label>
+                    <Input 
+                        className="h-8 text-xs font-mono bg-zinc-950/50 border-zinc-800 focus-visible:ring-emerald-500/30 uppercase tracking-widest" 
+                        value={symbol}
+                        onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                    />
                 </div>
-                <div className="space-y-2">
+                <div className="flex-1 space-y-1.5">
                     <div className="flex justify-between">
-                        <label className="text-[10px] uppercase text-zinc-600 font-bold">Lookback</label>
-                        <span className="text-[10px] font-mono text-zinc-400">{lookback} Days</span>
+                        <label className="text-[10px] uppercase text-zinc-500 font-bold tracking-widest">Lookback</label>
+                        <span className="text-[10px] font-mono text-emerald-500">{lookback} Days</span>
                     </div>
                     <Slider 
                         value={[lookback]} 
@@ -62,11 +58,11 @@ export function SignalControlCenter({ symbol, setSymbol, lookback, setLookback }
                         min={20} 
                         max={504} 
                         step={1}
-                        className="py-1"
+                        className="py-2"
                     />
                 </div>
             </div>
-        </CardContent>
+        </div>
     </Card>
   )
 }

@@ -75,55 +75,112 @@ export default function ResearchPage() {
       loadSymbolData()
   }, [symbol, lookback])
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-black text-zinc-300 font-sans p-2 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-            <div className="flex justify-between items-center mb-2 px-2">
-                <h1 className="text-sm font-bold tracking-tight text-zinc-100 uppercase">Research Lab</h1>
-                <TabsList className="h-7 bg-zinc-900 border border-zinc-800">
-                    <TabsTrigger value="signals" className="text-[10px] h-5 data-[state=active]:bg-zinc-800 data-[state=active]:text-emerald-500">Signal Charts</TabsTrigger>
-                    <TabsTrigger value="governance" className="text-[10px] h-5 data-[state=active]:bg-zinc-800 data-[state=active]:text-blue-500">Governance</TabsTrigger>
-                </TabsList>
-            </div>
+    return (
 
-            <TabsContent value="signals" className="flex-1 min-h-0 space-y-2">
-                
-                {/* Control Center */}
-                <div className="h-auto">
-                    <SignalControlCenter 
-                        symbol={symbol} 
-                        setSymbol={setSymbol} 
-                        lookback={lookback} 
-                        setLookback={setLookback} 
-                    />
-                </div>
+      <div className="flex flex-col h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
 
-                {/* Main Grid */}
-                <div className="grid grid-cols-12 gap-2 flex-1 min-h-0 h-full pb-2">
-                    
-                    {/* Left Col: Charts */}
-                    <div className="col-span-8 grid grid-rows-2 gap-2 h-full">
-                        <div className="grid grid-cols-2 gap-2 h-full">
-                            <RankScatter data={signals} focusSymbol={symbol} />
-                            <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 h-full">
-                             <FactorDistributionChart data={signals} />
-                             <RawRankingsTable data={signals} />
-                        </div>
-                    </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
 
-                    {/* Right Col: Profile */}
-                    <div className="col-span-4 h-full">
-                        <CompanyProfile profile={profile} />
-                    </div>
-                </div>
-            </TabsContent>
+              <div className="flex justify-between items-center px-2">
 
-            <TabsContent value="governance" className="flex-1 min-h-0">
-                <StrategyGovernance />
-            </TabsContent>
-        </Tabs>
-    </div>
-  )
-}
+                  <div className="flex flex-col">
+
+                      <h1 className="text-xl font-bold tracking-tight text-white">Research Lab</h1>
+
+                      <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Signals // Alpha Discovery</p>
+
+                  </div>
+
+                  <TabsList className="bg-zinc-900/50 border border-zinc-800 p-1">
+
+                      <TabsTrigger value="signals" className="text-xs px-4 data-[state=active]:bg-zinc-800 data-[state=active]:text-emerald-400">Signal Charts</TabsTrigger>
+
+                      <TabsTrigger value="governance" className="text-xs px-4 data-[state=active]:bg-zinc-800 data-[state=active]:text-blue-400">Governance</TabsTrigger>
+
+                  </TabsList>
+
+              </div>
+
+  
+
+              <TabsContent value="signals" className="flex-1 min-h-0 m-0 outline-none">
+
+                  <div className="flex flex-col gap-4 h-full">
+
+                      {/* Control Center - SaaS Style */}
+
+                      <SignalControlCenter 
+
+                          symbol={symbol} 
+
+                          setSymbol={setSymbol} 
+
+                          lookback={lookback} 
+
+                          setLookback={setLookback} 
+
+                      />
+
+  
+
+                      {/* Main Grid - Balanced Layout */}
+
+                      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
+
+                          
+
+                          {/* Left Col: Charts (8 Units) */}
+
+                          <div className="col-span-8 grid grid-rows-2 gap-4 h-full">
+
+                              <div className="grid grid-cols-2 gap-4">
+
+                                  <RankScatter data={signals} focusSymbol={symbol} />
+
+                                  <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
+
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+
+                                   <FactorDistributionChart data={signals} />
+
+                                   <RawRankingsTable data={signals} />
+
+                              </div>
+
+                          </div>
+
+  
+
+                          {/* Right Col: Profile (4 Units) */}
+
+                          <div className="col-span-4 h-full overflow-hidden">
+
+                              <CompanyProfile profile={profile} />
+
+                          </div>
+
+                      </div>
+
+                  </div>
+
+              </TabsContent>
+
+  
+
+              <TabsContent value="governance" className="flex-1 min-h-0 m-0 outline-none">
+
+                  <StrategyGovernance />
+
+              </TabsContent>
+
+          </Tabs>
+
+      </div>
+
+    )
+
+  }
+
+  
