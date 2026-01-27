@@ -113,8 +113,8 @@ export function ProcessMonitor() {
   }, []);
 
   return (
-    <Card className="border-border bg-card/50 backdrop-blur-sm">
-      <CardHeader className="pb-3 border-b border-border">
+    <Card className="h-full border-border bg-card/50 backdrop-blur-sm flex flex-col overflow-hidden">
+      <CardHeader className="pb-3 border-b border-border flex-none">
         <div className="flex items-center justify-between">
             <div className="space-y-1">
                 <CardTitle className="text-sm font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-2">

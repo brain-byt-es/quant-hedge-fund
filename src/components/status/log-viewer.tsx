@@ -42,15 +42,15 @@ export function LogViewer() {
   }, [])
 
   return (
-    <Card className="h-full bg-background text-primary font-mono border-border">
-      <CardHeader className="py-3 border-b border-border bg-muted/50">
+    <Card className="h-full bg-background text-primary font-mono border-border flex flex-col overflow-hidden">
+      <CardHeader className="py-3 border-b border-border bg-muted/50 flex-none">
         <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
             <Terminal className="h-4 w-4 text-primary" />
             System Execution Logs
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[300px] p-4">
+      <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full p-4">
             <div className="space-y-1">
                 {logs.map((log, i) => (
                     <div key={i} className="text-xs grid grid-cols-12 gap-2 hover:bg-accent/5 p-1 rounded transition-colors">

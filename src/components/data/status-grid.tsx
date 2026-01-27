@@ -35,36 +35,34 @@ export function DataStatusGrid() {
   }, [])
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
       {tables.map((table) => (
         <Card 
           key={table.name}
           className={`
-            p-3 border flex flex-col justify-between h-24
-            bg-card/50 backdrop-blur-md
-            ${table.status === 'active' && table.count > 0 ? 'border-border' : 'border-muted'}
+            p-2 border flex flex-col justify-between min-h-[60px]
+            bg-card/50 backdrop-blur-md transition-all
+            ${table.status === 'active' && table.count > 0 ? 'border-border shadow-sm' : 'border-muted opacity-60'}
           `}
         >
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2">
-              <Table className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider truncate max-w-[100px]" title={table.name}>
-                {table.name.replace('bulk_', '').replace('_fmp', '')}
+          <div className="flex justify-between items-start gap-1">
+            <div className="flex items-center gap-1.5 truncate">
+              <Table className="h-3 w-3 text-primary/50 shrink-0" />
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-tighter truncate" title={table.name}>
+                {table.name.replace('bulk_', '').replace('_fmp', '').replace('_statement_annual', '')}
               </span>
             </div>
             {table.status === 'syncing' && (
-              <Badge variant="outline" className="h-4 text-[9px] border-primary/50 text-primary animate-pulse px-1">
-                SYNC
-              </Badge>
+              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
             )}
           </div>
           
-          <div className="flex items-end justify-between mt-2">
-            <span className="text-xl font-mono font-bold text-foreground">
-              {table.count.toLocaleString()}
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="text-sm font-mono font-bold text-foreground">
+              {table.count >= 0 ? table.count.toLocaleString() : '---'}
             </span>
-            <span className="text-[9px] text-muted-foreground font-mono">
-              {table.lastUpdated || '-'}
+            <span className="text-[8px] text-muted-foreground/50 font-mono">
+              {table.lastUpdated || ''}
             </span>
           </div>
         </Card>
