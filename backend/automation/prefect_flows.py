@@ -50,6 +50,7 @@ def task_ingest_fundamentals(limit: int = 5):
                 batch_symbols = us_symbols[i : i + batch_size]
                 logger.info(f"  > Processing batch {i // batch_size + 1}/{(total_symbols // batch_size) + 1} ({len(batch_symbols)} symbols)...")
                 
+                data = None
                 try:
                     data = client._fmp_client.get_starter_fundamentals(
                         symbols=batch_symbols,
