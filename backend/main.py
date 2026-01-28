@@ -19,7 +19,13 @@ async def lifespan(app: FastAPI):
         # Force initialization of Omega Singleton
         get_omega_app()
         # Initialize Data Client early
-        get_qs_client()
+        client = get_qs_client()
+        
+        # System Heartbeat Logging
+        client.log_event("INFO", "System", "Quant Hedge Fund Platform: Neural Bridge Established.")
+        client.log_event("INFO", "Omega", "Execution Layer Singletons online.")
+        client.log_event("INFO", "Research", "Research Lab data connectors active.")
+        
     except Exception as e:
         logger.error(f"Error initializing services: {e}")
     

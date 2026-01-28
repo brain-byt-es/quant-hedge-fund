@@ -297,6 +297,13 @@ class Client:
             end_year=end_year,
         )
     
+    def log_event(self, level: str, component: str, message: str, details: Optional[Dict] = None) -> None:
+        """Log a system event to the database telemetry table."""
+        try:
+            self._db_manager.log_event(level, component, message, details)
+        except Exception as e:
+            logger.error(f"Failed to log event to DB: {e}")
+
     # =====================
     # Database Operations
     # =====================

@@ -3,6 +3,16 @@ from datetime import datetime, date, timedelta
 from loguru import logger
 from qsconnect import Client as QSConnectClient
 import pandas as pd
+import polars as pl
+
+# ==========================================
+# Helpers
+# ==========================================
+
+def log_step(client: QSConnectClient, level: str, component: str, message: str):
+    """Log to both loguru and DB telemetry."""
+    logger.log(level, f"[{component}] {message}")
+    client.log_event(level, component, message)
 
 # ==========================================
 # Tasks (Internal Client Initialization)
@@ -12,9 +22,10 @@ import pandas as pd
 def task_update_stock_list():
     """Update US stock list."""
     client = QSConnectClient()
-    logger.info("Prefect: Updating Stock List...")
+    log_step(client, "INFO", "Ingest", "Starting Stock List update...")
     df = client._fmp_client.get_stock_list()
     client._db_manager.upsert_stock_list(df)
+    log_step(client, "INFO", "Ingest", f"Stock List updated: {len(df)} symbols cached.")
     return f"Updated symbols"
 
 @task(retries=2)
@@ -24,8 +35,9 @@ def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Price
     start_dt = date.fromisoformat(start_date) if start_date else None
     end_dt = date.fromisoformat(end_date) if end_date else None
     
-    logger.info(f"Prefect: Ingesting {desc} from {start_date} to {end_date}...")
+    log_step(client, "INFO", "Ingest", f"Starting Price Ingestion: {desc} ({start_date} to {end_date})")
     client.bulk_historical_prices(start_date=start_dt, end_date=end_dt)
+    log_step(client, "INFO", "Ingest", f"Price Ingestion complete: {desc}")
     return f"{desc} sync complete"
 
 @task(retries=0)
@@ -39,18 +51,21 @@ def task_ingest_fundamentals(limit: int = 5):
         batch_size = 500
         total_symbols = len(us_symbols)
         
+        log_step(client, "INFO", "Ingest", f"Starting Fundamentals Sync for {total_symbols} symbols...")
+        
         for stmt in fundamental_types:
-            logger.info(f"Prefect: Ingesting {stmt} (Annual) - Total Symbols: {total_symbols}")
+            log_step(client, "INFO", "Ingest", f"Processing layer: {stmt}")
             
             for i in range(0, total_symbols, batch_size):
                 if client.stop_requested:
-                    logger.warning("Prefect: Stop signal received. Aborting fundamentals sync.")
+                    log_step(client, "WARNING", "Ingest", "Stop signal received. Aborting fundamentals sync.")
                     return "Stopped"
 
                 batch_symbols = us_symbols[i : i + batch_size]
-                logger.info(f"  > Processing batch {i // batch_size + 1}/{(total_symbols // batch_size) + 1} ({len(batch_symbols)} symbols)...")
+                # Log progress every 5 batches to avoid clutter but show activity
+                if (i // batch_size) % 5 == 0:
+                    log_step(client, "INFO", "Ingest", f"  > Ingesting {stmt}: {i}/{total_symbols} symbols processed.")
                 
-                data = None
                 try:
                     data = client._fmp_client.get_starter_fundamentals(
                         symbols=batch_symbols,
@@ -59,32 +74,28 @@ def task_ingest_fundamentals(limit: int = 5):
                         stop_check=lambda: client.stop_requested
                     )
                     
-                    # Robust DataFrame handling (Pandas vs Polars)
                     if isinstance(data, pd.DataFrame):
-                        if not data.empty:
-                            data = pl.from_pandas(data)
-                        else:
-                            data = pl.DataFrame()
+                        data = pl.from_pandas(data) if not data.empty else pl.DataFrame()
                     
                     if not data.is_empty():
                         client._db_manager.upsert_fundamentals(stmt, "annual", data)
                         
                 except Exception as batch_err:
-                    logger.error(f"Batch failed (type={type(data)}): {batch_err}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+                    logger.error(f"Batch failed: {batch_err}")
                     
+        log_step(client, "INFO", "Ingest", "Fundamentals Synchronization successful.")
     except Exception as e:
         logger.error(f"Fundamentals sync failed: {e}")
-        # Do not raise, to prevent retries on 403/404
     return "Fundamentals sync complete"
 
 @task
 def task_rebuild_bundle():
     """Finalize data for Zipline."""
     client = QSConnectClient()
+    log_step(client, "INFO", "Bundler", "Starting Zipline Bundle reconstruction...")
     client.build_zipline_bundle("historical_prices_fmp")
     client.ingest_bundle("historical_prices_fmp")
+    log_step(client, "INFO", "Bundler", "Zipline Bundle ready for Research Lab.")
     return "Bundle ready"
 
 # ==========================================
