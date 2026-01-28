@@ -45,6 +45,7 @@ class Client:
         datalink_api_key: Optional[str] = None,
         duckdb_path: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
+        read_only: bool = False,
     ):
         """
         Initialize the QS Connect client.
@@ -54,6 +55,7 @@ class Client:
             datalink_api_key: Datalink API key (defaults to environment variable)
             duckdb_path: Path to DuckDB database file
             cache_dir: Directory for parquet file cache
+            read_only: Whether to open the database in read-only mode
         """
         settings = get_settings()
         
@@ -71,14 +73,14 @@ class Client:
         
         # Initialize sub-clients
         self._fmp_client = FMPClient(api_key=self._fmp_api_key)
-        self._db_manager = DuckDBManager(db_path=self._duckdb_path)
+        self._db_manager = DuckDBManager(db_path=self._duckdb_path, read_only=read_only)
         self._cache_manager = CacheManager(cache_dir=self._cache_dir)
         self._bundler = ZiplineBundler(db_manager=self._db_manager)
         
         # Stop Signal for background tasks
         self._stop_requested = False
         
-        logger.info(f"QS Connect client initialized. Cache: {self._cache_dir}")
+        logger.info(f"QS Connect client initialized. Cache: {self._cache_dir} (Read-Only: {read_only})")
 
     @property
     def stop_requested(self) -> bool:

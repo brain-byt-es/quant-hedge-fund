@@ -12,10 +12,10 @@ router = APIRouter()
 qs_client = None
 
 def get_qs_client():
-    """Singleton for QS Connect Client (Shared Connection)"""
+    """Singleton for QS Connect Client (Read-Only for API responsiveness)"""
     global qs_client
     if not qs_client:
-        qs_client = QSConnectClient()
+        qs_client = QSConnectClient(read_only=True)
     return qs_client
 
 class IngestRequest(BaseModel):

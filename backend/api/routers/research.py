@@ -98,9 +98,12 @@ def get_company_profile(symbol: str):
                         "market_cap": float(api_profile.get("mktCap", 0)),
                         "ipo_date": api_profile.get("ipoDate", "N/A")
                     }
-                    # Save to DB for caching
-                    import pandas as pd
-                    client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
+                    # Save to DB for caching (Try-except to handle locks during background ingestion)
+                    try:
+                        import pandas as pd
+                        client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
+                    except:
+                        logger.debug(f"JIT: Cache write skipped for {symbol} (Database busy)")
             except Exception as jit_err:
                 logger.error(f"❌ JIT Profile fetch failed for {symbol}: {jit_err}")
 
