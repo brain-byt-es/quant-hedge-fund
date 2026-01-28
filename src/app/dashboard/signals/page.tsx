@@ -24,11 +24,17 @@ interface SignalPriceData {
   [key: string]: unknown;
 }
 
+interface Signal {
+  symbol: string;
+  rank: number;
+  factor_signal: number;
+}
+
 export default function SignalDashboardPage() {
   const [symbol, setSymbol] = useState("RGTI")
   const [window, setTimeWindow] = useState("1Y")
   const [priceData, setPriceHistory] = useState<SignalPriceData[]>([])
-  const [signals, setSignals] = useState<any[]>([])
+  const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(false)
 
   // Find dynamic metrics for selected symbol

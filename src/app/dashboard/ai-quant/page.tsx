@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { api } from "@/lib/api"
-import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Database, Bot, Users, Activity } from "lucide-react"
+import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Bot, Users, Activity } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 

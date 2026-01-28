@@ -55,7 +55,7 @@ export default function ResearchPage() {
               if (Array.isArray(data)) {
                   setSignals(data)
               }
-          } catch (err) {
+          } catch {
               console.debug("Research Lab: Backend busy, skipping signals fetch...")
           }
       }
@@ -81,7 +81,7 @@ export default function ResearchPage() {
               if (Array.isArray(h)) {
                   setPriceHistory(h)
               }
-          } catch (err) {
+          } catch {
               console.debug("Research Lab: Backend busy or symbol missing, skipping profile fetch...")
           } finally {
               setLoadingProfile(false)

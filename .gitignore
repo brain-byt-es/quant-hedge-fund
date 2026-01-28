@@ -76,5 +76,13 @@ logs/
 *.log
 
 # Testing
+
 .pytest_cache/
+
 htmlcov/
+
+
+
+# OpenBB
+
+openbb/

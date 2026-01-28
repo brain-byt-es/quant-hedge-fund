@@ -6,9 +6,6 @@ import { ExposureChart } from "@/components/dashboard/exposure-chart"
 import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { api } from "@/lib/api"
 import { 
-  Zap, 
-  Play,
-  Pause,
   Clock,
 } from "lucide-react"
 import { useWebSocket } from "@/hooks/use-websocket"
@@ -62,7 +59,10 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const init = async () => {
+        await fetchData()
+    }
+    init()
     const interval = setInterval(fetchData, 5000)
     return () => clearInterval(interval)
   }, [fetchData])

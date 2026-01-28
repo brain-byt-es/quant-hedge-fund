@@ -336,6 +336,25 @@ class DuckDBManager:
                 INSERT OR REPLACE INTO historical_prices_fmp (symbol, date, open, high, low, close, volume)
                 SELECT symbol, date, open, high, low, close, volume FROM temp_prices
             """)
+            
+            # Post-Upsert Sanity: Check for outliers in the current batch
+            try:
+                outliers = conn.execute("""
+                    WITH returns AS (
+                        SELECT symbol, date, close, lag(close) OVER (PARTITION BY symbol ORDER BY date) as prev_close
+                        FROM historical_prices_fmp
+                        WHERE symbol IN (SELECT DISTINCT symbol FROM temp_prices)
+                    )
+                    SELECT symbol, date, close, prev_close 
+                    FROM returns 
+                    WHERE abs((close/NULLIF(prev_close,0))-1) > 0.5
+                """).pl()
+                
+                if not outliers.is_empty():
+                    for row in outliers.to_dicts():
+                        self.log_event("WARNING", "DataValidator", f"Price anomaly detected for {row['symbol']} on {row['date']}: ${row['prev_close']} -> ${row['close']}")
+            except: pass
+
             return len(df)
         finally:
             try: conn.unregister("temp_prices")
@@ -495,6 +514,12 @@ class DuckDBManager:
             ORDER BY last_date ASC, symbol
         """
         return self.query(sql)
+
+    def get_full_health_report(self) -> Dict[str, Any]:
+        """Run comprehensive validation suite."""
+        from qsconnect.database.data_validator import DataValidator
+        validator = DataValidator(self)
+        return validator.run_full_health_check()
 
     def get_table_stats(self) -> List[Dict[str, Any]]:
         """Get row counts for key tables."""

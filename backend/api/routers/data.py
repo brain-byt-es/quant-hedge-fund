@@ -36,11 +36,10 @@ def get_data_status():
 
 @router.get("/health")
 def get_data_health():
-    """Get detailed health check of the data (gaps, stale data)."""
+    """Get detailed health check of the data (gaps, outliers, anomalies)."""
     try:
         client = get_qs_client()
-        df = client.get_data_health()
-        return df.to_dicts()
+        return client._db_manager.get_full_health_report()
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
