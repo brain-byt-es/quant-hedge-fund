@@ -64,7 +64,7 @@ const data = {
     },
     {
       title: "Signal Terminal",
-      url: "/dashboard/research/signals",
+      url: "/dashboard/signals",
       icon: IconChartCandle,
     },
   ],

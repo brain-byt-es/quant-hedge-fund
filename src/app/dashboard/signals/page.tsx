@@ -56,7 +56,7 @@ export default function SignalDashboardPage() {
       {/* 1. HEADER / CONTROL BAR */}
       <div className="flex items-center justify-between mb-4 border-b border-border pb-3 px-3 shrink-0">
         <div className="flex items-center gap-5">
-            <Link href="/dashboard/research">
+            <Link href="/dashboard">
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8 transition-colors">
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
