@@ -553,9 +553,23 @@ class DuckDBManager:
             conn.close()
 
     def get_symbols(self) -> List[str]:
-        """Get list of all symbols in the database."""
+        """Get list of all symbols in the price database."""
         result = self.query("SELECT DISTINCT symbol FROM historical_prices_fmp ORDER BY symbol")
         return result["symbol"].to_list() if not result.is_empty() else []
+    
+    def get_symbols_with_data(self, table_name: str) -> List[str]:
+        """Get list of symbols that already have entries in a specific fundamental table."""
+        try:
+            # Check if table exists first
+            exists = self.query(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table_name}'")[0,0] > 0
+            if not exists:
+                return []
+            
+            result = self.query(f"SELECT DISTINCT symbol FROM {table_name}")
+            return result["symbol"].to_list() if not result.is_empty() else []
+        except Exception as e:
+            logger.debug(f"Could not fetch symbols for {table_name}: {e}")
+            return []
     
     def get_date_range(self) -> Dict[str, Any]:
         """Get the date range of price data in the database."""

@@ -56,32 +56,48 @@ def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Price
 
 @task(retries=0)
 def task_ingest_fundamentals(limit: int = 5):
-    """Ingest annual financials (Starter Plan) in batches."""
+    """Ingest annual financials with Smart Resume support."""
     try:
         client = QSConnectClient()
         fundamental_types = ["income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"]
         us_symbols = client._fmp_client.get_stock_list()["symbol"].tolist()
+        total_universe = len(us_symbols)
         
-        batch_size = 500
-        total_symbols = len(us_symbols)
-        
-        log_step(client, "INFO", "Ingest", f"Starting Fundamentals Sync for {total_symbols} symbols...")
+        log_step(client, "INFO", "Ingest", f"Starting Fundamentals Sync (Universe: {total_universe} symbols)...")
         
         for stmt in fundamental_types:
-            log_step(client, "INFO", "Ingest", f"Processing layer: {stmt}")
+            table_name = f"bulk_{stmt.replace('-', '_')}_annual_fmp"
             
-            for i in range(0, total_symbols, batch_size):
+            # 1. SMART RESUME: Find symbols already in DB for this statement
+            existing_symbols = set(client._db_manager.get_symbols_with_data(table_name))
+            pending_symbols = [s for s in us_symbols if s not in existing_symbols]
+            
+            total_pending = len(pending_symbols)
+            skipped = total_universe - total_pending
+            
+            if skipped > 0:
+                log_step(client, "INFO", "Ingest", f"⏭️ {stmt}: Skipping {skipped} symbols already in database.")
+            
+            if total_pending == 0:
+                log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already synchronized.")
+                continue
+
+            log_step(client, "INFO", "Ingest", f"📥 {stmt}: Pending workload: {total_pending} symbols.")
+            
+            batch_size = 500
+            for i in range(0, total_pending, batch_size):
                 if client.stop_requested:
                     log_step(client, "WARNING", "Ingest", "Stop signal received. Aborting fundamentals sync.")
                     return "Stopped"
 
-                batch_symbols = us_symbols[i : i + batch_size]
-                progress_pct = (i / total_symbols) * 100
-                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_symbols}")
+                batch_symbols = pending_symbols[i : i + batch_size]
                 
-                # Log progress every 5 batches
+                # Update UI progress based on the current stmt layer
+                progress_pct = (i / total_pending) * 100
+                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_pending} (Resumed)")
+                
                 if (i // batch_size) % 5 == 0:
-                    log_step(client, "INFO", "Ingest", f"  > Ingesting {stmt}: {i}/{total_symbols} symbols processed.")
+                    log_step(client, "INFO", "Ingest", f"  > {stmt}: {i}/{total_pending} pending symbols processed.")
                 
                 try:
                     data = client._fmp_client.get_starter_fundamentals(
