@@ -592,12 +592,19 @@ class DuckDBManager:
         finally:
             conn.close()
 
-    def get_failed_symbols(self, data_type: str) -> List[str]:
-        """Get list of symbols that have previously failed for a specific data type."""
+    def get_failed_symbols(self, data_type: str, ttl_days: int = 30) -> List[str]:
+        """Get list of symbols that have failed recently (within TTL)."""
         try:
-            result = self.query(f"SELECT symbol FROM failed_scans WHERE data_type = '{data_type}'")
+            # Only ignore if the failure was recorded within the last 30 days
+            # This allows the system to re-check 'ghost' tickers periodically
+            result = self.query(f"""
+                SELECT symbol FROM failed_scans 
+                WHERE data_type = '{data_type}'
+                AND timestamp > (CURRENT_TIMESTAMP - INTERVAL {ttl_days} DAY)
+            """)
             return result["symbol"].to_list() if not result.is_empty() else []
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to fetch negative cache: {e}")
             return []
     
     def get_date_range(self) -> Dict[str, Any]:
