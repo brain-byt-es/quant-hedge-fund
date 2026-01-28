@@ -115,7 +115,7 @@ export function ProcessMonitor() {
   return (
     <Card className="h-full border-border bg-card/50 backdrop-blur-sm flex flex-col overflow-hidden">
       <CardHeader className="pb-3 border-b border-border flex-none">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
             <div className="space-y-1">
                 <CardTitle className="text-sm font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                     <Database className="h-4 w-4" /> Ingestion Engine
@@ -124,18 +124,18 @@ export function ProcessMonitor() {
                     {isRunning ? `ACTIVE: ${details}` : "Ready for data sync"}
                 </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 min-w-[140px]">
                 {isRunning ? (
-                    <Button size="sm" variant="destructive" className="h-7 text-[10px] uppercase font-bold" onClick={handleStopPipeline}>
-                        <Square className="mr-1 h-3 w-3 fill-current" /> Stop
+                    <Button size="sm" variant="destructive" className="h-8 text-[10px] uppercase font-bold w-full" onClick={handleStopPipeline}>
+                        <Square className="mr-2 h-3 w-3 fill-current" /> Stop Ingestion
                     </Button>
                 ) : (
                     <>
-                        <Button size="sm" variant="outline" className="h-7 text-[10px] uppercase font-bold border-border hover:bg-accent" onClick={() => handleRunPipeline("daily")}>
-                            <Zap className="mr-1 h-3 w-3 fill-current text-chart-4" /> Daily Sync
+                        <Button size="sm" variant="outline" className="h-8 text-[10px] uppercase font-bold border-border hover:bg-accent w-full justify-start" onClick={() => handleRunPipeline("daily")}>
+                            <Zap className="mr-2 h-3 w-3 fill-current text-chart-4" /> Daily Sync
                         </Button>
-                        <Button size="sm" variant="default" className="h-7 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleRunPipeline("backfill")}>
-                            <Database className="mr-1 h-3 w-3 fill-current" /> Full Backfill
+                        <Button size="sm" variant="default" className="h-8 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground w-full justify-start" onClick={() => handleRunPipeline("backfill")}>
+                            <Database className="mr-2 h-3 w-3 fill-current" /> Full Backfill
                         </Button>
                     </>
                 )}
