@@ -56,7 +56,7 @@ def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Price
 
 @task(retries=0)
 def task_ingest_fundamentals(limit: int = 5):
-    """Ingest annual financials with Smart Resume support."""
+    """Ingest annual financials with Smart Resume and Negative Caching support."""
     try:
         client = QSConnectClient()
         fundamental_types = ["income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"]
@@ -68,18 +68,24 @@ def task_ingest_fundamentals(limit: int = 5):
         for stmt in fundamental_types:
             table_name = f"bulk_{stmt.replace('-', '_')}_annual_fmp"
             
-            # 1. SMART RESUME: Find symbols already in DB for this statement
-            existing_symbols = set(client._db_manager.get_symbols_with_data(table_name))
-            pending_symbols = [s for s in us_symbols if s not in existing_symbols]
+            # 1. SMART RESUME + NEGATIVE CACHING
+            # Symbols we have data for
+            existing_data = set(client._db_manager.get_symbols_with_data(table_name))
+            # Symbols we already tried and were empty
+            failed_scans = set(client._db_manager.get_failed_symbols(stmt))
+            
+            completed_symbols = existing_data.union(failed_scans)
+            pending_symbols = [s for s in us_symbols if s not in completed_symbols]
             
             total_pending = len(pending_symbols)
-            skipped = total_universe - total_pending
+            skipped_data = len(existing_data)
+            skipped_empty = len(failed_scans)
             
-            if skipped > 0:
-                log_step(client, "INFO", "Ingest", f"⏭️ {stmt}: Skipping {skipped} symbols already in database.")
+            if skipped_data > 0 or skipped_empty > 0:
+                log_step(client, "INFO", "Ingest", f"⏭️ {stmt}: Skipping {skipped_data} existing and {skipped_empty} previously empty symbols.")
             
             if total_pending == 0:
-                log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already synchronized.")
+                log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already processed.")
                 continue
 
             log_step(client, "INFO", "Ingest", f"📥 {stmt}: Pending workload: {total_pending} symbols.")
@@ -91,10 +97,8 @@ def task_ingest_fundamentals(limit: int = 5):
                     return "Stopped"
 
                 batch_symbols = pending_symbols[i : i + batch_size]
-                
-                # Update UI progress based on the current stmt layer
                 progress_pct = (i / total_pending) * 100
-                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_pending} (Resumed)")
+                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_pending}")
                 
                 if (i // batch_size) % 5 == 0:
                     log_step(client, "INFO", "Ingest", f"  > {stmt}: {i}/{total_pending} pending symbols processed.")
@@ -112,6 +116,16 @@ def task_ingest_fundamentals(limit: int = 5):
                     
                     if not data.is_empty():
                         client._db_manager.upsert_fundamentals(stmt, "annual", data)
+                        # Identify which symbols in the batch successfully returned data
+                        successful_symbols = set(data["symbol"].unique().to_list())
+                    else:
+                        successful_symbols = set()
+
+                    # Mark symbols that were in the batch but NOT in the result as 'Failed/Empty'
+                    # so we don't try them again.
+                    for s in batch_symbols:
+                        if s not in successful_symbols:
+                            client._db_manager.log_failed_scan(s, stmt, "No data available")
                         
                 except Exception as batch_err:
                     logger.error(f"Batch failed: {batch_err}")

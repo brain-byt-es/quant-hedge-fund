@@ -284,6 +284,17 @@ class DuckDBManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 25. System: Failed Scans (Negative Caching)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS failed_scans (
+                    symbol VARCHAR,
+                    data_type VARCHAR, -- e.g. income-statement, balance-sheet
+                    reason VARCHAR,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (symbol, data_type)
+                )
+            """)
             
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_sym ON historical_prices_fmp(symbol)")
@@ -569,6 +580,24 @@ class DuckDBManager:
             return result["symbol"].to_list() if not result.is_empty() else []
         except Exception as e:
             logger.debug(f"Could not fetch symbols for {table_name}: {e}")
+            return []
+
+    def log_failed_scan(self, symbol: str, data_type: str, reason: str = "Empty Result") -> None:
+        """Log a symbol that returned no data to prevent retries."""
+        conn = self.connect()
+        try:
+            conn.execute("INSERT OR IGNORE INTO failed_scans (symbol, data_type, reason) VALUES (?, ?, ?)", [symbol, data_type, reason])
+        except Exception as e:
+            logger.error(f"Failed to log failed scan: {e}")
+        finally:
+            conn.close()
+
+    def get_failed_symbols(self, data_type: str) -> List[str]:
+        """Get list of symbols that have previously failed for a specific data type."""
+        try:
+            result = self.query(f"SELECT symbol FROM failed_scans WHERE data_type = '{data_type}'")
+            return result["symbol"].to_list() if not result.is_empty() else []
+        except Exception:
             return []
     
     def get_date_range(self) -> Dict[str, Any]:
