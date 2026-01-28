@@ -142,7 +142,7 @@ export default function AIQuantPage() {
           const config = JSON.parse(strategyConfig)
           await api.runBacktest(config)
           alert("Strategy Deployed to Research Lab.")
-          router.push("/research")
+          router.push("/dashboard/research")
       } catch {
           alert("Invalid JSON Config.")
       }

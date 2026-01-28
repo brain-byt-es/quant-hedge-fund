@@ -42,29 +42,29 @@ const data = {
     },
     {
       title: "Live Ops",
-      url: "/live",
+      url: "/dashboard/live",
       icon: IconActivity,
     },
     {
       title: "Governance",
-      url: "/operations/governance",
+      url: "/dashboard/governance",
       icon: IconShieldCheck,
     },
   ],
   navIntelligence: [
     {
       title: "Research Lab",
-      url: "/research",
+      url: "/dashboard/research",
       icon: IconFlask,
     },
     {
       title: "AI Quant Team",
-      url: "/ai-quant",
+      url: "/dashboard/ai-quant",
       icon: IconRobot,
     },
     {
       title: "Signal Terminal",
-      url: "/research/signals",
+      url: "/dashboard/research/signals",
       icon: IconChartCandle,
     },
   ],
@@ -88,7 +88,7 @@ const data = {
   navSystem: [
     {
       name: "Data Hub",
-      url: "/data",
+      url: "/dashboard/data",
       icon: IconDatabase,
     },
   ],
