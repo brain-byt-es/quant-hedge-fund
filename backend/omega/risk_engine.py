@@ -169,6 +169,53 @@ class RiskManager:
         # Rule of thumb for normal distribution: ES is roughly 1.2-1.5x VaR at tail
         return var * 1.25
 
+    def get_portfolio_risk(self, positions: List[Dict[str, Any]], total_equity: float) -> Dict[str, Any]:
+        """
+        Get a structured summary of all portfolio risk metrics.
+        """
+        var_95 = self.calculate_portfolio_var(positions, 0.95)
+        es_95 = self.calculate_expected_shortfall(positions, 0.95)
+        
+        return {
+            "var_95_usd": float(var_95),
+            "var_95_percent": float(var_95 / total_equity) if total_equity > 0 else 0.0,
+            "expected_shortfall_usd": float(es_95),
+            "stress_tests": self.run_stress_test(positions, total_equity)
+        }
+
+    def run_stress_test(self, positions: List[Dict[str, Any]], total_equity: float) -> List[Dict[str, Any]]:
+        """
+        Run multiple 'What-if' crash scenarios.
+        """
+        scenarios = [
+            {"name": "S&P 500 Correction", "market_drop": -0.05, "beta": 1.0},
+            {"name": "Tech Sector Crash", "market_drop": -0.10, "beta": 1.5},
+            {"name": "Black Monday (1987)", "market_drop": -0.22, "beta": 1.0},
+            {"name": "NVDA Flash Crash", "symbol": "NVDA", "drop": -0.15}
+        ]
+        
+        results = []
+        for s in scenarios:
+            impact = 0.0
+            if "market_drop" in s:
+                # Impact = PortfolioValue * MarketDrop * PortfolioBeta
+                # Assuming portfolio beta of 1.1 for now
+                impact = total_equity * s["market_drop"] * s.get("beta", 1.1)
+            elif "symbol" in s:
+                # Specific symbol crash
+                for p in positions:
+                    if p["symbol"] == s["symbol"]:
+                        impact = p["market_value"] * s["drop"]
+            
+            results.append({
+                "scenario": s["name"],
+                "impact_usd": float(impact),
+                "impact_percent": float(impact / total_equity) if total_equity > 0 else 0.0,
+                "status": "SEVERE" if abs(impact/total_equity) > 0.1 else "WARNING"
+            })
+            
+        return results
+
     def get_volatility_adjusted_size(self, portfolio_value: float, price: float, atr: float, risk_per_trade_pct: float = 0.01) -> int:
         """
         Calculates position size based on ATR (Average True Range).

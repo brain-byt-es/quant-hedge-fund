@@ -2,8 +2,9 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Globe, Users, DollarSign, Loader2 } from "lucide-react"
+import { Globe, Users, DollarSign, Loader2, Radar as RadarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, PolarRadiusAxis } from "recharts"
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
@@ -23,6 +24,7 @@ interface ProfileData {
   dcf_value?: number;
   insider_sentiment?: string;
   latest_news?: { title: string, publishedDate: string, url: string, text: string }[];
+  factor_attribution?: { factor: string, score: number }[];
   [key: string]: string | number | undefined | unknown;
 }
 
@@ -78,7 +80,29 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                     <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-primary font-bold">
                         Alpha Intelligence
                     </AccordionTrigger>
-                    <AccordionContent className="pb-5">
+                    <AccordionContent className="pb-5 space-y-4">
+                        {/* Radar Chart: Factor Attribution */}
+                        <div className="h-[180px] w-full bg-card/20 rounded-xl border border-border/30 p-2 relative overflow-hidden shadow-inner">
+                            <div className="absolute top-2 left-3 flex items-center gap-1.5 opacity-50">
+                                <RadarIcon className="h-3 w-3" />
+                                <span className="text-[8px] font-mono uppercase tracking-widest">Factor Profile</span>
+                            </div>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart data={profile.factor_attribution} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <PolarGrid stroke="var(--border)" />
+                                    <PolarAngleAxis dataKey="factor" tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontWeight: 'bold' }} />
+                                    <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                                    <Radar
+                                        name={profile.symbol}
+                                        dataKey="score"
+                                        stroke="var(--primary)"
+                                        fill="var(--primary)"
+                                        fillOpacity={0.3}
+                                    />
+                                </RadarChart>
+                            </ResponsiveContainer>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
                             <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20">
                                 <span className="text-[10px] text-primary/80 uppercase font-black tracking-widest block mb-1.5">DCF Value</span>

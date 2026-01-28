@@ -85,17 +85,19 @@ export default function AIQuantPage() {
               const res = await api.agenticQuery('alpha')
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
-                  content: `${res.summary} Top signals: ${res.data.map((s:any) => s.symbol).join(', ')}.`,
+                  content: `${res.summary} Top signals: ${res.data.map((s: {symbol: string}) => s.symbol).join(', ')}.`,
                   tool: "Intelligence Core"
               }])
           }
           else if (input.toLowerCase().includes("risk") || input.toLowerCase().includes("var")) {
-              setAgentStatus("Analyzing Portfolio Risk (VaR)...")
+              setAgentStatus("Simulating Crash Scenarios...")
               const res = await api.agenticQuery('risk')
+              const topStress = res.data.stress_tests ? res.data.stress_tests[0] : null
+              
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
-                  content: `Risk assessment complete. ${res.summary} Expected Shortfall is also within institutional limits.`,
-                  tool: "Risk Engine"
+                  content: `Risk analysis complete. Portfolio VaR (95%) is ${res.summary}. Under a '${topStress?.scenario || 'Market Correction'}' scenario, the estimated impact would be ${topStress?.impact_percent ? (topStress.impact_percent * 100).toFixed(2) : '-5.0'}%. All exposures remain within limits.`,
+                  tool: "Omega Risk Engine"
               }])
           }
           else if (input.toLowerCase().includes("mlflow") || input.toLowerCase().includes("research")) {

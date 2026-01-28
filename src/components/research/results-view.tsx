@@ -3,6 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { PortfolioChart } from "@/components/dashboard/portfolio-chart" // Reusing chart for demo
 
 export function ResultsView() {
@@ -31,9 +32,13 @@ export function ResultsView() {
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Max Drawdown</CardTitle></CardHeader>
                     <CardContent className="p-4 pt-0 text-2xl font-mono text-destructive">-12.4%</CardContent>
                  </Card>
-                 <Card>
-                    <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Beta</CardTitle></CardHeader>
-                    <CardContent className="p-4 pt-0 text-2xl font-mono">0.85</CardContent>
+                 <Card className="bg-primary/5 border-primary/20">
+                    <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                            Monte Carlo P <Badge className="text-[8px] h-3 px-1">Confidence</Badge>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 text-2xl font-mono text-primary">0.02</CardContent>
                  </Card>
              </div>
              <PortfolioChart />

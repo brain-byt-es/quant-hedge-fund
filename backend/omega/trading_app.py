@@ -469,16 +469,17 @@ class TradingApp:
         """
         positions = self.get_positions()
         account = self.get_account_info()
-        portfolio_var = self.risk_manager.calculate_portfolio_var(positions)
-        portfolio_es = self.risk_manager.calculate_expected_shortfall(positions)
+        total_equity = account.get("NetLiquidation", 0.0)
+        
+        # Use new comprehensive risk logic
+        risk_summary = self.risk_manager.get_portfolio_risk(positions, total_equity)
         
         # P&L Calculation
         daily_pnl = account.get("DailyPnL")
         if daily_pnl is None:
             # Fallback to local session tracking
-            portfolio_value = account.get("NetLiquidation", 0.0)
             if self.metrics["daily_pnl_initial_value"]:
-                daily_pnl = portfolio_value - self.metrics["daily_pnl_initial_value"]
+                daily_pnl = total_equity - self.metrics["daily_pnl_initial_value"]
             else:
                 daily_pnl = 0.0
 
@@ -490,10 +491,12 @@ class TradingApp:
             "latency_p99_ms": 0.0,
             "truth_layer_active": len(self.aggregators) > 0,
             "active_symbols": list(self.aggregators.keys()),
-            "portfolio_var_95_usd": portfolio_var,
-            "portfolio_es_95_usd": portfolio_es,
+            "portfolio_var_95_usd": risk_summary["var_95_usd"],
+            "portfolio_var_95_percent": risk_summary["var_95_percent"],
+            "portfolio_es_95_usd": risk_summary["expected_shortfall_usd"],
+            "stress_tests": risk_summary["stress_tests"],
             "daily_pnl_usd": daily_pnl,
-            "net_liquidation": account.get("NetLiquidation", 0.0)
+            "net_liquidation": total_equity
         }
         
         if self.metrics["order_latencies"]:
