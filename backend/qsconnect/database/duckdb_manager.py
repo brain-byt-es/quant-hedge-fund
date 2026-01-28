@@ -13,11 +13,13 @@ import duckdb
 import polars as pl
 import pandas as pd
 from loguru import logger
+import threading
 
 
 class DuckDBManager:
     """
     Manager for DuckDB database operations.
+    Supports multi-threaded access via a shared connection.
     """
     
     def __init__(self, db_path: Path, read_only: bool = False, auto_close: bool = False):
@@ -26,48 +28,54 @@ class DuckDBManager:
         """
         self.db_path = Path(db_path)
         self.read_only = read_only
-        self.auto_close = auto_close
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Initialize schema on first connect (ONLY if writable)
-        if not self.read_only:
-            self._init_schema()
+        # Persistent connection for the process
+        self._conn = None
+        self._lock = threading.Lock()
         
-        logger.info(f"DuckDB manager initialized: {self.db_path} (read_only={self.read_only})")
+        # Initialize schema
+        self._init_schema()
+        
+        logger.info(f"DuckDB manager initialized: {self.db_path}")
     
     def connect(self, read_only: Optional[bool] = None) -> duckdb.DuckDBPyConnection:
-        """Establish a database connection with robust retry logic."""
-        import time
-        import random
-        max_retries = 10
-        db_path_str = str(self.db_path.absolute().resolve())
-        
-        # Use instance default if not specified
-        r_only = read_only if read_only is not None else self.read_only
-        
-        for attempt in range(max_retries):
-            try:
-                conn = duckdb.connect(database=db_path_str, read_only=r_only)
-                conn.execute("PRAGMA threads=1")
-                return conn
-            except Exception as e:
-                err_msg = str(e).lower()
-                if ("used by another process" in err_msg or "cannot open" in err_msg) and attempt < max_retries - 1:
-                    wait_time = (0.05 * (2 ** attempt)) + (random.random() * 0.05)
-                    time.sleep(wait_time)
-                else:
-                    raise e
-        
-        raise ConnectionError("Failed to initialize DuckDB connection.")
+        """Get a cursor from the persistent connection."""
+        # Note: read_only parameter is kept for signature compatibility but ignored
+        # as the main connection defines the mode for the process.
+        with self._lock:
+            if self._conn is None:
+                import time
+                db_path_str = str(self.db_path.absolute().resolve())
+                
+                # Retry loop only for the initial connection
+                for attempt in range(10):
+                    try:
+                        self._conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
+                        self._conn.execute("PRAGMA threads=4")
+                        break
+                    except Exception as e:
+                        if attempt < 9:
+                            time.sleep(0.1 * (2 ** attempt))
+                        else: raise e
+            
+            return self._conn.cursor()
     
     def close(self) -> None:
-        """Deprecated: connections are now short-lived and self-closing."""
-        pass
+        """Close the persistent connection."""
+        with self._lock:
+            if self._conn:
+                self._conn.close()
+                self._conn = None
     
     def _init_schema(self) -> None:
-        """Initialize institutional database schema (13 core tables + Governance)."""
-        conn = self.connect()
+        """Initialize institutional database schema."""
+        # Using a direct connection once for initialization
+        db_path_str = str(self.db_path.absolute().resolve())
+        # Ensure we can initialize the schema
         try:
+            conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
+            try:
             # 1. Historical Prices
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS historical_prices_fmp (

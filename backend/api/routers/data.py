@@ -12,10 +12,10 @@ router = APIRouter()
 qs_client = None
 
 def get_qs_client():
-    """Singleton for QS Connect Client (Read-Only for API responsiveness)"""
+    """Singleton for QS Connect Client (Shared Process Connection)"""
     global qs_client
     if not qs_client:
-        qs_client = QSConnectClient(read_only=True)
+        qs_client = QSConnectClient(read_only=False)
     return qs_client
 
 class IngestRequest(BaseModel):
@@ -109,47 +109,28 @@ class IngestRequest(BaseModel):
 
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion via separate process to prevent API freezing."""
-    import subprocess
-    import sys
-    import os
-
-    def run_ingestion_process():
+    """Trigger data ingestion in a background thread using the shared connection."""
+    
+    def run_ingestion():
+        client = get_qs_client()
         try:
-            # Use the same python interpreter as the current process
-            python_exe = sys.executable
-            # Path to a script that runs the flow
-            # For simplicity, we can use a small inline script or just run prefect_flows.py
-            env = os.environ.copy()
-            env["PYTHONPATH"] = f"{os.getcwd()}:{env.get('PYTHONPATH', '')}"
+            from automation.prefect_flows import daily_sync_flow, historical_backfill_flow
             
-            # Create stop signal path
-            from config.settings import get_settings
-            signal_file = get_settings().duckdb_path.parent / "ingest_stop.signal"
-            if signal_file.exists():
-                signal_file.unlink()
-
-            logger.info(f"Starting ingestion process: {request.mode}")
-            state = {"status": "running", "step": f"Initializing {request.mode}...", "progress": 0, "details": ""}
-            save_ingestion_state(state)
+            # Reset stop signal
+            client.stop_requested = False
             
-            # Simple wrapper to run the flow
-            cmd = [
-                python_exe, "-c", 
-                f"from automation.prefect_flows import {request.mode}_sync_flow; {request.mode}_sync_flow()" if request.mode == "daily" else f"from automation.prefect_flows import historical_backfill_flow; historical_backfill_flow()"
-            ]
+            logger.info(f"Starting background ingestion: {request.mode}")
+            save_ingestion_state({"status": "running", "step": f"Initializing {request.mode}...", "progress": 0, "details": ""})
             
-            process = subprocess.Popen(cmd, env=env)
-            process.wait()
-            
-            if process.returncode == 0:
-                save_ingestion_state({"status": "completed", "step": f"Finished: {request.mode}", "progress": 100, "details": "Done"})
+            if request.mode == "daily":
+                daily_sync_flow()
             else:
-                save_ingestion_state({"status": "error", "step": "Failed", "progress": 0, "details": f"Process exited with code {process.returncode}"})
+                historical_backfill_flow()
                 
+            save_ingestion_state({"status": "completed", "step": f"Finished: {request.mode}", "progress": 100, "details": "Done"})
         except Exception as e:
-            logger.error(f"Ingestion process failed: {e}")
-            save_ingestion_state({"status": "error", "step": "Process Error", "progress": 0, "details": str(e)})
+            logger.error(f"Ingestion failed: {e}")
+            save_ingestion_state({"status": "error", "step": "Failed", "progress": 0, "details": str(e)})
 
-    background_tasks.add_task(run_ingestion_process)
-    return {"status": "started", "message": f"Ingestion ({request.mode}) started in background process"}
+    background_tasks.add_task(run_ingestion)
+    return {"status": "started", "message": f"Ingestion ({request.mode}) started in background thread"}
