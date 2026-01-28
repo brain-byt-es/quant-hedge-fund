@@ -10,14 +10,20 @@ pre_cleanup() {
     lsof -ti:4200 | xargs kill -9 2>/dev/null
     
     # Kill backend python processes specifically (prevents DuckDB locks)
-    pgrep -f "backend/main.py" | xargs kill -9 2>/dev/null
+    pgrep -f "uvicorn main:app" | xargs kill -9 2>/dev/null
+    pgrep -f "prefect_flows" | xargs kill -9 2>/dev/null
     
     # AGGRESSIVE: Kill anything holding the DuckDB file lock
     echo "🔒 Releasing DB locks..."
-    lsof -t backend/data/quant.duckdb | xargs kill -9 2>/dev/null
+    # Find the process ID holding the lock and kill it
+    LOCK_PID=$(lsof -t backend/data/quant.duckdb)
+    if [ ! -z "$LOCK_PID" ]; then
+        echo "Found process $LOCK_PID holding DuckDB lock. Terminating..."
+        kill -9 $LOCK_PID 2>/dev/null
+    fi
     
     # Wait a moment for OS to release file locks
-    sleep 1
+    sleep 2
     echo "✅ Environment clean."
 }
 

@@ -465,7 +465,12 @@ class DuckDBManager:
     # =====================
 
     def log_event(self, level: str, component: str, message: str, details: Optional[Dict] = None) -> None:
-        """Log a system event to the database."""
+        """Log a system event. Records to DB if writable, otherwise falls back to console."""
+        if self.read_only:
+            # Fallback for API server in read-only mode
+            logger.opt(colors=True).log(level, f"<magenta>[{component}]</magenta> {message}")
+            return
+
         conn = self.connect()
         try:
             import json

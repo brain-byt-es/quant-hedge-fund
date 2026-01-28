@@ -258,8 +258,9 @@ class FMPClient(BaseAPIClient):
                 pass
             return None
 
-        # Use 5 workers to perfectly hit the 300 calls/min limit (5 * 60 = 300)
-        max_workers = 5
+        # Use 3 workers to stay well under the 300 calls/min limit (3 * 60 = 180)
+        # This leaves room for other API tasks (fundamentals, profiles)
+        max_workers = 3
         completed_count = 0
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -268,7 +269,7 @@ class FMPClient(BaseAPIClient):
             pbar = tqdm(total=total_symbols, desc="Downloading Market Data", leave=True, dynamic_ncols=True)
             for future in concurrent.futures.as_completed(future_to_symbol):
                 # Small yield to let the OS/Event loop breathe
-                time.sleep(0.01)
+                time.sleep(0.05)
                 
                 if stop_check and stop_check():
                     logger.warning("Stop signal received. Terminating ingestion engine...")
@@ -305,8 +306,8 @@ class FMPClient(BaseAPIClient):
                         save_callback(pl.from_pandas(partial_df))
                         batch_buffer = [] # Clear buffer on success
                         
-                        # Pause slightly after DB write to let API handle pending requests
-                        time.sleep(0.1)
+                        # Pause longer after DB write to let other processes access DB
+                        time.sleep(0.5)
                     except Exception as e:
                         logger.error(f"Incremental save failed (Retrying next tick): {e}")
                         # If locked, cool down longer

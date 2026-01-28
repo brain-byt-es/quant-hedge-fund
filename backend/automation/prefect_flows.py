@@ -122,10 +122,13 @@ def task_ingest_fundamentals(limit: int = 5):
                         successful_symbols = set()
 
                     # Mark symbols that were in the batch but NOT in the result as 'Failed/Empty'
-                    # so we don't try them again.
                     for s in batch_symbols:
                         if s not in successful_symbols:
                             client._db_manager.log_failed_scan(s, stmt, "No data available")
+                    
+                    # Small cooling period after batch
+                    import time
+                    time.sleep(1.0)
                         
                 except Exception as batch_err:
                     logger.error(f"Batch failed: {batch_err}")
