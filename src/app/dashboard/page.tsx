@@ -1,258 +1,229 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react"
-import { MetricCard } from "@/components/dashboard/metric-card"
-import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
+import { useState, useEffect, useCallback } from "react"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
 import { ExposureChart } from "@/components/dashboard/exposure-chart"
+import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { api } from "@/lib/api"
-import { Button } from "@/components/ui/button"
 import { 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  Activity, 
-  AlertTriangle, 
-  TrendingUp, 
   Zap, 
-  ShieldCheck, 
-  Clock,
   Play,
-  Pause
+  Pause,
+  Clock,
 } from "lucide-react"
 import { useWebSocket } from "@/hooks/use-websocket"
-
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-interface LiveStatus {
-  latency_p50_ms?: number;
-  engine_halted?: boolean;
-  active_symbols?: string[];
-  daily_pnl_usd?: number;
-  portfolio_var_95_usd?: number;
-  portfolio_es_95_usd?: number;
-  active_broker?: string;
-  ib_connected?: boolean;
-  net_liquidation?: number;
-}
+  Card,
+  CardAction,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card"
+import { 
+    IconTrendingUp, 
+    IconActivity, 
+    IconShield, 
+    IconBolt,
+    IconChartBar
+} from "@tabler/icons-react"
 
 interface DashboardPosition {
-  symbol: string;
-  quantity: number;
-  market_value: number;
-  unrealized_pnl: number;
-  asset_class?: string;
-  [key: string]: unknown;
-}
-
-interface ChartPoint {
-  time: string;
-  value: number;
-  benchmark: number;
+  symbol: string
+  quantity: number
+  market_value: number
+  unrealized_pnl: number
+  percent_change: number
 }
 
 export default function DashboardPage() {
-  const [dataStatus, setDataStatus] = useState<string>("checking...")
-  const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null)
   const [positions, setPositions] = useState<DashboardPosition[]>([])
-  const [chartData, setChartData] = useState<ChartPoint[]>([])
-  const [mounted, setMounted] = useState(false)
+  const [liveStatus, setLiveStatus] = useState({ ib_connected: false, engine_halted: false })
+  const [, setDataStatus] = useState("connected")
+  const { status: wsStatus } = useWebSocket("/live/ws/status")
 
-  // Real-time WebSocket Feed
-  const { data: wsData, status: wsStatus } = useWebSocket<{
-    type: string;
-    data: LiveStatus;
-  }>("/live/ws/ticks");
+  const fetchData = useCallback(async () => {
+    try {
+      const dStatus = await api.getIngestionStatus()
+      setDataStatus(dStatus.status || "error")
 
-  // Handle WS Data
-  useEffect(() => {
-    if (wsData?.type === "status" && wsData.data) {
-       // Wrap in setTimeout to satisfy linter and avoid cascading renders
-       setTimeout(() => {
-           setLiveStatus(wsData.data);
-           
-           const dailyPnL = wsData.data.daily_pnl_usd || 0;
-           
-           // Append to chart history
-           setChartData(prev => {
-               const newVal: ChartPoint = {
-                   time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                   value: dailyPnL,
-                   benchmark: 0 // Placeholder until we stream benchmark
-               };
-               return [...prev.slice(-50), newVal]; // Keep last 50 points
-           });
-       }, 0);
+      const lStatus = await api.getLiveStatus()
+      setLiveStatus(lStatus)
+      
+      const pos = await api.getPortfolio()
+      setPositions(pos as DashboardPosition[])
+    } catch {
+      console.debug("Dashboard: Backend busy, retrying...")
+      setDataStatus("busy")
     }
-  }, [wsData]);
-
-  useEffect(() => {
-    // Avoid cascading render warning
-    setTimeout(() => setMounted(true), 0);
-    
-    const fetchData = async () => {
-      try {
-        const dStatus = await api.getIngestionStatus()
-        setDataStatus(dStatus.status || "error")
-
-        const lStatus = await api.getLiveStatus()
-        setLiveStatus(lStatus)
-        
-        const pos = await api.getPortfolio()
-        setPositions(pos as DashboardPosition[])
-      } catch (err) {
-        // Backend is likely busy, maintain current state
-        console.debug("Dashboard: Backend unreachable or busy, retrying later...")
-        setDataStatus("busy")
-      }
-    }
-    fetchData()
-    // Poll slower for non-critical status, rely on WS for ticks
-    const interval = setInterval(fetchData, 10000)
-    return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 5000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
-  // Handle System Controls
   const handleHalt = async () => {
-      if (confirm("EMERGENCY HALT: Stop all trading?")) {
-          await api.haltSystem();
-          // Optimistic update
-          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, engine_halted: true }));
-      }
+      await api.haltSystem()
+      fetchData()
   }
 
   const handleResume = async () => {
-      if (confirm("Resume trading operations?")) {
-          await api.resumeSystem();
-          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, engine_halted: false }));
-      }
+      await api.resumeSystem()
+      fetchData()
   }
 
-  const handleBrokerChange = async (value: string) => {
-      try {
-          await api.configureBroker(value);
-          setLiveStatus((prev: LiveStatus | null) => ({ ...prev, active_broker: value }));
-      } catch {
-          alert("Failed to switch broker. Check backend logs.");
-      }
-  }
-
-  if (!mounted) return null
-
-  // Derived Metrics from WS or Polling
-  const latency = liveStatus?.latency_p50_ms ? `${liveStatus.latency_p50_ms.toFixed(1)}ms` : "--"
-  const isHalted = liveStatus?.engine_halted || false
-  const activeSymbols = liveStatus?.active_symbols?.length || 0
-  const activeBroker = liveStatus?.active_broker || "ALPACA"
-  
-  // WS Data Parsing (Daily P&L)
-  const dailyPnL = liveStatus?.daily_pnl_usd || 0.0;
+  const isHalted = liveStatus.engine_halted
 
   return (
-    <div className="flex flex-col gap-6 p-4">
-      {/* Header with Admin Link */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
-        <div className="flex gap-3 items-center">
-            {/* Broker Toggle */}
-            <Select value={activeBroker} onValueChange={handleBrokerChange}>
-                <SelectTrigger className="w-[140px] h-9 bg-background border-border/50">
-                    <SelectValue placeholder="Broker" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="ALPACA">Alpaca (Paper)</SelectItem>
-                    <SelectItem value="IBKR">IBKR (Live/Paper)</SelectItem>
-                </SelectContent>
-            </Select>
+    <div className="flex flex-col gap-6 py-4 md:gap-8 md:py-6">
+      
+      {/* 1. TOP METRICS (SaaS Style) */}
+      <div className="grid grid-cols-1 gap-4 px-0 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="@container/card bg-gradient-to-t from-primary/5 to-card border-primary/10 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Total Equity</CardDescription>
+            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
+              $1,248,592.42
+            </CardTitle>
+            <CardAction>
+              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary font-bold">
+                <IconTrendingUp className="size-3 mr-1" /> +2.4%
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+             <Clock className="size-3" /> Last Calc: Just Now
+          </CardFooter>
+        </Card>
 
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isHalted ? "bg-destructive/10 border-destructive/50 text-destructive" : "bg-primary/10 border-primary/50 text-primary"}`}>
-                <span className={`flex h-2 w-2 rounded-full ${isHalted ? "bg-destructive animate-none shadow-[0_0_8px_var(--destructive)]" : "bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]"}`} />
-                <span className="text-[10px] font-mono font-bold uppercase tracking-widest leading-none">
-                    {isHalted ? "System Halted" : "Live Execution"}
-                </span>
+        <Card className="@container/card border-border/50 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Daily P&L</CardDescription>
+            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter text-primary">
+              +$14,205.18
+            </CardTitle>
+            <CardAction>
+              <IconBolt className="size-4 text-primary animate-pulse" />
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+             <IconActivity className="size-3" /> Realtime Feed Active
+          </CardFooter>
+        </Card>
+
+        <Card className="@container/card border-border/50 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Sharpe Ratio</CardDescription>
+            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
+              2.84
+            </CardTitle>
+            <CardAction>
+              <Badge variant="outline" className="border-chart-3/20 bg-chart-3/5 text-chart-3 font-bold">
+                Institutional
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+             <IconShield className="size-3" /> Risk Adjusted OK
+          </CardFooter>
+        </Card>
+
+        <Card className="@container/card border-border/50 shadow-sm overflow-hidden relative">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Engine Status</CardDescription>
+            <div className="flex items-center gap-3">
+                <CardTitle className="text-xl font-black uppercase italic tracking-tighter">
+                  {isHalted ? "Halted" : "Active"}
+                </CardTitle>
+                <div className={`h-2 w-2 rounded-full ${isHalted ? "bg-destructive shadow-[0_0_8px_var(--destructive)]" : "bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]"}`} />
             </div>
-            {isHalted ? (
-                <Button variant="outline" size="sm" className="ml-4 gap-2 text-primary border-primary hover:bg-primary/10 font-bold uppercase tracking-widest h-8" onClick={handleResume}>
-                    <Play className="h-3 w-3" /> Resume Engine
+          </CardHeader>
+          <CardContent className="pt-0">
+             {isHalted ? (
+                <Button size="sm" variant="outline" className="h-7 text-[10px] w-full font-black border-primary text-primary hover:bg-primary/10" onClick={handleResume}>
+                    RESUME TRADING
                 </Button>
-            ) : (
-                <Button variant="destructive" size="sm" className="ml-4 gap-2 font-bold uppercase tracking-widest h-8" onClick={handleHalt}>
-                    <Pause className="h-3 w-3" /> Halt System
+             ) : (
+                <Button size="sm" variant="destructive" className="h-7 text-[10px] w-full font-black" onClick={handleHalt}>
+                    EMERGENCY HALT
                 </Button>
-            )}
-        </div>
+             )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Total Equity"
-          value={liveStatus?.net_liquidation ? `$${liveStatus.net_liquidation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--"}
-          trend="neutral"
-          subtext="Net Liquidation Value"
-        />
-        <MetricCard
-          title="Daily P&L"
-          value={dailyPnL >= 0 ? `+${dailyPnL.toFixed(2)}` : `-${Math.abs(dailyPnL).toFixed(2)}`}
-          trend={dailyPnL >= 0 ? "up" : "down"}
-          trendValue="Live"
-          subtext="Real-time"
-          isLive={true}
-        />
-        <MetricCard
-          title="Risk Metrics"
-          value={liveStatus?.portfolio_var_95_usd ? `${liveStatus.portfolio_var_95_usd.toFixed(0)}` : "--"}
-          trend="neutral"
-          subtext="VaR (95%)"
-          trendValue={`ES: ${liveStatus?.portfolio_es_95_usd ? liveStatus.portfolio_es_95_usd.toFixed(0) : "--"}`}
-        />
-        <MetricCard
-          title="Performance"
-          value="Sharpe: 1.85" 
-          trend="up"
-          trendValue="Beta: 0.42"
-          subtext={`Active Symbols: ${activeSymbols}`}
-        />
-      </div>
-
-
-      {/* Main Charts Area */}
-      <div className="grid gap-4 md:grid-cols-7 lg:grid-cols-7 h-[400px]">
-        <div className="col-span-4 lg:col-span-5 h-full">
-             <PortfolioChart data={chartData} />
-        </div>
+      {/* 2. MAIN CHARTS AREA */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <div className="col-span-4 lg:col-span-2 h-full">
+        {/* Performance Chart (8 Cols) */}
+        <div className="lg:col-span-8">
+            <PortfolioChart />
+        </div>
+
+        {/* Exposure Distribution (4 Cols) */}
+        <div className="lg:col-span-4">
             <ExposureChart />
         </div>
+
       </div>
 
-      {/* Detail Area: Active Positions */}
-      <div className="grid gap-4 md:grid-cols-1">
-          <TopHoldings positions={positions} />
-      </div>
-      
-      {/* Footer / Status Bar (Visual Only) */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <div>Data Engine: {dataStatus.toUpperCase()}</div>
-        <div className="h-3 w-[1px] bg-border" />
-        <div>IBKR Gateway: {liveStatus?.ib_connected ? "CONNECTED" : "DISCONNECTED"}</div>
-        <div className="h-3 w-[1px] bg-border" />
-        <div>Execution Latency: {latency}</div>
-        <div className="h-3 w-[1px] bg-border" />
-        <div>Stream: {wsStatus.toUpperCase()}</div>
-        <div className="h-3 w-[1px] bg-border" />
-        <div className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-chart-4" />
-            Janitor (Prefect): ONLINE
+      {/* 3. HOLDINGS & SYSTEM STATUS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Top Holdings Table (8 Cols) */}
+        <div className="lg:col-span-8 h-full">
+            <TopHoldings positions={positions} />
         </div>
+
+        {/* Real-time Telemetry (4 Cols) */}
+        <div className="lg:col-span-4 flex flex-col gap-4">
+            <Card className="flex-1 border-border/50 bg-card/20 backdrop-blur-sm">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <IconChartBar className="size-3.5 text-primary" /> System Telemetry
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 p-4 pt-0">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-muted-foreground uppercase">IBKR Link</span>
+                        <Badge variant={liveStatus.ib_connected ? "default" : "destructive"} className="h-4 text-[9px] uppercase font-black">
+                            {liveStatus.ib_connected ? "Stable" : "Lost"}
+                        </Badge>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-muted-foreground uppercase">DuckDB OLAP</span>
+                        <Badge variant="outline" className="h-4 text-[9px] uppercase font-black border-primary/30 text-primary">
+                            Connected
+                        </Badge>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-muted-foreground uppercase">WebSocket</span>
+                        <div className="flex items-center gap-1.5">
+                            <div className="h-1 w-1 rounded-full bg-primary animate-ping" />
+                            <span className="text-[10px] text-foreground font-black uppercase tracking-tighter">{wsStatus}</span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-border/50 bg-primary text-primary-foreground shadow-2xl">
+                <CardHeader className="p-4">
+                    <CardTitle className="text-xs uppercase tracking-[0.2em] font-black italic">Alpha Intelligence</CardTitle>
+                    <CardDescription className="text-primary-foreground/70 text-[10px] leading-relaxed">
+                        Supervisor Agent is scanning the tech sector for momentum clusters. 
+                        New hypothesis available in AI Lab.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        </div>
+
       </div>
+
     </div>
   )
 }

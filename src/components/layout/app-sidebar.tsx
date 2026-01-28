@@ -2,16 +2,21 @@
 
 import * as React from "react"
 import {
-  Home,
-  Database,
-  FlaskConical,
-  Zap,
-  Bot,
-  Settings,
-} from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+  IconActivity,
+  IconRobot,
+  IconChartCandle,
+  IconDashboard,
+  IconDatabase,
+  IconFlask,
+  IconHelp,
+  IconLayoutGrid,
+  IconSearch,
+  IconSettings,
+} from "@tabler/icons-react"
 
+import { NavMain } from "@/components/nav-main"
+import { NavSecondary } from "@/components/nav-secondary"
+import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -20,83 +25,102 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname()
-
-  const navItems = [
+const data = {
+  user: {
+    name: "Henrik",
+    email: "manager@quant-science.fund",
+    avatar: "/avatars/user.jpg",
+  },
+  navOperations: [
     {
       title: "Dashboard",
       url: "/dashboard",
-      icon: Home,
+      icon: IconDashboard,
     },
     {
-      title: "Data Hub",
-      url: "/data",
-      icon: Database,
+      title: "Live Execution",
+      url: "/live",
+      icon: IconActivity,
+    },
+  ],
+  navIntelligence: [
+    {
+      title: "Research Lab",
+      url: "/research",
+      icon: IconFlask,
     },
     {
       title: "AI Quant Team",
       url: "/ai-quant",
-      icon: Bot,
+      icon: IconRobot,
     },
     {
-      title: "Research Lab",
-      url: "/research",
-      icon: FlaskConical,
+      title: "Signal Terminal",
+      url: "/research/signals",
+      icon: IconChartCandle,
+    },
+  ],
+  navSecondary: [
+    {
+      title: "Settings",
+      url: "#",
+      icon: IconSettings,
     },
     {
-      title: "Live Ops",
-      url: "/live",
-      icon: Zap,
+      title: "Terminal Help",
+      url: "#",
+      icon: IconHelp,
     },
-  ]
+    {
+      title: "Global Search",
+      url: "#",
+      icon: IconSearch,
+    },
+  ],
+  navSystem: [
+    {
+      name: "Data Hub",
+      url: "/data",
+      icon: IconDatabase,
+    },
+  ],
+}
 
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="h-16 flex items-center justify-center border-b border-sidebar-border/50">
-        <div className="flex items-center gap-2 font-bold text-xl text-primary px-2 w-full overflow-hidden whitespace-nowrap">
-           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-             <span className="text-lg">Q</span>
-           </div>
-           <span className="truncate group-data-[collapsible=icon]:hidden transition-all duration-300">
-             Quant Science
-           </span>
-        </div>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              size="lg"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+            >
+              <a href="/dashboard">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                    <IconLayoutGrid className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-black uppercase italic tracking-tighter">Quant Science</span>
+                  <span className="truncate text-[10px] text-muted-foreground uppercase font-mono">Institutional v2.1</span>
+                </div>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="p-2 gap-2">
-        <SidebarMenu>
-          {navItems.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname === item.url || pathname.startsWith(item.url + "/")}
-                tooltip={item.title}
-                size="lg"
-                className="rounded-xl transition-all duration-200"
-              >
-                <Link href={item.url}>
-                  <item.icon className="!size-5" />
-                  <span className="font-medium text-base">{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+      <SidebarContent>
+        <NavMain label="Operations" items={data.navOperations} />
+        <NavMain label="Alpha Intelligence" items={data.navIntelligence} />
+        <NavMain label="Infrastructure" items={data.navSystem.map(i => ({ title: i.name, url: i.url, icon: i.icon }))} />
+        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-      <SidebarFooter className="p-2">
-        <SidebarMenu>
-           <SidebarMenuItem>
-             <SidebarMenuButton tooltip="Settings" size="lg" className="rounded-xl">
-               <Settings className="!size-5" />
-               <span className="font-medium">Settings</span>
-             </SidebarMenuButton>
-           </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarFooter>
+        <NavUser user={data.user} />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   )
 }
