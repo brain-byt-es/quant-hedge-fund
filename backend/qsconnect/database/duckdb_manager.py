@@ -125,6 +125,7 @@ class DuckDBManager:
                     website VARCHAR,
                     ceo VARCHAR,
                     full_time_employees BIGINT,
+                    price DOUBLE,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -409,9 +410,9 @@ class DuckDBManager:
             
             conn.execute("""
                 INSERT INTO bulk_company_profiles_fmp (
-                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees, updated_at
+                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees, price, updated_at
                 )
-                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, updated_at FROM temp_profiles
+                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, price, updated_at FROM temp_profiles
                 ON CONFLICT (symbol) DO UPDATE SET
                     company_name = EXCLUDED.company_name,
                     sector = EXCLUDED.sector,
@@ -420,6 +421,7 @@ class DuckDBManager:
                     website = EXCLUDED.website,
                     ceo = EXCLUDED.ceo,
                     full_time_employees = EXCLUDED.full_time_employees,
+                    price = EXCLUDED.price,
                     updated_at = EXCLUDED.updated_at
             """)
             return len(df)

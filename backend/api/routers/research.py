@@ -74,8 +74,8 @@ def get_company_profile(symbol: str):
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
             
-        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete
-        if not profile_data or not profile_data.get("company_name"):
+        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0)
+        if not profile_data or not profile_data.get("company_name") or profile_data.get("price", 0) == 0:
             try:
                 logger.info(f"JIT: Fetching real-time profile for {symbol} from FMP...")
                 api_profile = client._fmp_client.get_company_profile(symbol)
@@ -96,29 +96,27 @@ def get_company_profile(symbol: str):
                         "market_cap": float(api_profile.get("mktCap", 0)),
                         "ipo_date": api_profile.get("ipoDate", "N/A")
                     }
-                    # Save to DB for caching (using original FMP keys for the upsert method)
+                    # Save to DB for caching
                     import pandas as pd
                     client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
-                else:
-                    # Emergency Fallback if API also fails
-                    profile_data = {
-                        "symbol": symbol,
-                        "company_name": f"{symbol} (Real-time Pending)",
-                        "sector": "Scanning...",
-                        "industry": "Pending",
-                        "description": "Fetching intelligence from FMP Hub...",
-                        "price": 0.0,
-                        "beta": 1.0,
-                        "exchange": "NASDAQ",
-                        "website": "",
-                        "full_time_employees": 0,
-                        "market_cap": 0,
-                        "ipo_date": "N/A"
-                    }
             except Exception as jit_err:
                 logger.error(f"JIT Profile fetch failed for {symbol}: {jit_err}")
 
-        # 3. Add dynamic layers (DCF, Insider, News) - these are always live
+        # 3. Dynamic Price Recovery: If price is STILL 0, try to get latest from historical table
+        if profile_data.get("price", 0) == 0:
+            try:
+                # Try real-time first
+                price_df = client._fmp_client.get_historical_prices(symbol)
+                if not price_df.empty:
+                    profile_data["price"] = float(price_df.iloc[0]["close"])
+                else:
+                    # Try local DB as last resort
+                    local_price = client.query(f"SELECT close FROM historical_prices_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 1")
+                    if not local_price.is_empty():
+                        profile_data["price"] = float(local_price[0, 0])
+            except: pass
+
+        # 4. Add dynamic layers (DCF, Insider, News)
         try:
             dcf_df = client._fmp_client.get_dcf_valuation(symbol)
             if not dcf_df.empty:
