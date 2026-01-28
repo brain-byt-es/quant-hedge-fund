@@ -12,6 +12,7 @@ import {
   IconLayoutGrid,
   IconSearch,
   IconSettings,
+  IconShieldCheck,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -40,9 +41,14 @@ const data = {
       icon: IconDashboard,
     },
     {
-      title: "Live Execution",
+      title: "Live Ops",
       url: "/live",
       icon: IconActivity,
+    },
+    {
+      title: "Governance",
+      url: "/operations/governance",
+      icon: IconShieldCheck,
     },
   ],
   navIntelligence: [

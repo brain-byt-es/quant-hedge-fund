@@ -7,8 +7,6 @@ import { PriceAnalysisChart } from "@/components/research/price-chart"
 import { FactorDistributionChart } from "@/components/research/factor-distribution"
 import { CompanyProfile } from "@/components/research/company-profile"
 import { RawRankingsTable } from "@/components/research/raw-rankings-table"
-import { StrategyGovernance } from "@/components/research/strategy-governance"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api } from "@/lib/api"
 
 interface SignalData {
@@ -41,7 +39,6 @@ interface ProfileData {
 }
 
 export default function ResearchPage() {
-  const [activeTab, setActiveTab] = useState("signals")
   const [symbol, setSymbol] = useState("RGTI")
   const [lookback, setLookback] = useState(252)
   
@@ -94,57 +91,45 @@ export default function ResearchPage() {
   }, [symbol, lookback])
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col p-4 gap-4">
-            <div className="flex justify-between items-center px-2 shrink-0">
-                <div className="flex flex-col">
-                    <h1 className="text-2xl font-black tracking-tight italic">RESEARCH LAB</h1>
-                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-[0.3em] font-bold">Signals // Alpha Discovery</p>
-                </div>
-                <TabsList className="bg-muted/50 border border-border p-1.5 h-10">
-                    <TabsTrigger value="signals" className="text-xs font-bold px-6 data-[state=active]:bg-background data-[state=active]:text-primary uppercase tracking-widest">Signal Charts</TabsTrigger>
-                    <TabsTrigger value="governance" className="text-xs font-bold px-6 data-[state=active]:bg-background data-[state=active]:text-primary uppercase tracking-widest">Governance</TabsTrigger>
-                </TabsList>
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden p-4 gap-4">
+        <div className="flex justify-between items-center px-2 shrink-0">
+            <div className="flex flex-col">
+                <h1 className="text-2xl font-black tracking-tight italic">RESEARCH LAB</h1>
+                <p className="text-xs text-muted-foreground font-mono uppercase tracking-[0.3em] font-bold">Signals // Alpha Discovery</p>
+            </div>
+        </div>
+
+        <div className="flex-1 min-h-0 flex flex-col gap-4 h-full">
+            {/* Control Center */}
+            <div className="shrink-0">
+                <SignalControlCenter 
+                    symbol={symbol} 
+                    setSymbol={setSymbol} 
+                    lookback={lookback} 
+                    setLookback={setLookback} 
+                />
             </div>
 
-            <TabsContent value="signals" className="flex-1 min-h-0 m-0 outline-none">
-                <div className="flex flex-col gap-4 h-full">
-                    {/* Control Center */}
-                    <div className="shrink-0">
-                        <SignalControlCenter 
-                            symbol={symbol} 
-                            setSymbol={setSymbol} 
-                            lookback={lookback} 
-                            setLookback={setLookback} 
-                        />
+            {/* Main Layout */}
+            <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
+                {/* Left Column: Charts */}
+                <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-hidden">
+                    <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                        <RankScatter data={signals} focusSymbol={symbol} />
+                        <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
                     </div>
-
-                    {/* Main Layout */}
-                    <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
-                        {/* Left Column: Charts */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-hidden">
-                            <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-                                <RankScatter data={signals} focusSymbol={symbol} />
-                                <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
-                            </div>
-                            <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-                                 <FactorDistributionChart data={signals} />
-                                 <RawRankingsTable data={signals} />
-                            </div>
-                        </div>
-
-                        {/* Right Column: Profile Sidebar */}
-                        <div className="w-[380px] shrink-0 h-full overflow-hidden">
-                            <CompanyProfile profile={profile} isLoading={loadingProfile} />
-                        </div>
+                    <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                         <FactorDistributionChart data={signals} />
+                         <RawRankingsTable data={signals} />
                     </div>
                 </div>
-            </TabsContent>
 
-            <TabsContent value="governance" className="flex-1 min-h-0 m-0 outline-none">
-                <StrategyGovernance />
-            </TabsContent>
-        </Tabs>
+                {/* Right Column: Profile Sidebar */}
+                <div className="w-[380px] shrink-0 h-full overflow-hidden">
+                    <CompanyProfile profile={profile} isLoading={loadingProfile} />
+                </div>
+            </div>
+        </div>
     </div>
   )
 }
