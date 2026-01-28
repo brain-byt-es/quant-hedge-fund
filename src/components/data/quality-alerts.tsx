@@ -44,11 +44,11 @@ export function DataQualityAlerts() {
       </Card>
   )
 
-  const hasIssues = report && (
-      report.price_holes.length > 0 || 
-      report.outliers.length > 0 || 
-      report.staleness.length > 0 ||
-      report.universe_consistency.missing_prices_for_universe > 0
+  const hasIssues = !!report && (
+      (report.price_holes?.length || 0) > 0 || 
+      (report.outliers?.length || 0) > 0 || 
+      (report.staleness?.length || 0) > 0 ||
+      (report.universe_consistency?.missing_prices_for_universe || 0) > 0
   )
 
   return (
@@ -68,10 +68,10 @@ export function DataQualityAlerts() {
         <ScrollArea className="h-full p-4">
             <div className="space-y-4">
                 {/* 1. Price Holes */}
-                {report?.price_holes && report.price_holes.length > 0 && (
+                {(report?.price_holes?.length || 0) > 0 && (
                     <div className="space-y-2">
                         <span className="text-[10px] uppercase font-black text-destructive tracking-widest">Price Gaps (Holes)</span>
-                        {report.price_holes.slice(0, 5).map((hole, i) => (
+                        {report?.price_holes.slice(0, 5).map((hole, i) => (
                             <div key={i} className="flex justify-between items-center bg-destructive/5 border border-destructive/10 p-2 rounded text-[10px] font-mono">
                                 <span className="font-bold text-foreground">{hole.symbol}</span>
                                 <span className="text-muted-foreground">Max Gap: {hole.max_gap} days</span>
@@ -81,10 +81,10 @@ export function DataQualityAlerts() {
                 )}
 
                 {/* 2. Outliers */}
-                {report?.outliers && report.outliers.length > 0 && (
+                {(report?.outliers?.length || 0) > 0 && (
                     <div className="space-y-2">
                         <span className="text-[10px] uppercase font-black text-amber-500 tracking-widest">Price Anomalies</span>
-                        {report.outliers.slice(0, 5).map((outlier, i) => (
+                        {report?.outliers.slice(0, 5).map((outlier, i) => (
                             <div key={i} className="flex justify-between items-center bg-amber-500/5 border border-amber-500/10 p-2 rounded text-[10px] font-mono">
                                 <span className="font-bold text-foreground">{outlier.symbol}</span>
                                 <span className="text-muted-foreground">Change: {(outlier.daily_return * 100).toFixed(1)}%</span>
@@ -94,12 +94,12 @@ export function DataQualityAlerts() {
                 )}
 
                 {/* 3. Universe Consistency */}
-                {report?.universe_consistency && report.universe_consistency.missing_prices_for_universe > 0 && (
+                {(report?.universe_consistency?.missing_prices_for_universe || 0) > 0 && (
                     <div className="space-y-2">
                         <span className="text-[10px] uppercase font-black text-primary tracking-widest">Missing Prices</span>
                         <div className="bg-primary/5 border border-primary/10 p-2 rounded text-[10px] font-mono flex items-center gap-2">
                             <Info className="h-3 w-3 text-primary" />
-                            <span>{report.universe_consistency.missing_prices_for_universe} symbols in stock list have no price data.</span>
+                            <span>{report?.universe_consistency.missing_prices_for_universe} symbols in stock list have no price data.</span>
                         </div>
                     </div>
                 )}
