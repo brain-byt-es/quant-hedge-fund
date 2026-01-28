@@ -59,8 +59,10 @@ async def stop_ingestion():
     """Stop the running background ingestion."""
     client = get_qs_client()
     client.stop_requested = True
-    ingestion_state["status"] = "idle"
-    ingestion_state["step"] = "Stopped by User"
+    state = load_ingestion_state()
+    state["status"] = "idle"
+    state["step"] = "Stopped by User"
+    save_ingestion_state(state)
     return {"status": "stopping", "message": "Stop signal sent to ingestion engine"}
 
 @router.get("/prices/latest")
@@ -147,8 +149,7 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
                 
         except Exception as e:
             logger.error(f"Ingestion process failed: {e}")
-            ingestion_state["status"] = "error"
-            ingestion_state["details"] = str(e)
+            save_ingestion_state({"status": "error", "step": "Process Error", "progress": 0, "details": str(e)})
 
     background_tasks.add_task(run_ingestion_process)
     return {"status": "started", "message": f"Ingestion ({request.mode}) started in background process"}
