@@ -1,8 +1,18 @@
 "use client"
 
 import { StrategyGovernance } from "@/components/research/strategy-governance"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
-export default function GovernancePage() {
+function GovernanceContent() {
+  const searchParams = useSearchParams()
+  const initialData = {
+      strategy_name: searchParams.get("strategy_name"),
+      run_id: searchParams.get("run_id"),
+      sharpe: searchParams.get("sharpe"),
+      return: searchParams.get("return")
+  }
+
   return (
     <div className="flex flex-col gap-6 py-4 md:gap-8 md:py-6 h-full">
       <div className="flex flex-col gap-1 px-1 shrink-0">
@@ -11,8 +21,16 @@ export default function GovernancePage() {
       </div>
       
       <div className="flex-1 min-h-0">
-          <StrategyGovernance />
+          <StrategyGovernance initialData={initialData} />
       </div>
     </div>
+  )
+}
+
+export default function GovernancePage() {
+  return (
+    <Suspense fallback={<div>Loading Governance...</div>}>
+      <GovernanceContent />
+    </Suspense>
   )
 }

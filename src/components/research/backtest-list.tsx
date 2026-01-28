@@ -12,10 +12,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Play, RotateCcw, BrainCircuit } from "lucide-react"
+import { Play, RotateCcw, BrainCircuit, ShieldCheck as GovernanceIcon } from "lucide-react"
 import { api, BacktestRun } from "@/lib/api"
+import { useRouter } from "next/navigation"
 
 export function BacktestList() {
+  const router = useRouter()
   const [runs, setRuns] = useState<BacktestRun[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -46,6 +48,17 @@ export function BacktestList() {
       } catch (e) {
           alert("Analysis failed: " + String(e));
       }
+  }
+
+  const handlePromoteToGovernance = (run: BacktestRun) => {
+      // Encode data in URL for the governance page to pick up (or use a shared store)
+      const params = new URLSearchParams({
+          strategy_name: run.strategy_name,
+          run_id: run.run_id,
+          sharpe: run.sharpe_ratio.toFixed(2),
+          return: (run.annual_return * 100).toFixed(1)
+      });
+      router.push(`/dashboard/governance?${params.toString()}`);
   }
 
   useEffect(() => {
@@ -110,9 +123,14 @@ export function BacktestList() {
                         </Badge>
                     </TableCell>
                     <TableCell>
-                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleAnalyze(run.run_id); }}>
-                            <BrainCircuit className="h-4 w-4 text-primary" />
-                        </Button>
+                        <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" title="AI Analysis" onClick={(e) => { e.stopPropagation(); handleAnalyze(run.run_id); }}>
+                                <BrainCircuit className="h-4 w-4 text-primary" />
+                            </Button>
+                            <Button variant="ghost" size="icon" title="Promote to Governance" onClick={(e) => { e.stopPropagation(); handlePromoteToGovernance(run); }}>
+                                <GovernanceIcon className="h-4 w-4 text-chart-4" />
+                            </Button>
+                        </div>
                     </TableCell>
                   </TableRow>
                 ))

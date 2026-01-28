@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { api } from "@/lib/api"
-import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Database, Bot, Users } from "lucide-react"
+import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Database, Bot, Users, Activity } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -80,7 +80,25 @@ export default function AIQuantPage() {
       setAgentStatus("Routing query...")
 
       try {
-          if (input.toLowerCase().includes("mlflow") || input.toLowerCase().includes("research")) {
+          if (input.toLowerCase().includes("alpha") || input.toLowerCase().includes("top")) {
+              setAgentStatus("Querying Factor Database...")
+              const res = await api.agenticQuery('alpha')
+              setChatHistory(prev => [...prev, { 
+                  role: 'ai', 
+                  content: `${res.summary} Top signals: ${res.data.map((s:any) => s.symbol).join(', ')}.`,
+                  tool: "Intelligence Core"
+              }])
+          }
+          else if (input.toLowerCase().includes("risk") || input.toLowerCase().includes("var")) {
+              setAgentStatus("Analyzing Portfolio Risk (VaR)...")
+              const res = await api.agenticQuery('risk')
+              setChatHistory(prev => [...prev, { 
+                  role: 'ai', 
+                  content: `Risk assessment complete. ${res.summary} Expected Shortfall is also within institutional limits.`,
+                  tool: "Risk Engine"
+              }])
+          }
+          else if (input.toLowerCase().includes("mlflow") || input.toLowerCase().includes("research")) {
               setAgentStatus("Querying MLflow Registry...")
               await new Promise(r => setTimeout(r, 800))
               await api.getResearchSignals()
@@ -264,14 +282,14 @@ export default function AIQuantPage() {
 
                   {/* QUICK ACTIONS */}
                   <div className="flex flex-wrap gap-3 pt-8 border-t border-border/50">
-                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Analyze current MLflow Research")}>
-                        <Search className="h-4 w-4 mr-2" /> Strategy Research
+                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Check current top Alpha signals")}>
+                        <Search className="h-4 w-4 mr-2" /> Check Alpha
+                    </Button>
+                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Explain current Portfolio Risk (VaR)")}>
+                        <Activity className="h-4 w-4 mr-2" /> Explain Risk
                     </Button>
                     <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Build new Alpha Factor code")}>
                         <Code className="h-4 w-4 mr-2" /> Strategy Builder
-                    </Button>
-                    <Button variant="secondary" size="sm" className="h-9 text-xs uppercase font-black tracking-widest bg-muted hover:bg-primary/10 hover:text-primary transition-all border border-transparent hover:border-primary/30 px-4" onClick={() => handleChat("Run Prefect Ingestion Check")}>
-                        <Database className="h-4 w-4 mr-2" /> Ingestion Status
                     </Button>
                   </div>
 

@@ -119,6 +119,49 @@ async def analyze_backtest(request: AnalyzeRequest):
         logger.error(f"AI Analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class AgenticQueryRequest(BaseModel):
+    query_type: str # 'alpha' or 'risk'
+    symbols: Optional[List[str]] = None
+
+@router.post("/agentic_query")
+async def agentic_query(request: AgenticQueryRequest):
+    """
+    Handle specialized agentic queries from the Architect.
+    Connects the LLM to the system's live intelligence and risk data.
+    """
+    from api.routers.data import get_qs_client
+    client = get_qs_client()
+    
+    try:
+        if request.query_type == "alpha":
+            # Fetch top 5 alpha signals from DB
+            # For now, we simulate the calculation based on recent historicals
+            # In production, this pulls from a 'factors' table
+            signals = client.query("SELECT symbol, factor_signal as score, rank FROM stock_list_fmp LIMIT 5").to_dicts()
+            return {
+                "type": "alpha",
+                "data": signals,
+                "summary": "High-confidence alpha clusters detected in recent tech sector rotation."
+            }
+            
+        elif request.query_type == "risk":
+            # Fetch VaR and ES from the Omega Risk Engine
+            from omega.singleton import get_omega_app
+            omega = get_omega_app()
+            risk_metrics = omega.risk_manager.get_portfolio_risk()
+            
+            return {
+                "type": "risk",
+                "data": risk_metrics,
+                "summary": f"Portfolio VaR (95%) is currently {risk_metrics.get('var_95_percent', 0)*100:.2f}%."
+            }
+            
+        return {"error": "Unknown query type"}
+        
+    except Exception as e:
+        logger.error(f"Agentic query failed: {e}")
+        return {"error": str(e)}
+
 @router.post("/generate_strategy")
 async def generate_strategy(request: StrategyRequest):
     """

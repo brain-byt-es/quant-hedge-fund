@@ -9,6 +9,16 @@ import polars as pl
 # Helpers
 # ==========================================
 
+def update_ui_progress(status="running", step="", progress=0, details=""):
+    """Update the shared state file for the frontend UI."""
+    import json
+    from config.settings import get_settings
+    state_file = get_settings().duckdb_path.parent / "ingest_state.json"
+    try:
+        with open(state_file, "w") as f:
+            json.dump({"status": status, "step": step, "progress": progress, "details": details}, f)
+    except: pass
+
 def log_step(client: QSConnectClient, level: str, component: str, message: str):
     """Log to both loguru and DB telemetry."""
     logger.log(level, f"[{component}] {message}")
@@ -36,7 +46,11 @@ def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Price
     end_dt = date.fromisoformat(end_date) if end_date else None
     
     log_step(client, "INFO", "Ingest", f"Starting Price Ingestion: {desc} ({start_date} to {end_date})")
-    client.bulk_historical_prices(start_date=start_dt, end_date=end_dt)
+    
+    def on_progress(current, total):
+        update_ui_progress(step=f"Downloading Prices ({desc})", progress=(current/total)*100, details=f"{current}/{total}")
+
+    client.bulk_historical_prices(start_date=start_dt, end_date=end_dt, progress_callback=on_progress)
     log_step(client, "INFO", "Ingest", f"Price Ingestion complete: {desc}")
     return f"{desc} sync complete"
 
@@ -62,7 +76,10 @@ def task_ingest_fundamentals(limit: int = 5):
                     return "Stopped"
 
                 batch_symbols = us_symbols[i : i + batch_size]
-                # Log progress every 5 batches to avoid clutter but show activity
+                progress_pct = (i / total_symbols) * 100
+                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_symbols}")
+                
+                # Log progress every 5 batches
                 if (i // batch_size) % 5 == 0:
                     log_step(client, "INFO", "Ingest", f"  > Ingesting {stmt}: {i}/{total_symbols} symbols processed.")
                 

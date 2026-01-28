@@ -18,9 +18,11 @@ interface AuditEntry {
   [key: string]: unknown;
 }
 
-export function StrategyGovernance() {
+export function StrategyGovernance({ initialData }: { initialData?: any }) {
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
-  const [rationale, setRationale] = useState("")
+  const [rationale, setRationale] = useState(
+      initialData?.strategy_name ? `Authorized promotion of '${initialData.strategy_name}' (Run: ${initialData.run_id}). Sharpe: ${initialData.sharpe}, Return: ${initialData.return}%.` : ""
+  )
   const [stage, setStage] = useState("PAPER")
   const [loading, setLoading] = useState(false)
 

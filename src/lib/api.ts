@@ -157,6 +157,15 @@ export const api = {
       return handleResponse(res);
   },
 
+  agenticQuery: async (query_type: 'alpha' | 'risk') => {
+      const res = await fetch(`${API_BASE_URL}/ai/agentic_query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query_type }),
+      });
+      return handleResponse(res);
+  },
+
   // Live Execution Layer
   getLiveStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/live/status`);

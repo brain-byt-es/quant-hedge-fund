@@ -76,18 +76,30 @@ def get_latest_prices(limit: int = 100):
         logger.error(f"Failed to fetch prices: {e}")
         raise HTTPException(status_code=500, detail="Database query failed")
 
-# Global Ingestion State
-ingestion_state = {
-    "status": "idle", # idle, running, completed, error
-    "step": "",
-    "progress": 0,
-    "details": ""
-}
+# Global Ingestion State (Shared via File for Multi-process support)
+def get_state_file():
+    from config.settings import get_settings
+    return get_settings().duckdb_path.parent / "ingest_state.json"
+
+def save_ingestion_state(state: Dict):
+    import json
+    try:
+        with open(get_state_file(), "w") as f:
+            json.dump(state, f)
+    except: pass
+
+def load_ingestion_state() -> Dict:
+    import json
+    try:
+        with open(get_state_file(), "r") as f:
+            return json.load(f)
+    except:
+        return {"status": "idle", "step": "", "progress": 0, "details": ""}
 
 @router.get("/ingest/progress")
 def get_ingestion_progress():
     """Get real-time progress of data pipeline."""
-    return ingestion_state
+    return load_ingestion_state()
 
 class IngestRequest(BaseModel):
     mode: str = "daily" # 'daily' or 'backfill'
@@ -117,8 +129,8 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
                 signal_file.unlink()
 
             logger.info(f"Starting ingestion process: {request.mode}")
-            ingestion_state["status"] = "running"
-            ingestion_state["step"] = f"Initializing {request.mode}..."
+            state = {"status": "running", "step": f"Initializing {request.mode}...", "progress": 0, "details": ""}
+            save_ingestion_state(state)
             
             # Simple wrapper to run the flow
             cmd = [
@@ -130,11 +142,9 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
             process.wait()
             
             if process.returncode == 0:
-                ingestion_state["status"] = "completed"
-                ingestion_state["step"] = f"Finished: {request.mode}"
+                save_ingestion_state({"status": "completed", "step": f"Finished: {request.mode}", "progress": 100, "details": "Done"})
             else:
-                ingestion_state["status"] = "error"
-                ingestion_state["details"] = f"Process exited with code {process.returncode}"
+                save_ingestion_state({"status": "error", "step": "Failed", "progress": 0, "details": f"Process exited with code {process.returncode}"})
                 
         except Exception as e:
             logger.error(f"Ingestion process failed: {e}")
