@@ -198,51 +198,18 @@ async def execute_backtest(params: BacktestParams, background_tasks: BackgroundT
 
 
 
-        def _task():
-
-
-
-            from api.routers.data import get_qs_client
-
-
-
-            client = get_qs_client()
-
-
-
-            try:
-
-
-
-                client.log_event("INFO", "Research", f"Backtest Initialized: {params.strategy_name}")
-
-
-
-                logger.info(f"Background task starting backtest: {params.strategy_name}")
-
-
-
-                run_backtest(config)
-
-
-
-                logger.info(f"Background task completed backtest: {params.strategy_name}")
-
-
-
-                client.log_event("INFO", "Research", f"Backtest Completed: {params.strategy_name}. Result ready for Governance.")
-
-
-
-            except Exception as e:
-
-
-
-                logger.error(f"Backtest task failed: {e}")
-
-
-
-                client.log_event("ERROR", "Research", f"Backtest Failed: {params.strategy_name}. Error: {str(e)}")
+    def _task():
+        from api.routers.data import get_qs_client
+        client = get_qs_client()
+        try:
+            client.log_event("INFO", "Research", f"Backtest Initialized: {params.strategy_name}")
+            logger.info(f"Background task starting backtest: {params.strategy_name}")
+            run_backtest(config)
+            logger.info(f"Background task completed backtest: {params.strategy_name}")
+            client.log_event("INFO", "Research", f"Backtest Completed: {params.strategy_name}. Result ready for Governance.")
+        except Exception as e:
+            logger.error(f"Backtest task failed: {e}")
+            client.log_event("ERROR", "Research", f"Backtest Failed: {params.strategy_name}. Error: {str(e)}")
 
 
 

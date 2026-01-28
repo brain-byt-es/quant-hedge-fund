@@ -74,13 +74,15 @@ def get_company_profile(symbol: str):
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
             
-        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0)
-        if not profile_data or not profile_data.get("company_name") or profile_data.get("price", 0) == 0:
+        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0 or None)
+        current_price = profile_data.get("price")
+        if not profile_data or not profile_data.get("company_name") or current_price is None or current_price == 0:
             try:
-                logger.info(f"JIT: Fetching real-time profile for {symbol} from FMP...")
+                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing or 0 price)")
                 api_profile = client._fmp_client.get_company_profile(symbol)
                 
                 if api_profile:
+                    logger.info(f"✅ JIT SUCCESS: Received live profile for {symbol}. Price: ${api_profile.get('price')}")
                     # Map API keys to our internal schema
                     profile_data = {
                         "symbol": symbol,
@@ -100,7 +102,7 @@ def get_company_profile(symbol: str):
                     import pandas as pd
                     client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
             except Exception as jit_err:
-                logger.error(f"JIT Profile fetch failed for {symbol}: {jit_err}")
+                logger.error(f"❌ JIT Profile fetch failed for {symbol}: {jit_err}")
 
         # 3. Dynamic Price Recovery: If price is STILL 0, try to get latest from historical table
         if profile_data.get("price", 0) == 0:
