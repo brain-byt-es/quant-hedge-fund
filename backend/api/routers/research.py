@@ -8,50 +8,75 @@ from loguru import logger
 
 from api.routers.data import get_qs_client
 
+from qsresearch.features.factor_engine import FactorEngine
+
 router = APIRouter()
+
+@router.post("/update_factors")
+def trigger_factor_update():
+    """Trigger the Factor Engine to recalculate universe rankings."""
+    try:
+        client = get_qs_client()
+        # Pass the shared client's DB manager to avoid locking issues
+        engine = FactorEngine(db_mgr=client._db_manager)
+        count = engine.calculate_universe_ranks()
+        return {"status": "success", "ranked_symbols": count}
+    except Exception as e:
+        logger.error(f"Factor update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/signals")
 def get_signals(
     lookback: int = 252,
-    limit: int = 100
+    limit: int = 5000,
+    sort_by: str = "momentum_score"
 ):
     """
-    Calculate factor signals (Momentum proxy) for the universe.
-    Returns data for Scatter Plot, Histogram, and Rankings Table.
+    Get Factor Rankings from the Factor Engine Snapshot.
+    Returns pre-calculated percentile scores for the entire universe.
     """
     try:
         client = get_qs_client()
-        # For prototype: Get latest prices and calculate simple momentum
-        # In production: This would query a pre-calculated factors table
         
-        # Get a subset of symbols for performance (or all if cached)
-        # We simulate a "Rank vs Factor" dataset
-        
-        # Mocking the distribution for UI development if DB is busy/empty
-        # REAL IMPLEMENTATION would be:
-        # df = client.get_momentum_scores(lookback=lookback)
-        
-        # Generating realistic distribution
-        n_points = 500
-        ranks = np.arange(1, n_points + 1)
-        # Factor score correlated with rank (lower rank = higher score)
-        scores = 100 - (ranks * 0.1) + np.random.normal(0, 5, n_points)
-        
-        data = []
-        tickers = ["RGTI", "GE", "KGC", "BCS", "QBTS", "BE", "IREN", "MU", "EOSE", "APH", 
-                   "SBSW", "B", "OKLO", "PLTR", "NEM", "PL", "WDC", "HOOD", "IAG", "GLW"]
-        
-        for i in range(n_points):
-            symbol = tickers[i % len(tickers)] if i < 20 else f"TICK{i}"
-            data.append({
-                "rank": int(ranks[i]),
-                "symbol": symbol,
-                "factor_signal": float(scores[i]),
-                "as_of": datetime.now().strftime("%Y-%m-%d"),
-                "bundle_name": "historical_prices_fmp"
-            })
+        # Validate sort column
+        valid_cols = ["momentum_score", "quality_score", "value_score", "growth_score", "safety_score", "f_score"]
+        if sort_by not in valid_cols:
+            sort_by = "momentum_score"
             
-        return data
+        try:
+            sql = f"""
+                SELECT 
+                    symbol,
+                    ROUND(momentum_score, 1) as momentum,
+                    ROUND(quality_score, 1) as quality,
+                    ROUND(value_score, 1) as value,
+                    ROUND(growth_score, 1) as growth,
+                    ROUND(safety_score, 1) as safety,
+                    f_score,
+                    as_of
+                FROM factor_ranks_snapshot
+                ORDER BY {sort_by} DESC
+                LIMIT {limit}
+            """
+            
+            res = client.query(sql)
+            
+            if res.is_empty():
+                # Fallback: Trigger calculation if empty
+                from qsresearch.features.factor_engine import FactorEngine
+                engine = FactorEngine(db_mgr=client._db_manager)
+                engine.calculate_universe_ranks()
+                res = client.query(sql) # Retry
+                
+            df = res.to_pandas()
+            df['rank'] = range(1, len(df) + 1)
+            
+            # Format for frontend
+            return df.to_dict(orient="records")
+            
+        except Exception as db_err:
+            logger.error(f"Signal Snapshot Query failed: {db_err}")
+            return []
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -74,11 +99,13 @@ def get_company_profile(symbol: str):
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
             
-        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0 or None)
+        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0 or Market Cap 0)
         current_price = profile_data.get("price")
-        if not profile_data or not profile_data.get("company_name") or current_price is None or current_price == 0:
+        current_mcap = profile_data.get("market_cap")
+        
+        if not profile_data or not profile_data.get("company_name") or current_price is None or current_price == 0 or current_mcap is None or current_mcap == 0:
             try:
-                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing or 0 price)")
+                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Price/MCap)")
                 api_profile = client._fmp_client.get_company_profile(symbol)
                 
                 if api_profile:
@@ -128,16 +155,25 @@ def get_company_profile(symbol: str):
                 profile_data["dcf_value"] = float(dcf_df.iloc[0].get("dcf", 0))
         except: pass
 
-        # 4. Factor Attribution (Radar Chart Data)
-        # In a real system, these would be calculated from fundamentals/prices
-        # For now, we provide realistic proxy scores based on the current profile
-        profile_data["factor_attribution"] = [
-            {"factor": "Momentum", "score": 75 + np.random.randint(-10, 15)},
-            {"factor": "Value", "score": 60 + np.random.randint(-20, 20)},
-            {"factor": "Quality", "score": 85 + np.random.randint(-5, 10)},
-            {"factor": "Volatility", "score": 40 + np.random.randint(-30, 30)},
-            {"factor": "Growth", "score": 70 + np.random.randint(-15, 20)},
-        ]
+        # 4. Factor Attribution (Radar Chart Data) - REAL DATA
+        try:
+            engine = FactorEngine(db_mgr=client._db_manager)
+            factor_data = engine.get_ranks(symbol)
+            if factor_data:
+                profile_data["factor_attribution"] = factor_data["factor_attribution"]
+                profile_data["raw_factor_metrics"] = factor_data["raw_metrics"]
+            else:
+                # Fallback to neutral if not ranked yet
+                profile_data["factor_attribution"] = [
+                    {"factor": "Momentum", "score": 50},
+                    {"factor": "Value", "score": 50},
+                    {"factor": "Quality", "score": 50},
+                    {"factor": "Volatility", "score": 50},
+                    {"factor": "Growth", "score": 50},
+                ]
+        except Exception as fe_err:
+            logger.error(f"Factor lookup failed for {symbol}: {fe_err}")
+            profile_data["factor_attribution"] = []
 
         try:
             insider_df = client._fmp_client.get_insider_trades(symbol, limit=5)
@@ -230,17 +266,15 @@ def get_price_history(symbol: str, lookback: int = 252):
                     pl.col("date").dt.strftime("%Y-%m-%d"),
                     pl.col("close")
                 ).to_dicts()
-        except:
-            pass
-            
-        # Fallback Mock
-        data = []
-        price = 20.0
-        for i in range(lookback):
-            date_str = (datetime.now() - timedelta(days=lookback-i)).strftime("%Y-%m-%d")
-            price = price * (1 + np.random.normal(0, 0.02))
-            data.append({"date": date_str, "close": price})
-        return data
+            else:
+                logger.warning(f"No price history found for {symbol}")
+                raise HTTPException(status_code=404, detail=f"No data for {symbol}")
+                
+        except Exception as db_err:
+            logger.error(f"Price history query failed: {db_err}")
+            raise HTTPException(status_code=500, detail="Database error")
         
+    except HTTPException as http_ex:
+        raise http_ex
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -3,21 +3,29 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts"
 
-const data = [
-  { name: 'Technology', value: 45 },
-  { name: 'Finance', value: 25 },
-  { name: 'Energy', value: 15 },
-  { name: 'Healthcare', value: 10 },
-  { name: 'Consumer', value: 5 },
-];
+interface DashboardPosition {
+  symbol: string
+  market_value: number
+}
+
+interface ExposureChartProps {
+  positions?: DashboardPosition[];
+}
 
 const COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
-export function ExposureChart() {
+export function ExposureChart({ positions = [] }: ExposureChartProps) {
+  // If no positions, assume 100% Cash
+  const hasPositions = positions.length > 0;
+  
+  const data = hasPositions 
+    ? positions.map((p, i) => ({ name: p.symbol, value: Math.abs(p.market_value) }))
+    : [{ name: 'Cash', value: 100 }];
+
   return (
     <Card className="col-span-4 lg:col-span-2 h-full">
       <CardHeader>
-        <CardTitle>Sector Exposure</CardTitle>
+        <CardTitle>Asset Allocation</CardTitle>
       </CardHeader>
       <CardContent className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -32,7 +40,7 @@ export function ExposureChart() {
               dataKey="value"
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={hasPositions ? COLORS[index % COLORS.length] : '#334155'} />
               ))}
             </Pie>
             <Tooltip 

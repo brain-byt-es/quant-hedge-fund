@@ -112,19 +112,26 @@ export default function ResearchPage() {
 
             {/* Main Layout */}
             <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
-                {/* Left Column: Charts */}
-                <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-hidden">
-                    <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                {/* Left Column: Charts (Scrollable) */}
+                <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                    {/* Row 1: Analytics */}
+                    <div className="h-[320px] shrink-0 grid grid-cols-2 gap-4">
                         <RankScatter data={signals} focusSymbol={symbol} />
                         <PriceAnalysisChart data={priceHistory} symbol={symbol} lookback={lookback} />
                     </div>
-                    <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
+                    
+                    {/* Row 2: Distribution (Compact) */}
+                    <div className="h-[200px] shrink-0">
                          <FactorDistributionChart data={signals} />
+                    </div>
+
+                    {/* Row 3: Full Table */}
+                    <div className="h-[600px] shrink-0 pb-4">
                          <RawRankingsTable data={signals} />
                     </div>
                 </div>
 
-                {/* Right Column: Profile Sidebar */}
+                {/* Right Column: Profile Sidebar (Fixed) */}
                 <div className="w-[380px] shrink-0 h-full overflow-hidden">
                     <CompanyProfile profile={profile} isLoading={loadingProfile} />
                 </div>

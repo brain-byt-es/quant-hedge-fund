@@ -73,6 +73,7 @@ class DuckDBManager:
         # Using a direct connection once for initialization
         db_path_str = str(self.db_path.absolute().resolve())
         # Ensure we can initialize the schema
+        conn = None
         try:
             conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
             
@@ -311,7 +312,8 @@ class DuckDBManager:
             
             logger.info("Institutional database schema initialized successfully")
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     # =====================
     # Persistence Methods

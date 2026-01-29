@@ -26,8 +26,9 @@ interface SignalPriceData {
 
 interface Signal {
   symbol: string;
-  rank: number;
-  factor_signal: number;
+  rank?: number;
+  momentum?: number;
+  [key: string]: unknown;
 }
 
 export default function SignalDashboardPage() {
@@ -39,8 +40,8 @@ export default function SignalDashboardPage() {
 
   // Find dynamic metrics for selected symbol
   const activeSignal = signals.find(s => s.symbol === symbol) || {
-      rank: Math.floor(Math.random() * 500) + 1, // Realistic proxy
-      factor_signal: 70 + (Math.random() * 20)
+      rank: 0, 
+      momentum: 50
   }
 
   const fetchData = useCallback(async () => {
@@ -123,9 +124,9 @@ export default function SignalDashboardPage() {
       {/* 2. BIG NUMBERS PANEL (High Density) */}
       <div className="shrink-0 px-1">
           <BigNumbers 
-            rank={activeSignal.rank} 
+            rank={activeSignal.rank || 0} 
             weight={symbol === "RGTI" ? 10 : 2} // Simulated portfolio weight
-            score={activeSignal.factor_signal} 
+            score={activeSignal.momentum || 50} 
           />
       </div>
 

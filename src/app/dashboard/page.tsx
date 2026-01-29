@@ -36,11 +36,29 @@ interface DashboardPosition {
   percent_change: number
 }
 
+interface LiveStatusData {
+  ib_connected: boolean
+  engine_halted: boolean
+  net_liquidation?: number
+  daily_pnl_usd?: number
+  trades_count?: number
+  sharpe_ratio?: number
+  portfolio_var_95_usd?: number
+  portfolio_var_95_percent?: number
+}
+
 export default function DashboardPage() {
   const [positions, setPositions] = useState<DashboardPosition[]>([])
-  const [liveStatus, setLiveStatus] = useState({ ib_connected: false, engine_halted: false })
+  const [liveStatus, setLiveStatus] = useState<LiveStatusData>({ 
+    ib_connected: false, 
+    engine_halted: false, 
+    net_liquidation: 0, 
+    daily_pnl_usd: 0,
+    trades_count: 0,
+    sharpe_ratio: 0
+  })
   const [, setDataStatus] = useState("connected")
-  const { status: wsStatus } = useWebSocket("/live/ws/status")
+  const { status: wsStatus } = useWebSocket("/live/ws/ticks")
 
   const fetchData = useCallback(async () => {
     try {
@@ -79,6 +97,13 @@ export default function DashboardPage() {
 
   const isHalted = liveStatus.engine_halted
 
+  // Initial Chart Data (Day 0)
+  const initialChartData = Array.from({ length: 30 }, (_, i) => ({
+      time: `Day ${i}`,
+      value: 100000,
+      benchmark: 100000
+  }));
+
   return (
     <div className="flex flex-col gap-6 py-4 md:gap-8 md:py-6">
       
@@ -88,11 +113,11 @@ export default function DashboardPage() {
           <CardHeader className="pb-2">
             <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Total Equity</CardDescription>
             <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
-              $1,248,592.42
+              ${(liveStatus.net_liquidation || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
             </CardTitle>
             <CardAction>
               <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary font-bold">
-                <IconTrendingUp className="size-3 mr-1" /> +2.4%
+                <IconTrendingUp className="size-3 mr-1" /> Live
               </Badge>
             </CardAction>
           </CardHeader>
@@ -104,8 +129,8 @@ export default function DashboardPage() {
         <Card className="@container/card border-border/50 shadow-sm">
           <CardHeader className="pb-2">
             <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Daily P&L</CardDescription>
-            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter text-primary">
-              +$14,205.18
+            <CardTitle className={`text-2xl font-black tabular-nums font-mono tracking-tighter ${(liveStatus.daily_pnl_usd || 0) >= 0 ? "text-primary" : "text-destructive"}`}>
+              {(liveStatus.daily_pnl_usd || 0) >= 0 ? "+" : ""}${(liveStatus.daily_pnl_usd || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
             </CardTitle>
             <CardAction>
               <IconBolt className="size-4 text-primary animate-pulse" />
@@ -120,16 +145,16 @@ export default function DashboardPage() {
           <CardHeader className="pb-2">
             <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Sharpe Ratio</CardDescription>
             <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
-              2.84
+              {liveStatus.trades_count && liveStatus.trades_count > 0 ? (liveStatus.sharpe_ratio || 0).toFixed(2) : "N/A"}
             </CardTitle>
             <CardAction>
               <Badge variant="outline" className="border-chart-3/20 bg-chart-3/5 text-chart-3 font-bold">
-                Institutional
+                {liveStatus.trades_count && liveStatus.trades_count > 0 ? "Statistical" : "No Data"}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
-             <IconShield className="size-3" /> Risk Adjusted OK
+             <IconShield className="size-3" /> {liveStatus.trades_count && liveStatus.trades_count > 0 ? "Risk Adjusted OK" : "Awaiting First Trade"}
           </CardFooter>
         </Card>
 
@@ -162,12 +187,12 @@ export default function DashboardPage() {
         
         {/* Performance Chart (8 Cols) */}
         <div className="lg:col-span-8">
-            <PortfolioChart />
+            <PortfolioChart data={initialChartData} />
         </div>
 
         {/* Exposure Distribution (4 Cols) */}
         <div className="lg:col-span-4">
-            <ExposureChart />
+            <ExposureChart positions={positions} />
         </div>
 
       </div>
