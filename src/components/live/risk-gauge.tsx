@@ -4,11 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function RiskGauge({ var95, portfolioValue }: { var95?: number, portfolioValue?: number }) {
 
-  // Mock calculate percentage
-
-  const varValue = var95 || 4500;
-
-  const total = portfolioValue || 100000;
+  // Real Data (default to 0 if undefined)
+  const varValue = var95 || 0;
+  const total = portfolioValue || 1; // Avoid div by zero
 
   const riskPct = (varValue / total) * 100;
 

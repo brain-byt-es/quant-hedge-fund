@@ -25,7 +25,7 @@ export function ProcessMonitor() {
   const [details, setDetails] = React.useState("");
   const [stats, setStats] = React.useState({ speed: 0, eta: "" });
 
-  const handleRunPipeline = async (mode: "daily" | "backfill") => {
+  const handleRunPipeline = async (mode: "daily" | "backfill" | "simfin") => {
       setIsRunning(true);
       setSteps(s => s.map(step => ({ ...step, status: "pending", progress: 0 })));
       try {
@@ -84,6 +84,13 @@ export function ProcessMonitor() {
               }
 
               setSteps(prev => prev.map(step => {
+                  if (state.step.includes("SimFin")) {
+                     // If SimFin is running, mark others as skipped/pending or repurpose one
+                     // For simplicity, we just mark Financials as running if it's a generic UI
+                     if (step.name.includes("Financials")) return { ...step, status: "running", progress: 50 };
+                     return step;
+                  }
+
                   if (state.step.includes("Stock List") && step.name.includes("Stock List")) {
                       return { ...step, status: "running", progress: 100 };
                   }
@@ -136,6 +143,9 @@ export function ProcessMonitor() {
                         </Button>
                         <Button size="sm" variant="default" className="h-8 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground w-full justify-start" onClick={() => handleRunPipeline("backfill")}>
                             <Database className="mr-2 h-3 w-3 fill-current" /> Full Backfill
+                        </Button>
+                        <Button size="sm" variant="secondary" className="h-8 text-[10px] uppercase font-bold w-full justify-start" onClick={() => handleRunPipeline("simfin")}>
+                            <Database className="mr-2 h-3 w-3 fill-current" /> SimFin Bulk
                         </Button>
                     </>
                 )}

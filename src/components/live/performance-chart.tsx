@@ -5,36 +5,18 @@ import { Button } from "@/components/ui/button"
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
 import { useState } from "react"
 
-// Mock Data Generator
-const generateData = (points: number) => {
-    let equity = 100000;
-    let benchmark = 100000;
-    const data = [];
-    for (let i = 0; i < points; i++) {
-        const change = (Math.random() - 0.48) * 500; // Slight upward bias
-        const benchChange = (Math.random() - 0.49) * 400;
-        equity += change;
-        benchmark += benchChange;
-        
-        // Calculate drawdown (simplified)
-        const peak = Math.max(equity, 105000); // Fake peak
-        const drawdown = ((equity - peak) / peak) * 100;
-
-        data.push({
-            date: `2024-01-${(i % 30) + 1}`,
-            equity: equity,
-            benchmark: benchmark,
-            drawdown: drawdown
-        });
-    }
-    return data;
-}
-
-const data = generateData(100);
+// Initial State (Day 0)
+const initialData = Array.from({ length: 30 }, (_, i) => ({
+    date: `Day ${i}`,
+    equity: 100000,
+    benchmark: 100000,
+    drawdown: 0
+}));
 
 export function LivePerformanceChart() {
-
   const [range, setRange] = useState("1M")
+  // In a future update, we will fetch real equity curve history here
+  const chartData = initialData;
 
 
 
@@ -86,7 +68,7 @@ export function LivePerformanceChart() {
 
                 <ResponsiveContainer width="100%" height="100%">
 
-                    <AreaChart data={data}>
+                    <AreaChart data={chartData}>
 
                         <defs>
 
@@ -132,7 +114,7 @@ export function LivePerformanceChart() {
 
                 <ResponsiveContainer width="100%" height="100%">
 
-                    <AreaChart data={data}>
+                    <AreaChart data={chartData}>
 
                         <YAxis hide domain={[-20, 0]} />
 

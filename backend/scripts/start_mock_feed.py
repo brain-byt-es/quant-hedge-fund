@@ -14,6 +14,7 @@ from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from qsconnect.database.duckdb_manager import DuckDBManager
+from config.settings import get_settings
 from omega.data.candle_engine import CandleAggregator, Tick, SessionManager
 from config.registry import get_registry
 
@@ -22,11 +23,12 @@ class MockSession(SessionManager):
     def is_in_session(self, ts, symbol): return True
 
 def main():
+    settings = get_settings()
     print("🚀 Starting MOCK Data Feed (Simulated Exchange)...")
-    print("   Target DB: data/quant.duckdb")
+    print(f"   Target DB: {settings.duckdb_path}")
     
     # Connect to PROD database (same as Dashboard)
-    db_mgr = DuckDBManager(db_path="data/quant.duckdb", auto_close=True)
+    db_mgr = DuckDBManager(db_path=settings.duckdb_path, auto_close=True)
     
     registry = get_registry()
     # Mock ALL Equities found in registry

@@ -7,26 +7,30 @@ Pydantic-based settings management with environment variable support.
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+import os
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Define the absolute root of the repository (app/)
+APP_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     """Global application settings loaded from environment variables."""
     
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"), # Looks in app/.env
+        env_file=str(APP_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-        env_ignore_empty=True,  # Ensure robust loading
+        env_ignore_empty=True,
     )
     
     # ===================
     # API Keys
     # ===================
     fmp_api_key: str = Field(default="", description="Financial Modeling Prep API key")
+    simfin_api_key: str = Field(default="free", description="SimFin API key")
     datalink_api_key: str = Field(default="", description="Datalink API key")
     openai_api_key: str = Field(default="", description="OpenAI API key for AI assistant")
     groq_api_key: str = Field(default="", description="Groq API key for LLM features")
@@ -40,11 +44,11 @@ class Settings(BaseSettings):
     # Database Settings
     # ===================
     duckdb_path: Path = Field(
-        default=Path("./data/quant.duckdb"),
+        default=APP_ROOT / "data/quant.duckdb",
         description="Path to DuckDB database file"
     )
     cache_dir: Path = Field(
-        default=Path("./data/cache"),
+        default=APP_ROOT / "data/cache",
         description="Directory for cached parquet files"
     )
     
@@ -90,7 +94,7 @@ class Settings(BaseSettings):
     # ===================
     dashboard_port: int = Field(default=8501, description="Streamlit dashboard port")
     dashboard_data_dir: Path = Field(
-        default=Path("./data/outputs"),
+        default=APP_ROOT / "data/outputs",
         description="Dashboard data directory"
     )
     dashboard_password: str = Field(
@@ -118,6 +122,14 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
     log_dir: Path = Field(default=Path("./logs"), description="Log directory")
     
+    @field_validator("duckdb_path", "cache_dir", "dashboard_data_dir", mode="after")
+    @classmethod
+    def enforce_absolute_paths(cls, v: Path) -> Path:
+        """Ensure paths are absolute and rooted in APP_ROOT if they were relative."""
+        if not v.is_absolute():
+            return APP_ROOT / v
+        return v
+
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist."""
         self.duckdb_path.parent.mkdir(parents=True, exist_ok=True)

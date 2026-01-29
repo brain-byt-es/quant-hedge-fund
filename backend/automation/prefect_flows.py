@@ -148,6 +148,18 @@ def task_rebuild_bundle():
     log_step(client, "INFO", "Bundler", "Zipline Bundle ready for Research Lab.")
     return "Bundle ready"
 
+@task(retries=0)
+def task_ingest_simfin():
+    """Ingest SimFin Bulk Data (Prices + Fundamentals)."""
+    client = QSConnectClient()
+    log_step(client, "INFO", "Ingest", "Starting SimFin Bulk Ingest...")
+    
+    stats = client.ingest_simfin_bulk()
+    
+    details = ", ".join([f"{k}: {v}" for k, v in stats.items()])
+    log_step(client, "INFO", "Ingest", f"SimFin Ingest Complete. Stats: {details}")
+    return f"SimFin Ingested: {details}"
+
 # ==========================================
 # FLOW 1: Institutional Backfill (Manual)
 # ==========================================
@@ -163,6 +175,16 @@ def historical_backfill_flow():
     task_rebuild_bundle()
     
     return "Backfill successful"
+
+# ==========================================
+# FLOW 3: SimFin Bulk Sync (Manual/Weekly)
+# ==========================================
+
+@flow(name="SimFin Bulk Sync")
+def simfin_bulk_flow():
+    """Download and ingest SimFin bulk datasets."""
+    task_ingest_simfin()
+    return "SimFin Sync successful"
 
 # ==========================================
 # FLOW 2: Daily Sync (Scheduled)

@@ -103,7 +103,7 @@ def get_ingestion_progress():
     return load_ingestion_state()
 
 class IngestRequest(BaseModel):
-    mode: str = "daily" # 'daily' or 'backfill'
+    mode: str = "daily" # 'daily', 'backfill', or 'simfin'
     start_date: Optional[str] = None
     symbols: Optional[List[str]] = None
 
@@ -114,7 +114,7 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
     def run_ingestion():
         client = get_qs_client()
         try:
-            from automation.prefect_flows import daily_sync_flow, historical_backfill_flow
+            from automation.prefect_flows import daily_sync_flow, historical_backfill_flow, simfin_bulk_flow
             
             # Reset stop signal
             client.stop_requested = False
@@ -124,6 +124,8 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
             
             if request.mode == "daily":
                 daily_sync_flow()
+            elif request.mode == "simfin":
+                simfin_bulk_flow()
             else:
                 historical_backfill_flow()
                 

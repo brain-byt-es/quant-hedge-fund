@@ -253,17 +253,10 @@ if __name__ == "__main__":
              print(f"Client/Data Error: {client_err}")
              prices = None
 
-        # MOCK DATA IF NONE FOUND (For testing without API key)
+        # FAIL FAST: Do not use mocks in production environment
         if prices is None or prices.is_empty():
-            print("No real data found/accessible. Using MOCK data for verification.")
-            dates = pd.date_range(start="2024-01-01", periods=150, freq="B")
-            mock_data = {
-                "symbol": ["MOCK"] * 150,
-                "date": dates,
-                "close": np.linspace(100, 120, 150) + np.random.normal(0, 2, 150),
-                "volume": np.random.randint(1000, 5000, 150)
-            }
-            prices = pl.DataFrame(mock_data)
+            logger.error("No real data found/accessible in DuckDB.")
+            raise ValueError("Strategy Generator failed: No price data available in DuckDB. Please run SimFin Ingest.")
         
         print(f"Data ready: {len(prices)} rows")
         

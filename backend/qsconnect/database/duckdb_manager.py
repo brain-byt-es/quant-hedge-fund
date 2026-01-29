@@ -75,7 +75,7 @@ class DuckDBManager:
         # Ensure we can initialize the schema
         try:
             conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
-            try:
+            
             # 1. Historical Prices
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS historical_prices_fmp (
@@ -539,13 +539,22 @@ class DuckDBManager:
         tables = [
             "stock_list_fmp",
             "historical_prices_fmp",
-            "bulk_income_statement_annual_fmp",
-            "bulk_balance_sheet_statement_annual_fmp",
-            "bulk_cash_flow_statement_annual_fmp",
-            "bulk_ratios_annual_fmp",
-            "bulk_key_metrics_annual_fmp",
+            # SimFin Core (Quarterly)
+            "bulk_income_quarter_fmp",
+            "bulk_balance_quarter_fmp",
+            "bulk_cashflow_quarter_fmp",
+            # SimFin Banks
+            "bulk_income_banks_quarter_fmp",
+            "bulk_balance_banks_quarter_fmp",
+            "bulk_cashflow_banks_quarter_fmp",
+            # SimFin Insurance
+            "bulk_income_insurance_quarter_fmp",
+            "bulk_balance_insurance_quarter_fmp",
+            "bulk_cashflow_insurance_quarter_fmp",
+            # Core Systems
             "strategy_audit_log",
-            "trades"
+            "trades",
+            "realtime_candles"
         ]
         
         stats = []

@@ -1,6 +1,8 @@
 import duckdb
+from config.settings import get_settings
 
-conn = duckdb.connect('data/quant.duckdb')
+settings = get_settings()
+conn = duckdb.connect(str(settings.duckdb_path))
 rows = conn.execute("""
     SELECT symbol, timestamp, close, source, asset_class 
     FROM realtime_candles 

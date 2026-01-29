@@ -86,3 +86,14 @@ htmlcov/
 # OpenBB
 
 openbb/
+
+# Data
+data/
+backend/data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.csv
+*.zip
+!data/.keep
+

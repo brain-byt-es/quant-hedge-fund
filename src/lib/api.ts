@@ -51,7 +51,7 @@ const handleResponse = async (res: Response) => {
 
 export const api = {
   // Data Layer
-      triggerIngestion: async (params: { mode: "daily" | "backfill", start_date?: string }) => {
+      triggerIngestion: async (params: { mode: "daily" | "backfill" | "simfin", start_date?: string }) => {
           const res = await fetch(`${API_BASE_URL}/data/ingest`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },

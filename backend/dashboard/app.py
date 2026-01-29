@@ -342,9 +342,10 @@ def main():
     if not check_password():
         st.stop()
 
+    settings = get_settings()
     # Shared Managers
     # Use auto_close=True to allow other processes to access the DB on Windows
-    db_mgr = DuckDBManager(Path("data/quant.duckdb"), read_only=True, auto_close=True)
+    db_mgr = DuckDBManager(settings.duckdb_path, read_only=True, auto_close=True)
     gov_mgr = GovernanceManager(db_mgr)
     report_engine = ReportingEngine(db_mgr)
     registry = get_registry()
@@ -458,19 +459,34 @@ def main():
         expiry_days = (active_strat['ttl_expiry'] - datetime.now()).days if isinstance(active_strat['ttl_expiry'], datetime) else "N/A"
         st.caption(f"Active Strategy: {active_strat['strategy_hash'][:12]} | Stage: {active_strat['stage']} | TTL: {expiry_days} days remaining")
 
-    # Live Metrics Row
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Net Liquidity", "$5.24M", "+0.4%")
-    with m2:
-        st.metric("Gross Exposure", "138%", "Target")
-    with m3:
-        st.metric("Day P&L", "+$24,510", "0.47%")
-    with m4:
-        limit = 50000
-        current_dd = 12300
-        pct_used = (current_dd / limit) * 100
-        st.metric("Current Drawdown", f"-${current_dd/1000:.1f}k", f"{pct_used:.1f}% of limit")
+    # Live Metrics Row (REAL DATA)
+    try:
+        # 1. Net Liquidity (Mock start balance + Realized P&L)
+        start_balance = 100000.0 # Paper Trading Start
+        pnl_query = "SELECT SUM(quantity * (fill_price * -1)) as cash_flow FROM trades" # Simplified cash flow
+        cash_flow_df = db_mgr.query_pandas(pnl_query)
+        realized_cash = cash_flow_df['cash_flow'].iloc[0] if not cash_flow_df.empty and cash_flow_df['cash_flow'].iloc[0] else 0.0
+        
+        # Unrealized P&L would need live prices * positions (Complexity: High)
+        # For now, we show Cash Balance
+        current_equity = start_balance + realized_cash
+        
+        # 2. Exposure
+        # Sum of absolute market value of open positions
+        exposure_val = 0.0 
+        
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("Paper Equity", f"${current_equity:,.2f}", "0.0%")
+        with m2:
+            st.metric("Gross Exposure", f"${exposure_val:,.2f}", "0%")
+        with m3:
+            st.metric("Realized P&L", f"${realized_cash:,.2f}", "0%")
+        with m4:
+            st.metric("Trades Today", "0", "0")
+            
+    except Exception as e:
+        st.error(f"Metrics Error: {e}")
 
     st.divider()
 
@@ -710,18 +726,61 @@ def main():
             else:
                 st.warning("No strategy active in FULL/CANARY stage.")
         with c2:
-            st.markdown("**2️⃣ Proposed Candidate (MOCK)**")
-            proposed = {"top_n": 30, "reasoning": "Aggressive momentum capture."}
-            st.json(proposed)
-            rationale = st.text_area("Human Approval Rationale", "Reviewed backtest.")
-            colP1, colP2 = st.columns(2)
-            with colP1:
-                target_stage = st.selectbox("Activation Stage", ["SHADOW", "PAPER", "CANARY", "FULL"])
-            with colP2:
-                if st.button("LOG & APPROVE STRATEGY", type="primary"):
-                    strat_hash = gov_mgr.log_strategy_approval(config=proposed, regime_snapshot={"label": "Bull"}, llm_reasoning=proposed["reasoning"], human_rationale=rationale, approved_by="ADMIN", stage=target_stage)
-                    st.success(f"Strategy {strat_hash[:8]} deployed to {target_stage}")
-                    st.rerun()
+            st.markdown("**2️⃣ AI Strategy Proposal**")
+            
+            if "proposed_strat" not in st.session_state:
+                st.info("No strategy generated yet.")
+            else:
+                st.json(st.session_state.proposed_strat)
+                
+            colGen, colApp = st.columns(2)
+            with colGen:
+                if st.button("✨ GENERATE NEW (AI)", type="secondary"):
+                    with st.spinner("Analyzing SimFin Market Regime..."):
+                        try:
+                            # 1. Init Generator
+                            from qsresearch.llm.strategy_generator import StrategyGenerator
+                            from qsconnect import Client as QSClient
+                            
+                            gen = StrategyGenerator()
+                            client = QSClient()
+                            
+                            # 2. Get Real Market Data (Proxy with AAPL for regime detection if SPY missing)
+                            # Ideally we want a market index, but let's use a liquid stock as proxy for now
+                            prices = client.get_prices(start_date=(datetime.now() - timedelta(days=300)).strftime("%Y-%m-%d"))
+                            # Filter for a proxy symbol to save LLM tokens/compute
+                            if not prices.is_empty():
+                                proxy_prices = prices.filter(pl.col("symbol") == "AAPL")
+                                if proxy_prices.is_empty(): # Fallback
+                                     proxy_prices = prices.head(252)
+                            else:
+                                st.error("No price data found in DB to analyze.")
+                                st.stop()
+                                
+                            # 3. Generate
+                            config = gen.generate_strategy(proxy_prices)
+                            st.session_state.proposed_strat = config
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Generation failed: {e}")
+            
+            with colApp:
+                if "proposed_strat" in st.session_state:
+                    if st.button("LOG & APPROVE", type="primary"):
+                        proposed = st.session_state.proposed_strat
+                        # Mock regime for now, or extract from generator result if available
+                        strat_hash = gov_mgr.log_strategy_approval(
+                            config=proposed, 
+                            regime_snapshot=proposed.get("regime_snapshot", {}), 
+                            llm_reasoning=proposed.get("reasoning", "Manual Approval"), 
+                            human_rationale="Dashboard Approval", 
+                            approved_by="ADMIN", 
+                            stage="PAPER"
+                        )
+                        st.success(f"Strategy {strat_hash[:8]} deployed to PAPER")
+                        del st.session_state.proposed_strat
+                        st.rerun()
 
     with tab4:
         st.markdown(f"#### {render_icon('database')} Immutable Audit Trail", unsafe_allow_html=True)

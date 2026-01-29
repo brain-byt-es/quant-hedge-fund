@@ -10,10 +10,12 @@ from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from qsconnect.database.duckdb_manager import DuckDBManager
+from config.settings import get_settings
 from loguru import logger
 
 def init_db():
-    db_path = Path("data/quant.duckdb")
+    settings = get_settings()
+    db_path = settings.duckdb_path
     if db_path.exists():
         logger.warning(f"Database already exists at {db_path}")
         # We don't delete it, just ensure schema is up to date

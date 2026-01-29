@@ -208,6 +208,7 @@ class FMPClient(BaseAPIClient):
         symbols: Optional[List[str]] = None,
         progress_callback: Optional[Any] = None,
         save_callback: Optional[Any] = None,
+        failed_callback: Optional[Any] = None,
         stop_check: Optional[Any] = None,
     ) -> pl.DataFrame:
         """
@@ -271,6 +272,8 @@ class FMPClient(BaseAPIClient):
                 # Small yield to let the OS/Event loop breathe
                 time.sleep(0.05)
                 
+                symbol = future_to_symbol[future]
+                
                 if stop_check and stop_check():
                     logger.warning("Stop signal received. Terminating ingestion engine...")
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -286,6 +289,14 @@ class FMPClient(BaseAPIClient):
                         
                         all_data.append(result)
                         batch_buffer.append(result)
+                    else:
+                        # Handle Empty/Failed Result
+                        if failed_callback:
+                            try:
+                                failed_callback(symbol)
+                            except Exception as e:
+                                logger.error(f"Failed callback error for {symbol}: {e}")
+
                 except Exception as e:
                     logger.error(f"Error processing batch result: {e}")
                 

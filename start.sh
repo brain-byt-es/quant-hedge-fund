@@ -16,7 +16,7 @@ pre_cleanup() {
     # AGGRESSIVE: Kill anything holding the DuckDB file lock
     echo "🔒 Releasing DB locks..."
     # Find the process ID holding the lock and kill it
-    LOCK_PID=$(lsof -t backend/data/quant.duckdb)
+    LOCK_PID=$(lsof -t data/quant.duckdb)
     if [ ! -z "$LOCK_PID" ]; then
         echo "Found process $LOCK_PID holding DuckDB lock. Terminating..."
         kill -9 $LOCK_PID 2>/dev/null
@@ -44,6 +44,10 @@ trap cleanup SIGINT
 pre_cleanup
 
 echo "Starting QuantHedgeFond Platform..."
+
+# Set Project Root for Python scripts
+export PROJECT_ROOT=$(pwd)
+echo "📂 Project Root set to: $PROJECT_ROOT"
 
 # Start Backend
 echo "Starting Backend (FastAPI)..."

@@ -24,6 +24,7 @@ duckdb>=0.9.0
 # API clients
 requests>=2.31.0
 httpx>=0.25.0
+simfin>=0.8.0
 
 # Backtesting
 zipline-reloaded>=3.0.0

@@ -23,6 +23,7 @@ from config.constants import (
     FMP_RATE_LIMIT_PER_MINUTE,
 )
 from qsconnect.api.fmp_client import FMPClient
+from qsconnect.api.simfin_client import SimFinClient
 from qsconnect.database.duckdb_manager import DuckDBManager
 from qsconnect.cache.cache_manager import CacheManager
 from qsconnect.bundle.zipline_bundler import ZiplineBundler
@@ -42,6 +43,7 @@ class Client:
     def __init__(
         self,
         fmp_api_key: Optional[str] = None,
+        simfin_api_key: Optional[str] = None,
         datalink_api_key: Optional[str] = None,
         duckdb_path: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
@@ -52,6 +54,7 @@ class Client:
         
         Args:
             fmp_api_key: FMP API key (defaults to environment variable)
+            simfin_api_key: SimFin API key (defaults to environment variable)
             datalink_api_key: Datalink API key (defaults to environment variable)
             duckdb_path: Path to DuckDB database file
             cache_dir: Directory for parquet file cache
@@ -61,6 +64,7 @@ class Client:
         
         # API Keys
         self._fmp_api_key = fmp_api_key or settings.fmp_api_key
+        self._simfin_api_key = simfin_api_key or settings.simfin_api_key
         self._datalink_api_key = datalink_api_key or settings.datalink_api_key
         
         # Paths
@@ -73,6 +77,12 @@ class Client:
         
         # Initialize sub-clients
         self._fmp_client = FMPClient(api_key=self._fmp_api_key)
+        
+        # Ensure SimFin uses the central data directory
+        simfin_dir = self._duckdb_path.parent / "simfin"
+        simfin_dir.mkdir(parents=True, exist_ok=True)
+        self._simfin_client = SimFinClient(api_key=self._simfin_api_key, data_dir=str(simfin_dir))
+        
         self._db_manager = DuckDBManager(db_path=self._duckdb_path, read_only=read_only)
         self._cache_manager = CacheManager(cache_dir=self._cache_dir)
         self._bundler = ZiplineBundler(db_manager=self._db_manager)
@@ -186,24 +196,39 @@ class Client:
             else:
                 symbols = []
         
-        # 2. Smart Resume: Filter out symbols already in DB
+        # 2. Smart Resume & Negative Caching
         try:
-            # Query existing symbols from the prices table
+            # A. Smart Resume: Filter out symbols already in DB
             existing_symbols = set(self._db_manager.get_symbols())
+            
+            # B. Negative Caching: Filter out symbols known to fail
+            failed_symbols = set(self._db_manager.get_failed_symbols("historical_price"))
+            
             original_count = len(symbols)
             
             # Filter
-            symbols = [s for s in symbols if s not in existing_symbols]
+            symbols = [
+                s for s in symbols 
+                if s not in existing_symbols and s not in failed_symbols
+            ]
+            
+            skipped_existing = original_count - len([s for s in symbols if s not in existing_symbols]) # Approx logic for log, but let's be precise
+            skipped_failed = len(failed_symbols.intersection(set(symbols) if symbols else set())) 
+            # Note: intersection logic above is slightly off because we already filtered 'symbols'. 
+            # Correct stats:
+            # We want to know how many were removed due to existing vs failed.
+            # Simplified log:
             
             skipped_count = original_count - len(symbols)
             if skipped_count > 0:
-                logger.info(f"⏭️ Smart Resume: Found {skipped_count} symbols already in database. Skipping...")
+                logger.info(f"⏭️ Optimization: Skipped {skipped_count} symbols (Existing in DB or marked as Failed).")
+                logger.info(f"   - Known Failed: {len(failed_symbols)}")
                 logger.info(f"📥 Pending workload: {len(symbols)} symbols.")
         except Exception as e:
             logger.warning(f"⚠️ Smart Resume check failed: {e}")
 
         if not symbols:
-            logger.info("All symbols already downloaded.")
+            logger.info("All symbols already downloaded or marked as failed.")
             if progress_callback: progress_callback(100, 100)
             return pl.DataFrame()
 
@@ -217,6 +242,7 @@ class Client:
             symbols=symbols,
             progress_callback=progress_callback,
             save_callback=self._db_manager.upsert_prices, # Incremental Persistence
+            failed_callback=lambda sym: self._db_manager.log_failed_scan(sym, "historical_price"), # Negative Caching
             stop_check=lambda: self.stop_requested # Kill Switch
         )
         
@@ -226,6 +252,129 @@ class Client:
         
         return prices
     
+    # =====================
+    # SimFin Bulk Ingestion
+    # =====================
+    
+    def ingest_simfin_bulk(self) -> Dict[str, int]:
+        """
+        Master Ingestion: Ingest all SimFin bulk data into DuckDB.
+        Uses SimFin as the Single Source of Truth for fundamentals and ratios.
+        """
+        logger.info("🚀 Starting Master SimFin Ingestion (BASIC/PRO Mode)...")
+        stats = {}
+        
+        # 1. Price Data & Point-in-Time Price Ratios
+        try:
+            # Stock List (Companies)
+            companies = self._simfin_client.get_stock_list()
+            if not companies.empty:
+                # SimFin columns: Ticker, Company Name, IndustryId
+                # Reset index to get Ticker as column if it's an index
+                companies = companies.reset_index()
+                
+                # Check columns before rename
+                if "Ticker" in companies.columns: 
+                    companies = companies.rename(columns={"Ticker": "symbol"})
+                
+                if "Company Name" in companies.columns:
+                    companies = companies.rename(columns={"Company Name": "name"})
+                    
+                if "IndustryId" in companies.columns:
+                    companies = companies.rename(columns={"IndustryId": "industry_id"})
+
+                # Clean and Validations
+                if "symbol" in companies.columns:
+                    # Remove entries without symbol
+                    companies = companies.dropna(subset=["symbol"])
+                    
+                    # Add placeholders for missing columns
+                    companies["exchange"] = "US"
+                    companies["asset_type"] = "stock"
+                    companies["price"] = 0.0 # Will be updated by price ingest or live feed
+                    
+                    stats["stock_list"] = self._db_manager.upsert_stock_list(companies)
+                    logger.info(f"✅ Ingested {stats['stock_list']} companies.")
+                else:
+                    logger.error(f"Stock List missing 'symbol' column after mapping. Columns: {companies.columns}")
+
+            # Prices
+            prices = self._simfin_client.get_share_prices(variant='daily')
+            if not prices.is_empty():
+                # SimFin columns: Ticker, Date, Open, High, Low, Close, Adj. Close, Volume
+                # Force rename known columns
+                if "Ticker" in prices.columns: prices = prices.rename({"Ticker": "symbol"})
+                if "Date" in prices.columns: prices = prices.rename({"Date": "date"})
+                
+                # Standardize other columns
+                mapping = {
+                    "Open": "open", "High": "high", "Low": "low", 
+                    "Close": "close", "Adj. Close": "adj_close", "Volume": "volume"
+                }
+                existing_map = {old: new for old, new in mapping.items() if old in prices.columns}
+                if existing_map: prices = prices.rename(existing_map)
+                
+                # Validation
+                if "symbol" in prices.columns and "date" in prices.columns:
+                    # Clean data: Remove rows with null PKs
+                    prices = prices.drop_nulls(subset=["symbol", "date"])
+                    
+                    # Ensure types
+                    prices = prices.with_columns([
+                        pl.col("symbol").cast(pl.Utf8),
+                        pl.col("date").cast(pl.Date)
+                    ])
+                    
+                    stats["prices"] = self._db_manager.upsert_prices(prices)
+                    logger.info(f"✅ Successfully ingested {stats['prices']} SimFin prices.")
+                else:
+                    logger.error(f"SimFin price columns missing PKs after mapping. Columns: {prices.columns}")
+                
+            # Price Ratios (Daily P/E, P/S etc. based on Publish Date)
+            p_ratios = self._simfin_client.get_share_price_ratios(variant='daily')
+            if p_ratios is not None and not p_ratios.is_empty():
+                mapping_r = {"Ticker": "symbol", "Date": "date"}
+                existing_map_r = {old: new for old, new in mapping_r.items() if old in p_ratios.columns}
+                if existing_map_r: p_ratios = p_ratios.rename(existing_map_r)
+                
+                stats["price_ratios_daily"] = self._db_manager.upsert_fundamentals("price_ratios", "daily", p_ratios)
+            else:
+                logger.warning("SimFin daily price ratios unavailable or empty.")
+        except Exception as e:
+            logger.error(f"SimFin price/ratio ingestion failed: {e}")
+            
+        # 2. Fundamentals & Derived Ratios (Normal, Banks, Insurance)
+        # We use 'quarterly' for maximum granularity as permitted by PRO key
+        templates = ["normal", "banks", "insurance"]
+        statements = ["income", "balance", "cashflow"]
+        
+        for template in templates:
+            for stmt in statements:
+                try:
+                    df = self._simfin_client.get_bulk_fundamentals(statement=stmt, variant='quarterly', template=template)
+                    if not df.is_empty():
+                        if "Ticker" in df.columns: df = df.rename({"Ticker": "symbol"})
+                        if "Report Date" in df.columns: df = df.rename({"Report Date": "date"})
+                        
+                        table_suffix = f"_{template}" if template != "normal" else ""
+                        count = self._db_manager.upsert_fundamentals(f"{stmt}{table_suffix}", "quarter", df)
+                        stats[f"{stmt}_{template}_quarterly"] = count
+                except Exception as e:
+                    logger.error(f"SimFin {template} {stmt} failed: {e}")
+            
+            # 3. Derived Ratios (EBITDA, etc.)
+            try:
+                ratios = self._simfin_client.get_derived_ratios(variant='quarterly', template=template)
+                if not ratios.is_empty():
+                    if "Ticker" in ratios.columns: ratios = ratios.rename({"Ticker": "symbol"})
+                    if "Report Date" in ratios.columns: ratios = ratios.rename({"Report Date": "date"})
+                    table_suffix = f"_{template}" if template != "normal" else ""
+                    stats[f"ratios_{template}_quarterly"] = self._db_manager.upsert_fundamentals(f"ratios{table_suffix}", "quarter", ratios)
+            except Exception as e:
+                logger.error(f"SimFin ratios {template} failed: {e}")
+                
+        return stats
+
     # =====================
     # Fundamental Data
     # =====================

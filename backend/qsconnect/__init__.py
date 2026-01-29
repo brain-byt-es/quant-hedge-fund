@@ -12,5 +12,7 @@ Main Features:
 """
 
 from qsconnect.client import Client
+from qsconnect.api.fmp_client import FMPClient
+from qsconnect.api.simfin_client import SimFinClient
 
-__all__ = ["Client"]
+__all__ = ["Client", "FMPClient", "SimFinClient"]

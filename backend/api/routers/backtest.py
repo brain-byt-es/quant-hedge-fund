@@ -246,23 +246,38 @@ def get_backtest_details(run_id: str) -> Dict[str, Any]:
 
 
 @router.post("/run_test")
+async def trigger_smoke_test(background_tasks: BackgroundTasks):
+    """
+    SMOKE TEST: Runs a real, short backtest on the data to verify the pipeline.
+    Replaces the old Mock endpoint.
+    """
+    try:
+        # Define a safe test configuration
+        config = {
+            "experiment_name": "System_Health_Checks",
+            "strategy_name": "Smoke_Test_BuyHold",
+            "run_name": f"SmokeTest_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "start_date": "2023-01-01",
+            "end_date": "2023-06-01", # Short window
+            "capital_base": 10000.0,
+            "benchmark": "SPY",
+            "algorithm": {
+                "callable": "buy_and_hold", # Simple logic
+                "params": {"symbol": "AAPL"} # Test with a liquid stock
+            }
+        }
 
-def trigger_backtest_mock():
+        def _run():
+            logger.info("Executing Smoke Test (Real Data)...")
+            try:
+                run_backtest(config)
+                logger.info("Smoke Test completed successfully.")
+            except Exception as e:
+                logger.error(f"Smoke Test Failed: {e}")
 
-    """MOCK Endpoint to simulate a backtest run."""
-
-    # (Same mock logic as before, useful for quick UI tests)
-
-    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
-
-    with mlflow.start_run(run_name="Mock_Momentum_Run") as run:
-
-        mlflow.set_tag("strategy_name", "Momentum_Trend_Follower")
-
-        mlflow.log_metric("sharpe", 1.85)
-
-        mlflow.log_metric("annual_return", 0.15)
-
-        mlflow.log_metric("max_drawdown", -0.12)
-
-    return {"status": "started", "run_id": run.info.run_id}
+        background_tasks.add_task(_run)
+        return {"status": "started", "message": "Real Smoke Test initiated in background."}
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger smoke test: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

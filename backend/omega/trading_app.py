@@ -81,8 +81,7 @@ class TradingApp:
         # Governance & Strategy Layer
         if not hasattr(self, '_db_manager'):
             from qsconnect.database.duckdb_manager import DuckDBManager
-            from pathlib import Path
-            self._db_manager = DuckDBManager(Path("data/quant.duckdb"))
+            self._db_manager = DuckDBManager(settings.duckdb_path)
             
         self.gov = GovernanceManager(self._db_manager)
         self.registry = get_registry()
