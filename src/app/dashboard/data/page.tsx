@@ -15,26 +15,26 @@ export default function DataHubPage() {
           <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">Storage // DuckDB // Telemetry</p>
       </div>
 
-      {/* Top Section: Status Matrix (Full Width) */}
+      {/* Top Section: Status Matrix (Compact Strip) */}
       <div className="flex-none">
            <DataStatusGrid />
       </div>
 
-      {/* Bottom Section: Multi-Col Split */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
+      {/* Bottom Section: 2-Column Split (Left: Ops Stack, Right: Logs) */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
         
-        {/* Left: Process Monitor (3 Cols) */}
-        <div className="lg:col-span-3 h-full min-h-0">
-           <ProcessMonitor />
+        {/* Left Stack: Monitor + Alerts (5 Cols) */}
+        <div className="lg:col-span-5 h-full flex flex-col gap-4 overflow-hidden">
+           <div className="flex-1 min-h-0">
+               <ProcessMonitor />
+           </div>
+           <div className="flex-1 min-h-0">
+               <DataQualityAlerts />
+           </div>
         </div>
 
-        {/* Center: Quality Alerts (3 Cols) */}
-        <div className="lg:col-span-3 h-full min-h-0">
-            <DataQualityAlerts />
-        </div>
-
-        {/* Right: Live Terminal (6 Cols) */}
-        <div className="lg:col-span-6 h-full min-h-0">
+        {/* Right: Live Terminal (7 Cols) - MAX WIDTH */}
+        <div className="lg:col-span-7 h-full overflow-hidden">
             <LogViewer />
         </div>
       </div>

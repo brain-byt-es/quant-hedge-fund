@@ -50,23 +50,23 @@ export function LogViewer() {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
-        <ScrollArea className="h-full p-4">
-            <div className="space-y-1">
+        <ScrollArea className="h-full w-full">
+            <div className="space-y-1 p-4 w-full">
                 {logs.map((log, i) => (
-                    <div key={i} className="text-xs grid grid-cols-12 gap-2 hover:bg-accent/5 p-1 rounded transition-colors">
-                        <span className="col-span-3 text-muted-foreground truncate opacity-60">
-                            {new Date(log.timestamp).toLocaleTimeString()}
+                    <div key={i} className="text-[11px] flex items-start gap-3 hover:bg-accent/5 p-1 rounded transition-colors border-b border-border/10">
+                        <span className="text-muted-foreground shrink-0 opacity-60 w-16 tabular-nums">
+                            {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </span>
-                        <span className="col-span-2">
-                            <Badge variant="outline" className={`text-[10px] h-5 uppercase tracking-tighter ${
+                        <div className="shrink-0 w-20">
+                            <Badge variant="outline" className={`text-[9px] h-4 uppercase tracking-tighter px-1 block text-center truncate ${
                                 log.level === "ERROR" ? "text-destructive border-destructive/50" : 
                                 log.level === "WARNING" ? "text-chart-4 border-chart-4/50" : 
                                 "text-muted-foreground border-border"
                             }`}>
                                 {log.component}
                             </Badge>
-                        </span>
-                        <span className="col-span-7 whitespace-pre-wrap break-all text-foreground/90">
+                        </div>
+                        <span className="flex-1 whitespace-pre-wrap break-words text-foreground/90 font-mono tracking-tight leading-relaxed">
                             {log.message}
                         </span>
                     </div>

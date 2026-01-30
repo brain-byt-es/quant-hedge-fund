@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
-import { Table } from "lucide-react"
+import { Table, Database, Activity } from "lucide-react"
 import { api } from "@/lib/api"
 
 interface TableStat {
@@ -12,8 +12,25 @@ interface TableStat {
   lastUpdated?: string
 }
 
+const formatName = (name: string) => {
+    // Clean SimFin/FMP table names to readable labels
+    let n = name.replace("bulk_", "").replace("_fmp", "").replace("_statement", "");
+    n = n.replace("_annual", " (A)").replace("_quarter", " (Q)");
+    
+    // Sector Handling
+    if (n.includes("banks")) n = n.replace("_banks", "").replace(" (Q)", "") + " (Bank)";
+    if (n.includes("insurance")) n = n.replace("_insurance", "").replace(" (Q)", "") + " (Ins)";
+    
+    // Core Types
+    n = n.replace("historical_", "").replace("stock_", "");
+    
+    // Capitalize
+    return n.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
 export function DataStatusGrid() {
   const [tables, setTables] = useState<TableStat[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -21,10 +38,10 @@ export function DataStatusGrid() {
             const stats = await api.getDataStats()
             if (Array.isArray(stats)) {
                 setTables(stats)
+                setLoading(false)
             }
         } catch {
-            // Backend is likely busy with ingestion, ignore fetch errors
-            console.debug("Data Hub: Backend busy, retrying stats fetch later...")
+            console.debug("Data Hub: Backend busy...")
         }
     }
     
@@ -33,39 +50,49 @@ export function DataStatusGrid() {
     return () => clearInterval(interval)
   }, [])
 
+  if (loading && tables.length === 0) {
+      return (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 pb-2">
+            {Array.from({ length: 16 }).map((_, i) => (
+                <div key={i} className="h-10 w-full bg-muted/20 animate-pulse rounded-md border border-border/50" />
+            ))}
+        </div>
+      )
+  }
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
-      {tables.map((table) => (
-        <Card 
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 pb-2">
+      {tables.map((table) => {
+        const isActive = table.count > 0;
+        const displayName = formatName(table.name);
+        
+        return (
+        <div 
           key={table.name}
           className={`
-            p-2 border flex flex-col justify-between min-h-[60px]
+            flex items-center justify-between gap-2 px-3 py-2 rounded-md border
             bg-card/50 backdrop-blur-md transition-all
-            ${table.status === 'active' && table.count > 0 ? 'border-border shadow-sm' : 'border-muted opacity-60'}
+            ${isActive ? 'border-border shadow-sm' : 'border-dashed border-border/50 opacity-60'}
           `}
         >
-          <div className="flex justify-between items-start gap-1">
-            <div className="flex items-center gap-1.5 truncate">
-              <Table className="h-3 w-3 text-primary/50 shrink-0" />
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-tighter truncate" title={table.name}>
-                {table.name.replace('bulk_', '').replace('_fmp', '').replace('_statement_annual', '')}
-              </span>
-            </div>
-            {table.status === 'syncing' && (
-              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+          <div className="flex items-center gap-2 overflow-hidden">
+            {table.status === 'syncing' ? (
+                <Activity className="h-3 w-3 text-primary animate-spin shrink-0" />
+            ) : isActive ? (
+                <Database className="h-3 w-3 text-primary/70 shrink-0" />
+            ) : (
+                <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
             )}
+            <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-tight truncate" title={displayName}>
+              {displayName}
+            </span>
           </div>
           
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-sm font-mono font-bold text-foreground">
-              {table.count >= 0 ? table.count.toLocaleString() : '---'}
-            </span>
-            <span className="text-[8px] text-muted-foreground/50 font-mono">
-              {table.lastUpdated || ''}
-            </span>
-          </div>
-        </Card>
-      ))}
+          <span className={`text-xs font-mono font-bold shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+            {table.count >= 0 ? (table.count > 1000000 ? `${(table.count/1000000).toFixed(1)}M` : table.count > 1000 ? `${(table.count/1000).toFixed(1)}k` : table.count) : '-'}
+          </span>
+        </div>
+      )})}
     </div>
   )
 }
