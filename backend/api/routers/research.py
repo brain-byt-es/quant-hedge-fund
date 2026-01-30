@@ -87,6 +87,7 @@ def get_company_profile(symbol: str):
     try:
         client = get_qs_client()
         profile_data = {}
+        api_profile = {} # Initialize early
 
         # 1. Try to fetch from local DuckDB cache
         try:
@@ -99,103 +100,118 @@ def get_company_profile(symbol: str):
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
             
-        # 2. JIT Fallback: Fetch from FMP API if missing in DB or incomplete (price 0 or Market Cap 0)
+        # 2. Dynamic Price & Market Cap Recovery (SimFin Native)
+        if profile_data.get("price", 0) == 0 or profile_data.get("market_cap", 0) == 0:
+            try:
+                # Calculate Market Cap: Price * Shares
+                sql_mcap = f"""
+                    SELECT 
+                        (SELECT close FROM historical_prices_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 1) as price,
+                        (
+                            SELECT "Shares (Basic)" 
+                            FROM (
+                                SELECT "Shares (Basic)", date FROM bulk_income_quarter_fmp WHERE symbol = '{symbol}' AND "Shares (Basic)" IS NOT NULL
+                                UNION ALL
+                                SELECT "Shares (Basic)", date FROM bulk_income_banks_quarter_fmp WHERE symbol = '{symbol}' AND "Shares (Basic)" IS NOT NULL
+                                UNION ALL
+                                SELECT "Shares (Basic)", date FROM bulk_income_insurance_quarter_fmp WHERE symbol = '{symbol}' AND "Shares (Basic)" IS NOT NULL
+                            ) combined_shares
+                            ORDER BY date DESC LIMIT 1
+                        ) as shares
+                """
+                res = client.query(sql_mcap)
+                if not res.is_empty():
+                    price_val = float(res["price"][0]) if res["price"][0] else 0.0
+                    shares_val = float(res["shares"][0]) if res["shares"][0] else 0.0
+                    
+                    if price_val > 0: profile_data["price"] = price_val
+                    if price_val > 0 and shares_val > 0: 
+                        profile_data["market_cap"] = price_val * shares_val
+                        logger.info(f"✅ Calculated SimFin Market Cap for {symbol}: ${profile_data['market_cap']:,.0f}")
+            except Exception as calc_err:
+                logger.debug(f"SimFin Market Cap calc failed: {calc_err}")
+
+        # 3. JIT Fallback (FMP)
         current_price = profile_data.get("price")
         current_mcap = profile_data.get("market_cap")
         
-        if not profile_data or not profile_data.get("company_name") or current_price is None or current_price == 0 or current_mcap is None or current_mcap == 0:
+        if not profile_data.get("company_name") or not current_price or not current_mcap:
             try:
-                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Price/MCap)")
+                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Profile/Price/MCap)")
                 api_profile = client._fmp_client.get_company_profile(symbol)
                 
                 if api_profile:
-                    logger.info(f"✅ JIT SUCCESS: Received live profile for {symbol}. Price: ${api_profile.get('price')}")
-                    # Map API keys to our internal schema
-                    profile_data = {
-                        "symbol": symbol,
-                        "company_name": api_profile.get("companyName", f"{symbol} Corp"),
-                        "sector": api_profile.get("sector", "Technology"),
-                        "industry": api_profile.get("industry", "N/A"),
-                        "description": api_profile.get("description", "No description available."),
-                        "price": float(api_profile.get("price", 0)),
-                        "beta": float(api_profile.get("beta", 0)),
-                        "exchange": api_profile.get("exchangeShortName", "NASDAQ"),
-                        "website": api_profile.get("website", ""),
-                        "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
-                        "market_cap": float(api_profile.get("mktCap", 0)),
-                        "ipo_date": api_profile.get("ipoDate", "N/A")
-                    }
-                    # Save to DB for caching (Try-except to handle locks during background ingestion)
+                    if not profile_data.get("company_name"):
+                        profile_data.update({
+                            "symbol": symbol,
+                            "company_name": api_profile.get("companyName", f"{symbol} Corp"),
+                            "sector": api_profile.get("sector", "Technology"),
+                            "industry": api_profile.get("industry", "N/A"),
+                            "description": api_profile.get("description", "No description available."),
+                            "website": api_profile.get("website", ""),
+                            "ceo": api_profile.get("ceo", ""),
+                            "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
+                            "exchange": api_profile.get("exchangeShortName", "NASDAQ"),
+                            "ipo_date": api_profile.get("ipoDate", "N/A")
+                        })
+
+                    if not profile_data.get("price") and api_profile.get("price"):
+                        profile_data["price"] = float(api_profile["price"])
+                    if not profile_data.get("market_cap") and api_profile.get("mktCap"):
+                        profile_data["market_cap"] = float(api_profile["mktCap"])
+                        
+                    # Cache back to DB
                     try:
                         import pandas as pd
                         client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
-                    except:
-                        logger.debug(f"JIT: Cache write skipped for {symbol} (Database busy)")
+                    except: pass
             except Exception as jit_err:
-                logger.error(f"❌ JIT Profile fetch failed for {symbol}: {jit_err}")
+                logger.error(f"❌ JIT Fallback failed for {symbol}: {jit_err}")
 
-        # 3. Dynamic Price Recovery: If price is STILL 0, try to get latest from historical table
-        if profile_data.get("price", 0) == 0:
-            try:
-                # Try real-time first
-                price_df = client._fmp_client.get_historical_prices(symbol)
-                if not price_df.empty:
-                    profile_data["price"] = float(price_df.iloc[0]["close"])
-                else:
-                    # Try local DB as last resort
-                    local_price = client.query(f"SELECT close FROM historical_prices_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 1")
-                    if not local_price.is_empty():
-                        profile_data["price"] = float(local_price[0, 0])
-            except: pass
+        # 4. Final Data Assembly
+        if not profile_data.get("company_name"):
+            raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found.")
 
-        # 4. Add dynamic layers (DCF, Insider, News)
-        try:
-            dcf_df = client._fmp_client.get_dcf_valuation(symbol)
-            if not dcf_df.empty:
-                profile_data["dcf_value"] = float(dcf_df.iloc[0].get("dcf", 0))
-        except: pass
-
-        # 4. Factor Attribution (Radar Chart Data) - REAL DATA
+        # Factor Ranks
         try:
             engine = FactorEngine(db_mgr=client._db_manager)
-            factor_data = engine.get_ranks(symbol)
-            if factor_data:
-                profile_data["factor_attribution"] = factor_data["factor_attribution"]
-                profile_data["raw_factor_metrics"] = factor_data["raw_metrics"]
-            else:
-                # Fallback to neutral if not ranked yet
-                profile_data["factor_attribution"] = [
-                    {"factor": "Momentum", "score": 50},
-                    {"factor": "Value", "score": 50},
-                    {"factor": "Quality", "score": 50},
-                    {"factor": "Volatility", "score": 50},
-                    {"factor": "Growth", "score": 50},
-                ]
-        except Exception as fe_err:
-            logger.error(f"Factor lookup failed for {symbol}: {fe_err}")
-            profile_data["factor_attribution"] = []
+            ranks = engine.get_ranks(symbol)
+        except: ranks = None
+        
+        if not ranks:
+            ranks = {
+                "factor_attribution": [
+                    {"factor": "Momentum", "score": 50}, {"factor": "Quality", "score": 50},
+                    {"factor": "Growth", "score": 50}, {"factor": "Value", "score": 50},
+                    {"factor": "Safety", "score": 50},
+                ],
+                "raw_metrics": { "f_score": 0 }
+            }
 
+        response = {
+            "symbol": symbol,
+            "company_name": profile_data.get("company_name"),
+            "sector": profile_data.get("sector"),
+            "industry": profile_data.get("industry"),
+            "description": profile_data.get("description"),
+            "website": profile_data.get("website"),
+            "ceo": profile_data.get("ceo"),
+            "full_time_employees": profile_data.get("full_time_employees"),
+            "price": profile_data.get("price"),
+            "updated_at": profile_data.get("updated_at"),
+            "market_cap": profile_data.get("market_cap"),
+            "factor_attribution": ranks["factor_attribution"],
+            "raw_factor_metrics": ranks["raw_metrics"]
+        }
+
+        # News & Insider Trading
         try:
-            insider_df = client._fmp_client.get_insider_trades(symbol, limit=5)
-            if not insider_df.empty:
-                buys = len(insider_df[insider_df["transactionType"].str.contains("Buy", na=False, case=False)])
-                profile_data["insider_sentiment"] = "BULLISH" if buys > 2 else "NEUTRAL"
+            response["latest_news"] = client._fmp_client.get_stock_news(symbol, limit=5)
+            response["insider_sentiment"] = client.get_insider_sentiment(symbol)
         except: pass
 
-        try:
-            news_df = client._fmp_client.get_stock_news(symbol, limit=3)
-            if not news_df.empty:
-                profile_data["latest_news"] = news_df.to_dict(orient="records")
-        except: pass
-
-        # Update price from real-time source if available
-        try:
-            price_df = client._fmp_client.get_historical_prices(symbol)
-            if not price_df.empty:
-                profile_data["price"] = float(price_df.iloc[0]["close"])
-        except: pass
-
-        return profile_data
+        return response
+        
     except Exception as e:
         logger.error(f"Error in get_company_profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))

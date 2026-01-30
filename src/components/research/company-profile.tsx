@@ -146,7 +146,16 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                                 <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Market Cap</span>
                                 <div className="text-sm font-mono text-foreground flex items-center gap-2">
                                     <DollarSign className="h-4 w-4 text-primary/50" />
-                                    {profile.market_cap ? `${(profile.market_cap / 1e9).toFixed(2)}B` : "N/A"}
+                                    {profile.market_cap ? (
+                                        <>
+                                            {`${(profile.market_cap / 1e9).toFixed(2)}B`}
+                                            <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-muted border-border font-bold">
+                                                {profile.market_cap > 200e9 ? "MEGA" : 
+                                                 profile.market_cap > 10e9 ? "LARGE" : 
+                                                 profile.market_cap > 2e9 ? "MID" : "SMALL"}
+                                            </Badge>
+                                        </>
+                                    ) : "N/A"}
                                 </div>
                             </div>
                             <div className="space-y-1.5">

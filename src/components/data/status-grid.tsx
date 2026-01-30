@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card } from "@/components/ui/card"
-import { Table, Database, Activity } from "lucide-react"
+import { Database, Activity } from "lucide-react"
 import { api } from "@/lib/api"
 
 interface TableStat {

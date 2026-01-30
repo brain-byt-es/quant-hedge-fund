@@ -39,7 +39,7 @@ interface ProfileData {
 }
 
 export default function ResearchPage() {
-  const [symbol, setSymbol] = useState("RGTI")
+  const [symbol, setSymbol] = useState("")
   const [lookback, setLookback] = useState(252)
   
   const [signals, setSignals] = useState<SignalData[]>([])
@@ -54,13 +54,17 @@ export default function ResearchPage() {
               const data = await api.getResearchSignals(lookback)
               if (Array.isArray(data)) {
                   setSignals(data)
+                  // Auto-select first symbol if none chosen
+                  if (data.length > 0 && !symbol) {
+                      setSymbol(data[0].symbol)
+                  }
               }
           } catch {
               console.debug("Research Lab: Backend busy, skipping signals fetch...")
           }
       }
       loadSignals()
-  }, [lookback])
+  }, [lookback, symbol])
 
   // Fetch Symbol Details
   useEffect(() => {
@@ -107,6 +111,7 @@ export default function ResearchPage() {
                     setSymbol={setSymbol} 
                     lookback={lookback} 
                     setLookback={setLookback} 
+                    allSymbols={signals.map(s => s.symbol)}
                 />
             </div>
 

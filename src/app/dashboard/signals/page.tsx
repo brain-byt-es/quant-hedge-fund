@@ -4,13 +4,25 @@ import { useState, useEffect, useCallback } from "react"
 import { BigNumbers } from "@/components/research/signals/big-numbers"
 import { TechnicalChart } from "@/components/research/signals/technical-chart"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api"
-import { ArrowLeft, RefreshCw } from "lucide-react"
+import { ArrowLeft, RefreshCw, Check, ChevronsUpDown } from "lucide-react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 const TIME_WINDOWS = ["1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "MAX"]
-const QUICK_SYMBOLS = ["RGTI", "NVDA", "MSFT", "AAPL", "AMZN"]
 
 // Derived lookback from window
 const lookbackMap: Record<string, number> = {
@@ -32,19 +44,34 @@ interface Signal {
 }
 
 export default function SignalDashboardPage() {
-  const [symbol, setSymbol] = useState("RGTI")
+  const [symbol, setSymbol] = useState("")
   const [window, setTimeWindow] = useState("1Y")
   const [priceData, setPriceHistory] = useState<SignalPriceData[]>([])
   const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
 
   // Find dynamic metrics for selected symbol
   const activeSignal = signals.find(s => s.symbol === symbol) || {
       rank: 0, 
-      momentum: 50
+      momentum: 0
   }
 
   const fetchData = useCallback(async () => {
+      if (!symbol && signals.length === 0) {
+          // Initial load: Fetch signals first
+          try {
+              const s = await api.getResearchSignals()
+              if (Array.isArray(s) && s.length > 0) {
+                  setSignals(s)
+                  setSymbol(s[0].symbol)
+                  return // useEffect will re-trigger with new symbol
+              }
+          } catch (e) { console.error(e) }
+      }
+
+      if (!symbol) return;
+
       setLoading(true)
       try {
           const [h, s] = await Promise.all([
@@ -63,11 +90,16 @@ export default function SignalDashboardPage() {
       } finally {
           setLoading(false)
       }
-  }, [symbol, window])
+  }, [symbol, window, signals.length])
 
   useEffect(() => {
       fetchData()
   }, [fetchData])
+
+  // Sort alphabetically for the dropdown
+  const symbolList = signals.length > 0 
+      ? signals.map(s => s.symbol).sort() 
+      : ["RGTI", "AAPL", "NVDA", "MSFT", "TSLA"]
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground p-3 overflow-hidden font-sans selection:bg-primary/30">
@@ -87,15 +119,49 @@ export default function SignalDashboardPage() {
         </div>
 
         <div className="flex items-center gap-4">
-            {/* Symbol Selector */}
-            <Select value={symbol} onValueChange={setSymbol}>
-                <SelectTrigger className="w-32 h-8 bg-card border-border text-xs font-mono uppercase tracking-widest focus:ring-primary/30 font-bold">
-                    <SelectValue placeholder="Symbol" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border text-popover-foreground">
-                    {QUICK_SYMBOLS.map(s => <SelectItem key={s} value={s} className="text-xs font-mono font-bold">{s}</SelectItem>)}
-                </SelectContent>
-            </Select>
+            {/* Symbol Combobox */}
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-32 h-8 bg-card border-border text-xs font-mono uppercase tracking-widest focus:ring-primary/30 font-bold justify-between"
+                >
+                  {symbol}
+                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0" align="end">
+                <Command>
+                  <CommandInput placeholder="Search ticker..." className="h-8 text-xs" />
+                  <CommandList>
+                    <CommandEmpty>No symbol found.</CommandEmpty>
+                    <CommandGroup>
+                      {symbolList.slice(0, 5000).map((s) => (
+                        <CommandItem
+                          key={s}
+                          value={s}
+                          onSelect={(currentValue) => {
+                            setSymbol(currentValue.toUpperCase())
+                            setOpen(false)
+                          }}
+                          className="text-xs font-mono"
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-3 w-3",
+                              symbol === s ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {s}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
 
             {/* Window Selector */}
             <div className="flex bg-muted rounded-md p-0.5 border border-border shadow-inner">
