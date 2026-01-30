@@ -19,7 +19,7 @@ export function ExposureChart({ positions = [] }: ExposureChartProps) {
   const hasPositions = positions.length > 0;
   
   const data = hasPositions 
-    ? positions.map((p, i) => ({ name: p.symbol, value: Math.abs(p.market_value) }))
+    ? positions.map((p) => ({ name: p.symbol, value: Math.abs(p.market_value) }))
     : [{ name: 'Cash', value: 100 }];
 
   return (

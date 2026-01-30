@@ -15,7 +15,7 @@ interface RankingData {
   f_score?: number;
   rank?: number;
   as_of: string;
-  [key: string]: any;
+  [key: string]: string | number | undefined | unknown;
 }
 
 type SortKey = keyof RankingData;
@@ -92,7 +92,7 @@ export function RawRankingsTable({ data }: { data: RankingData[] }) {
                             <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.value?.toFixed(1) || "-"}</TableCell>
                             <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.growth?.toFixed(1) || "-"}</TableCell>
                             <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.safety?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className={`py-1.5 text-xs font-mono font-black text-right px-2 ${row.f_score && row.f_score >= 4 ? 'text-green-500' : row.f_score && row.f_score <= 2 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                            <TableCell className={`py-1.5 text-xs font-mono font-black text-right px-2 ${row.f_score && row.f_score >= 7 ? 'text-green-500' : row.f_score && row.f_score <= 3 ? 'text-red-500' : 'text-muted-foreground'}`}>
                                 {row.f_score !== undefined ? row.f_score : "-"}
                             </TableCell>
                         </TableRow>

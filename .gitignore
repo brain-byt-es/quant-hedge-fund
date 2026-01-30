@@ -97,3 +97,7 @@ backend/data/
 *.zip
 !data/.keep
 
+
+# Session Logs
+docs/session_logs/
+

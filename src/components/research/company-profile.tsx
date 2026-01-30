@@ -25,7 +25,7 @@ interface ProfileData {
   insider_sentiment?: string;
   latest_news?: { title: string, publishedDate: string, url: string, text: string }[];
   factor_attribution?: { factor: string, score: number }[];
-  raw_factor_metrics?: { f_score?: number, [key: string]: any };
+  raw_factor_metrics?: { f_score?: number, [key: string]: string | number | undefined | unknown };
   [key: string]: string | number | undefined | unknown;
 }
 
@@ -45,13 +45,13 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
     </Card>
   )
 
-  // Piotroski Coloring
+  // Piotroski Coloring (0-9 Scale)
   const fScore = profile.raw_factor_metrics?.f_score ?? 0;
   let fScoreColor = "text-muted-foreground";
   let fScoreBg = "bg-muted";
   
-  if (fScore >= 4) { fScoreColor = "text-primary"; fScoreBg = "bg-primary/10"; }
-  if (fScore <= 2) { fScoreColor = "text-destructive"; fScoreBg = "bg-destructive/10"; }
+  if (fScore >= 7) { fScoreColor = "text-primary"; fScoreBg = "bg-primary/10"; }
+  if (fScore <= 3) { fScoreColor = "text-destructive"; fScoreBg = "bg-destructive/10"; }
 
   return (
     <Card className="h-full border-border bg-card/40 backdrop-blur-md flex flex-col overflow-hidden shadow-2xl">
@@ -116,7 +116,7 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                             <div className={cn("p-3.5 rounded-xl border", fScoreBg)}>
                                 <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest block mb-1.5">F-Score (Quality)</span>
                                 <div className={cn("text-base font-mono font-bold flex items-baseline gap-1", fScoreColor)}>
-                                    {fScore}/5 <span className="text-[9px] opacity-70 font-normal">Piotroski</span>
+                                    {fScore}/9 <span className="text-[9px] opacity-70 font-normal">Piotroski</span>
                                 </div>
                             </div>
                             <div className={cn(
