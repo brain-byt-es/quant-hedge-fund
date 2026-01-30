@@ -41,6 +41,12 @@ class FactorEngine:
                     symbol VARCHAR PRIMARY KEY,
                     as_of DATE,
                     
+                    -- Market Data
+                    price DOUBLE,
+                    volume DOUBLE,
+                    market_cap DOUBLE,
+                    change_1d DOUBLE,
+                    
                     -- Raw Metrics (for transparency)
                     raw_momentum DOUBLE,
                     raw_roe DOUBLE,
@@ -54,7 +60,7 @@ class FactorEngine:
                     growth_score DOUBLE,
                     value_score DOUBLE,
                     safety_score DOUBLE,
-                    f_score INTEGER, -- Piotroski-style Score (0-5)
+                    f_score INTEGER, -- Piotroski-style Score (0-9)
                     
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -66,9 +72,14 @@ class FactorEngine:
             WITH 
             -- A. Latest Prices & Momentum
             LatestPrices AS (
-                SELECT symbol, close as price_now, date as date_now
+                SELECT 
+                    symbol, 
+                    close as price_now, 
+                    volume as volume_now, 
+                    date as date_now,
+                    ((close / NULLIF(LAG(close) OVER (PARTITION BY symbol ORDER BY date), 0)) - 1) * 100 as change_1d
                 FROM historical_prices_fmp
-                WHERE date = (SELECT MAX(date) FROM historical_prices_fmp)
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
             ),
             PastPrices AS (
                 SELECT symbol, close as price_12m
@@ -175,6 +186,12 @@ class FactorEngine:
                                             p.symbol,
                                             p.date_now as as_of,
                                             
+                                            -- Market Data
+                                            p.price_now as price,
+                                            p.volume_now as volume,
+                                            (p.price_now * COALESCE(m.shares, 0)) as market_cap,
+                                            p.change_1d,
+                                            
                                             -- Factors for Ranking
                                             (p.price_now / NULLIF(pp.price_12m, 0)) - 1.0 as raw_mom,
                                             m.roe as raw_roe,
@@ -211,6 +228,10 @@ class FactorEngine:
             SELECT
                 symbol,
                 as_of,
+                
+                -- Market Data
+                price, volume, market_cap, change_1d,
+                
                 raw_mom, raw_roe, raw_growth, raw_val, raw_vola,
                 
                 PERCENT_RANK() OVER (ORDER BY raw_mom ASC) * 100 as momentum_score,

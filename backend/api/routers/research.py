@@ -47,6 +47,10 @@ def get_signals(
             sql = f"""
                 SELECT 
                     symbol,
+                    price,
+                    volume,
+                    market_cap,
+                    change_1d as change_percent,
                     ROUND(momentum_score, 1) as momentum,
                     ROUND(quality_score, 1) as quality,
                     ROUND(value_score, 1) as value,
@@ -55,6 +59,9 @@ def get_signals(
                     f_score,
                     as_of
                 FROM factor_ranks_snapshot
+                WHERE price > 0.5 
+                  AND price < 5000000 -- Filter data errors
+                  AND market_cap > 1000000 -- Min $1M Cap
                 ORDER BY {sort_by} DESC
                 LIMIT {limit}
             """
@@ -71,8 +78,8 @@ def get_signals(
             df = res.to_pandas()
             df['rank'] = range(1, len(df) + 1)
             
-            # Format for frontend
-            return df.to_dict(orient="records")
+            # Format for frontend (Handle NaN for JSON compliance)
+            return df.replace({np.nan: None}).to_dict(orient="records")
             
         except Exception as db_err:
             logger.error(f"Signal Snapshot Query failed: {db_err}")

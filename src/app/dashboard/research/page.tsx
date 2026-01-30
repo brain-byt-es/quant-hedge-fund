@@ -6,7 +6,7 @@ import { RankScatter } from "@/components/research/rank-scatter"
 import { PriceAnalysisChart } from "@/components/research/price-chart"
 import { FactorDistributionChart } from "@/components/research/factor-distribution"
 import { CompanyProfile } from "@/components/research/company-profile"
-import { RawRankingsTable } from "@/components/research/raw-rankings-table"
+import { MarketOverviewTable } from "@/components/research/market-overview-table"
 import { api } from "@/lib/api"
 
 interface SignalData {
@@ -132,7 +132,7 @@ export default function ResearchPage() {
 
                     {/* Row 3: Full Table */}
                     <div className="h-[600px] shrink-0 pb-4">
-                         <RawRankingsTable data={signals} />
+                         <MarketOverviewTable data={signals} />
                     </div>
                 </div>
 
