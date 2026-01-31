@@ -15,7 +15,7 @@ interface MarketData {
   f_score?: number;
   momentum?: number;
   as_of: string;
-  [key: string]: any;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 type SortKey = keyof MarketData;

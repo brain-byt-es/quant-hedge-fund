@@ -17,6 +17,8 @@ from api.routers.backtest import get_mlflow_client, _format_run, MLFLOW_EXPERIME
 
 router = APIRouter()
 
+# --- Request Models ---
+
 class AnalyzeRequest(BaseModel):
     run_id: str
 
@@ -28,9 +30,39 @@ class CodeGenRequest(BaseModel):
     prompt: str
     factor_type: str = "momentum"
 
+class DeployCodeRequest(BaseModel):
+    code: str
+    factor_name: str = "custom_momentum"
+
 class HypothesisRequest(BaseModel):
     n: int = 3
     universe: str = "sp500"
+
+class AgenticQueryRequest(BaseModel):
+    query_type: str # 'alpha' or 'risk'
+    symbols: Optional[List[str]] = None
+
+# --- Endpoints ---
+
+@router.post("/deploy_code")
+async def deploy_code(request: DeployCodeRequest):
+    """
+    Save AI-generated factor code to the research layer.
+    """
+    try:
+        import os
+        # Ensure directory exists
+        save_path = "backend/qsresearch/features/injected_factor.py"
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+        with open(save_path, "w") as f:
+            f.write(request.code)
+            
+        logger.info(f"🚀 AI Factor Injected: {request.factor_name} saved to {save_path}")
+        return {"status": "success", "message": f"Factor '{request.factor_name}' deployed and ready for backtesting."}
+    except Exception as e:
+        logger.error(f"Deployment failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate_hypotheses")
 async def generate_hypotheses(request: HypothesisRequest):
@@ -106,10 +138,6 @@ async def analyze_backtest(request: AnalyzeRequest):
     except Exception as e:
         logger.error(f"AI Analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-class AgenticQueryRequest(BaseModel):
-    query_type: str # 'alpha' or 'risk'
-    symbols: Optional[List[str]] = None
 
 @router.post("/agentic_query")
 async def agentic_query(request: AgenticQueryRequest):

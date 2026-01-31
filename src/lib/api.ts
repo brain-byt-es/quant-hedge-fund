@@ -148,6 +148,15 @@ export const api = {
       return handleResponse(res);
   },
 
+  deployFactorCode: async (code: string, factor_name: string = "custom_momentum") => {
+      const res = await fetch(`${API_BASE_URL}/ai/deploy_code`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, factor_name }),
+      });
+      return handleResponse(res);
+  },
+
   generateHypotheses: async (n: number = 3) => {
       const res = await fetch(`${API_BASE_URL}/ai/generate_hypotheses`, {
           method: "POST",

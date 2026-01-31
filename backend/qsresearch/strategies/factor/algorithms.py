@@ -9,6 +9,50 @@ def use_factor_as_signal(df: pd.DataFrame, **params) -> pd.DataFrame:
     logger.info("Using default factor strategy")
     return pd.DataFrame()
 
+def dynamic_custom_factor(df: pd.DataFrame, **params) -> pd.DataFrame:
+    """
+    Executes the AI-injected factor code on the fly.
+    """
+    try:
+        import importlib.util
+        import sys
+        
+        path = "backend/qsresearch/features/injected_factor.py"
+        spec = importlib.util.spec_from_file_location("injected_factor", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        logger.info("Executing dynamic AI-injected factor...")
+        
+        # Group by symbol and apply the custom compute_factor
+        results = []
+        for symbol, group in df.groupby('symbol'):
+            # Sort by date to ensure time-series correctness
+            group = group.sort_values('date')
+            factor_values = module.compute_factor(group, **params)
+            
+            # Combine back with dates
+            res = pd.DataFrame({'date': group['date'], 'symbol': symbol, 'factor_val': factor_values})
+            results.append(res)
+            
+        full_factors = pd.concat(results)
+        
+        # Pivot to Matrix (Date x Symbol)
+        factor_matrix = full_factors.pivot(index='date', columns='symbol', values='factor_val')
+        
+        # Ranking: Pick Top N symbols every day
+        top_n = params.get("top_n", 20)
+        
+        # Create signals: 1 for Top N, 0 otherwise
+        ranks = factor_matrix.rank(axis=1, ascending=False)
+        signals = (ranks <= top_n).astype(int)
+        
+        return signals
+
+    except Exception as e:
+        logger.error(f"Dynamic factor execution failed: {e}")
+        return pd.DataFrame()
+
 def multi_factor_rebalance(df: pd.DataFrame, **params) -> pd.DataFrame:
     """
     Multi-Factor Strategy using pre-calculated ranks from DuckDB.

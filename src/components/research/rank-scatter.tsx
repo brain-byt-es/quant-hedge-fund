@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts"
 
 interface ScatterData {
-  momentum: number;
-  f_score: number;
+  momentum?: number;
+  f_score?: number;
   symbol: string;
   [key: string]: unknown;
 }

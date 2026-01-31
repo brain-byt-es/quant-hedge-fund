@@ -214,16 +214,20 @@ def _apply_factors(
     factors_config: list,
 ) -> pd.DataFrame:
     """Apply factor calculations from config."""
-    from qsresearch.features import FactorEngine
+    # NOTE: The new FactorEngine V2 operates directly on DuckDB (factor_ranks_snapshot).
+    # Legacy on-the-fly calculation is deprecated for performance reasons.
+    # Strategies should fetch pre-calculated ranks from DB.
     
-    engine = FactorEngine()
+    # from qsresearch.features import FactorEngine
+    # engine = FactorEngine()
     
     for factor_spec in factors_config:
         name = factor_spec.get("name")
         params = factor_spec.get("params", {})
         
         if name:
-            df = engine.calculate_factor(df, name, **params)
+            logger.info(f"Skipping legacy factor calc: {name} (using DB snapshot instead)")
+            # df = engine.calculate_factor(df, name, **params)
     
     return df
 

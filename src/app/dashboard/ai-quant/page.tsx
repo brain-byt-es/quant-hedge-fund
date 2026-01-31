@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { api } from "@/lib/api"
 import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Bot, Users, Activity } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+
+import { toast } from "sonner"
 
 interface Hypothesis {
   strategy_name: string;
@@ -19,7 +20,6 @@ interface Hypothesis {
 }
 
 export default function AIQuantPage() {
-  const router = useRouter()
   
   // --- STATE ---
   const [services, setServices] = useState({
@@ -38,6 +38,7 @@ export default function AIQuantPage() {
   const [loadingHypotheses, setLoadingHypotheses] = useState(false)
   
   const [editorCode, setEditorCode] = useState<string>("# Waiting for Alpha Factor code injection...")
+  const [customFactorDeployed, setCustomFactorDeployed] = useState(false)
   
   const [strategyConfig, setStrategyConfig] = useState<string>(JSON.stringify({
       strategy_name: "New_Strategy",
@@ -170,24 +171,101 @@ export default function AIQuantPage() {
 
   const [activeAccordion, setActiveAccordion] = useState<string[]>(["hypotheses", "config"])
 
-  const loadHypothesis = (h: Hypothesis) => {
-      setStrategyConfig(JSON.stringify(h, null, 2))
-      setChatHistory(prev => [...prev, { role: 'ai', content: `Loaded hypothesis: ${h.strategy_name} into configuration engine. Review parameters and execute.`, tool: "Forge" }])
-      // Ensure config panel is open and highlight it
-      if (!activeAccordion.includes("config")) {
-          setActiveAccordion(prev => [...prev, "config"])
+  const handleDeployFactor = async () => {
+      try {
+          const res = await api.deployFactorCode(editorCode)
+          setCustomFactorDeployed(true)
+          toast.success("AI Factor Injected", {
+              description: res.message
+          })
+          setChatHistory(prev => [...prev, { 
+              role: 'ai', 
+              content: "Neural logic successfully injected into the research layer. I've mapped your SMA logic to the backtester. You can now execute the run.", 
+              tool: "Code Injector" 
+          }])
+      } catch (err) {
+          toast.error("Injection Failed", { description: String(err) })
       }
-      // Scroll to config (optional, simplified here)
+  }
+
+  const loadHypothesis = (h: Hypothesis) => {
+      // Intelligent Transformation: Abstract Hypothesis -> Concrete Execution Config
+      try {
+          const weights = (h.factor_weights as Record<string, number>) || { momentum: 0.5, quality: 0.3, value: 0.2 };
+          const topN = (h.top_n as number) || 20;
+          
+          // Logic: Map weights to thresholds
+          let momMin = 60;
+          if (weights.momentum && weights.momentum > 0.5) momMin = 90;
+          else if (weights.momentum && weights.momentum > 0.3) momMin = 80;
+          
+          let fMin = 5;
+          const qualityWeight = (weights.quality || 0) + (weights.value || 0); // Combined fundamental weight
+          if (qualityWeight > 0.4) fMin = 7;
+          if (qualityWeight > 0.7) fMin = 8;
+
+          // Decide algorithm: If we just generated code, use dynamic_custom_factor
+          // Otherwise use the standard multi_factor_rebalance
+          const useDynamic = customFactorDeployed;
+
+          const executionConfig = {
+              strategy_name: h.strategy_name || "AI_Strategy",
+              start_date: "2023-01-01",
+              end_date: "2024-12-31",
+              capital_base: 100000,
+              benchmark: "SPY",
+              algorithm: {
+                  callable: useDynamic ? "dynamic_custom_factor" : "multi_factor_rebalance",
+                  params: {
+                      f_score_min: fMin,
+                      momentum_min: momMin,
+                      top_n: topN
+                  }
+              },
+              // Persist original intent for reference
+              meta: {
+                  original_hypothesis: h.strategy_name,
+                  style: h.style,
+                  mode: useDynamic ? "Custom_AI_Factor" : "Standard_Snapshot"
+              }
+          };
+
+          setStrategyConfig(JSON.stringify(executionConfig, null, 2))
+          setChatHistory(prev => [...prev, { 
+              role: 'ai', 
+              content: `Loaded hypothesis: '${h.strategy_name}'. Mode: ${useDynamic ? 'Dynamic Custom Factor' : 'Standard DB Factors'}. Ready for execution.`, 
+              tool: "Forge" 
+          }])
+          
+          if (!activeAccordion.includes("config")) {
+              setActiveAccordion(prev => [...prev, "config"])
+          }
+      } catch (err) {
+          console.error("Failed to transform hypothesis", err);
+          // Fallback
+          setStrategyConfig(JSON.stringify(h, null, 2))
+      }
   }
 
   const handleDeploy = async () => {
       try {
           const config = JSON.parse(strategyConfig)
           await api.runBacktest(config)
-          alert("Strategy Deployed to Research Lab.")
-          router.push("/dashboard/research")
+          
+          toast.success("Strategy Deployed", {
+            description: `Backtest initiated for '${config.strategy_name}'. Check MLflow for results.`,
+          })
+          
+          setChatHistory(prev => [...prev, { 
+              role: 'ai', 
+              content: `Strategy '${config.strategy_name}' deployed to the Research Lab. Execution started in background. Monitor MLflow for performance metrics.`,
+              tool: "Supervisor"
+          }])
+          
       } catch {
-          alert("Invalid JSON Config.")
+          toast.error("Deployment Failed", {
+            description: "Invalid JSON Configuration.",
+          })
       }
   }
 
@@ -391,7 +469,7 @@ export default function AIQuantPage() {
                                     spellCheck={false}
                                 />
                                 <div className="p-3 border-t border-border/50 bg-muted/20 flex justify-end">
-                                    <Button size="sm" className="h-8 text-xs uppercase tracking-widest bg-chart-3 hover:bg-chart-3/80 text-white font-black px-6 shadow-lg">
+                                    <Button size="sm" className="h-8 text-xs uppercase tracking-widest bg-chart-3 hover:bg-chart-3/80 text-white font-black px-6 shadow-lg" onClick={handleDeployFactor}>
                                         <Save className="h-4 w-4 mr-2" /> Deploy Factors
                                     </Button>
                                 </div>

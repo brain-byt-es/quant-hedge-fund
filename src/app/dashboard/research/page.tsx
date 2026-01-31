@@ -12,10 +12,14 @@ import { api } from "@/lib/api"
 interface SignalData {
   rank: number;
   symbol: string;
-  factor_signal: number;
+  price?: number;
+  change_percent?: number;
+  market_cap?: number;
+  volume?: number;
+  momentum?: number;
+  f_score?: number;
   as_of: string;
-  bundle_name: string;
-  [key: string]: unknown;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 interface ProfileData {

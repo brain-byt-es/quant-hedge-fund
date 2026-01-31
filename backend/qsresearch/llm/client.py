@@ -17,6 +17,10 @@ class LLMClient:
         Initialize the LLM client. Priorities: OpenAI > Groq.
         """
         import os
+        from dotenv import load_dotenv
+        
+        # Explicitly load .env to ensure keys are available
+        load_dotenv()
         
         self.openai_key = os.getenv("OPENAI_API_KEY")
         self.groq_key = api_key or os.getenv("GROQ_API_KEY")
