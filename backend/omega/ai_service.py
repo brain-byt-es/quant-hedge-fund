@@ -101,28 +101,37 @@ class MarketAnalyst:
         """
         return self._call_llm(prompt)
 
-    def _call_llm(self, user_prompt: str) -> Dict[str, Any]:
+    def _call_llm(self, user_prompt: str, json_mode: bool = True) -> Any:
         """Internal helper to call LLM (OpenAI or Groq) safely"""
         if not self.client:
-            return {"error": "AI Service Disabled"}
+            return {"error": "AI Service Disabled"} if json_mode else "AI Service Disabled"
             
         try:
-            # Common interface for OpenAI-compatible clients
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a specialized trading AI. Output strictly valid JSON."},
+            # Adjust system prompt and params based on mode
+            sys_msg = "You are a specialized trading AI. Output strictly valid JSON." if json_mode else "You are a specialized trading AI."
+            params = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": sys_msg},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.4,
-                max_tokens=1024,
-                response_format={"type": "json_object"}
-            )
+                "temperature": 0.4,
+                "max_tokens": 1024
+            }
+            
+            if json_mode:
+                params["response_format"] = {"type": "json_object"}
+            
+            response = self.client.chat.completions.create(**params)
             content = response.choices[0].message.content
-            return json.loads(content)
+            
+            if json_mode:
+                return json.loads(content)
+            return content
+            
         except Exception as e:
             logger.error(f"LLM Call Failed ({self.provider}): {e}")
-            return {"error": str(e)}
+            return {"error": str(e)} if json_mode else f"Error: {e}"
 
 # Singleton instance
 _ANALYST = None

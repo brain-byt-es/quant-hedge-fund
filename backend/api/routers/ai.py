@@ -42,7 +42,36 @@ class AgenticQueryRequest(BaseModel):
     query_type: str # 'alpha' or 'risk'
     symbols: Optional[List[str]] = None
 
+class ChatRequest(BaseModel):
+    message: str
+
 # --- Endpoints ---
+
+@router.post("/chat")
+async def chat(request: ChatRequest):
+    """
+    General conversational endpoint for the Supervisor Agent.
+    """
+    analyst = get_market_analyst()
+    if not analyst:
+        raise HTTPException(status_code=503, detail="AI Service unavailable")
+        
+    prompt = f"""
+    You are the 'Supervisor Agent' of a high-frequency quantitative hedge fund platform.
+    Your user is an institutional portfolio manager.
+    
+    Answer the following question or request concisely and professionally.
+    If the user asks about strategy optimization (e.g. lowering drawdown), suggest specific techniques (volatility targeting, stop-losses, beta hedging).
+    
+    User Query: "{request.message}"
+    """
+    
+    try:
+        # Use conversational mode (json_mode=False)
+        response = analyst._call_llm(prompt, json_mode=False)
+        return {"response": response}
+    except Exception as e:
+        return {"response": f"I am currently offline. ({e})"}
 
 @router.post("/deploy_code")
 async def deploy_code(request: DeployCodeRequest):
@@ -235,7 +264,7 @@ async def generate_strategy(request: StrategyRequest):
     IMPORTANT: If the user asks for F-Score, Quality, or Momentum, use "multi_factor_rebalance" and map their criteria to "f_score_min" (threshold 0-9) and "momentum_min" (percentile 0-100).
     
     Defaults: 
-    - Start date: 2020-01-01
+    - Start date: 2021-01-01
     - End date: 2024-12-31
     - Capital: 100000
     

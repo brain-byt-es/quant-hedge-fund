@@ -80,7 +80,7 @@ def multi_factor_rebalance(df: pd.DataFrame, **params) -> pd.DataFrame:
             LIMIT {top_n}
         """
         
-        candidates = client.query(sql).to_df()
+        candidates = client.query(sql).to_pandas()
         
         if candidates.empty:
             logger.warning("No stocks matched the criteria!")

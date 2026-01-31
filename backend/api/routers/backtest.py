@@ -43,23 +43,28 @@ def _format_run(run) -> Dict[str, Any]:
     data = run.data
     info = run.info
     
+    # Map complex metrics to frontend-friendly keys
+    metrics = data.metrics
+    
     return {
         "run_id": info.run_id,
         "experiment_id": info.experiment_id,
         "status": info.status,
         "start_time": datetime.fromtimestamp(info.start_time / 1000).isoformat() if info.start_time else None,
         "end_time": datetime.fromtimestamp(info.end_time / 1000).isoformat() if info.end_time else None,
-        "metrics": data.metrics,
+        "metrics": metrics,
         "params": data.params,
         "tags": data.tags,
         "strategy_name": data.tags.get("strategy_name", data.tags.get("mlflow.runName", "Unknown Strategy")),
-        "annual_return": data.metrics.get("annual_return", 0.0),
-        "sharpe_ratio": data.metrics.get("sharpe", 0.0),
-        "max_drawdown": data.metrics.get("max_drawdown", 0.0),
-        "alpha": data.metrics.get("alpha", 0.0),
-        "beta": data.metrics.get("beta", 0.0),
-        "volatility": data.metrics.get("volatility", 0.0),
-        "mc_stability_score": data.metrics.get("mc_stability_score", 0.0),
+        
+        # Mapping Logic
+        "annual_return": metrics.get("portfolio_cagr", metrics.get("annual_return", 0.0)),
+        "sharpe_ratio": metrics.get("portfolio_yearly_sharpe", metrics.get("sharpe", 0.0)),
+        "max_drawdown": metrics.get("portfolio_max_drawdown", metrics.get("max_drawdown", 0.0)),
+        "alpha": metrics.get("portfolio_alpha", metrics.get("alpha", 0.0)),
+        "beta": metrics.get("portfolio_beta", metrics.get("beta", 0.0)),
+        "volatility": metrics.get("portfolio_yearly_vol", metrics.get("volatility", 0.0)),
+        "mc_stability_score": metrics.get("mc_stability_score", 0.0),
     }
 
 @router.get("/list")
@@ -120,7 +125,11 @@ async def execute_backtest(params: BacktestParams, background_tasks: BackgroundT
 
     background_tasks.add_task(_task)
     
-    return {"status": "accepted", "message": "Backtest started in background"}
+    return {
+        "status": "accepted", 
+        "message": "Backtest started in background",
+        "run_name": config["run_name"]
+    }
 
 @router.get("/run/{run_id}")
 def get_backtest_details(run_id: str) -> Dict[str, Any]:

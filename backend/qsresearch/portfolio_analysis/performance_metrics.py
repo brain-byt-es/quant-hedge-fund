@@ -200,8 +200,18 @@ def calculate_all_metrics(
             bench_drawdown = (bench_cumulative - bench_running_max) / bench_running_max
             metrics["benchmark_max_drawdown"] = bench_drawdown.min()
     
-    # Round all metrics
-    metrics = {k: round(v, 10) if isinstance(v, float) else v for k, v in metrics.items()}
-    
-    logger.info(f"Calculated {len(metrics)} performance metrics")
-    return metrics
+    # Sanitize metrics for JSON serialization (handle inf/nan)
+    sanitized_metrics = {}
+    for k, v in metrics.items():
+        if isinstance(v, float):
+            if np.isinf(v):
+                sanitized_metrics[k] = None # Or a sentinel value like 0.0 or 9999.0
+            elif np.isnan(v):
+                sanitized_metrics[k] = None
+            else:
+                sanitized_metrics[k] = round(v, 10)
+        else:
+            sanitized_metrics[k] = v
+            
+    logger.info(f"Calculated {len(sanitized_metrics)} performance metrics")
+    return sanitized_metrics

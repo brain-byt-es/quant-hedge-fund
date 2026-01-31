@@ -308,15 +308,15 @@ def _simulate_portfolio(
         # Avoid division by zero
         portfolio_returns = strategy_assets_returns.sum(axis=1) / position_counts.replace(0, 1)
         
-        # Filter to date range
-        portfolio_returns = portfolio_returns.loc[start_date:end_date]
-        
-        if len(portfolio_returns) == 0:
-            return _fallback_simulation(capital_base, start_date, end_date)
-            
-        # --- Transaction Costs ---
+        # --- Transaction Costs (Only apply if positions are active) ---
         commission_bps = 0.0005 
-        adjusted_returns = portfolio_returns - commission_bps
+        
+        # Create a cost mask: 0 if in cash, commission if holding
+        cost_mask = (position_counts > 0).astype(float) * commission_bps
+        adjusted_returns = portfolio_returns - cost_mask
+        
+        # Filter to date range
+        adjusted_returns = adjusted_returns.loc[start_date:end_date]
         
         # Calculate cumulative value
         portfolio_values = [capital_base]

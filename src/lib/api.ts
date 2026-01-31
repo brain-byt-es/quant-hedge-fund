@@ -175,6 +175,15 @@ export const api = {
       return handleResponse(res);
   },
 
+  chat: async (message: string) => {
+      const res = await fetch(`${API_BASE_URL}/ai/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+      });
+      return handleResponse(res);
+  },
+
   // Live Execution Layer
   getLiveStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/live/status`);

@@ -7,6 +7,8 @@ import { PriceAnalysisChart } from "@/components/research/price-chart"
 import { FactorDistributionChart } from "@/components/research/factor-distribution"
 import { CompanyProfile } from "@/components/research/company-profile"
 import { MarketOverviewTable } from "@/components/research/market-overview-table"
+import { BacktestHistoryTable } from "@/components/research/backtest-history-table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api } from "@/lib/api"
 
 interface SignalData {
@@ -20,6 +22,17 @@ interface SignalData {
   f_score?: number;
   as_of: string;
   [key: string]: string | number | boolean | null | undefined;
+}
+
+interface BacktestRun {
+  run_id: string
+  strategy_name: string
+  start_time: string
+  status: string
+  sharpe_ratio: number
+  annual_return: number
+  max_drawdown: number
+  volatility: number
 }
 
 interface ProfileData {
@@ -47,27 +60,32 @@ export default function ResearchPage() {
   const [lookback, setLookback] = useState(252)
   
   const [signals, setSignals] = useState<SignalData[]>([])
+  const [backtests, setBacktests] = useState<BacktestRun[]>([])
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [priceHistory, setPriceHistory] = useState<{date: string, close: number, [key: string]: unknown}[]>([])
   const [loadingProfile, setLoadingProfile] = useState(false)
 
-  // Fetch Signals (Rank vs Score)
+  // Fetch Signals & Backtests
   useEffect(() => {
-      const loadSignals = async () => {
+      const loadData = async () => {
           try {
-              const data = await api.getResearchSignals(lookback)
-              if (Array.isArray(data)) {
-                  setSignals(data)
-                  // Auto-select first symbol if none chosen
-                  if (data.length > 0 && !symbol) {
-                      setSymbol(data[0].symbol)
-                  }
+              const [sigData, runData] = await Promise.all([
+                  api.getResearchSignals(lookback),
+                  api.listBacktests(50)
+              ])
+              
+              if (Array.isArray(sigData)) {
+                  setSignals(sigData)
+                  if (sigData.length > 0 && !symbol) setSymbol(sigData[0].symbol)
+              }
+              if (Array.isArray(runData)) {
+                  setBacktests(runData as unknown as BacktestRun[])
               }
           } catch {
-              console.debug("Research Lab: Backend busy, skipping signals fetch...")
+              console.debug("Research Lab: Backend busy...")
           }
       }
-      loadSignals()
+      loadData()
   }, [lookback, symbol])
 
   // Fetch Symbol Details
@@ -134,9 +152,22 @@ export default function ResearchPage() {
                          <FactorDistributionChart data={signals} />
                     </div>
 
-                    {/* Row 3: Full Table */}
-                    <div className="h-[600px] shrink-0 pb-4">
-                         <MarketOverviewTable data={signals} onSelectSymbol={setSymbol} />
+                    {/* Row 3: Tabs (Market Table vs Backtest History) */}
+                    <div className="h-[600px] shrink-0 pb-4 flex flex-col">
+                         <Tabs defaultValue="market" className="h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-2">
+                                <TabsList className="h-7 bg-muted/50 border border-border/50 p-0.5">
+                                    <TabsTrigger value="market" className="text-[10px] h-6 uppercase tracking-widest font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Market Overview</TabsTrigger>
+                                    <TabsTrigger value="backtests" className="text-[10px] h-6 uppercase tracking-widest font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Strategy Audit Log</TabsTrigger>
+                                </TabsList>
+                            </div>
+                            <TabsContent value="market" className="flex-1 min-h-0 mt-0">
+                                <MarketOverviewTable data={signals} onSelectSymbol={setSymbol} />
+                            </TabsContent>
+                            <TabsContent value="backtests" className="flex-1 min-h-0 mt-0">
+                                <BacktestHistoryTable data={backtests} />
+                            </TabsContent>
+                         </Tabs>
                     </div>
                 </div>
 
