@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     ib_paper_trading: bool = Field(default=True, description="Use paper trading mode")
     
     # ===================
+    # Universe Filters
+    # ===================
+    min_market_cap: float = Field(default=500_000_000.0, description="Minimum market cap for universe selection")
+    min_volume: float = Field(default=1_000_000.0, description="Minimum daily volume for universe selection")
+    
+    # ===================
     # Risk Management
     # ===================
     max_daily_loss_pct: float = Field(default=0.02, description="Max daily loss as % of portfolio (e.g. 0.02 = 2%)")

@@ -138,7 +138,7 @@ def calculate_all_metrics(
     dates = performance["date"] if "date" in performance.columns else pd.date_range(
         start="2020-01-01", periods=len(returns), freq="B"
     )
-    monthly_returns = pd.Series(returns, index=dates).resample("M").sum()
+    monthly_returns = pd.Series(returns, index=dates).resample("ME").sum()
     
     metrics["portfolio_monthly_mean"] = monthly_returns.mean()
     metrics["portfolio_monthly_std"] = monthly_returns.std()
@@ -147,7 +147,7 @@ def calculate_all_metrics(
     metrics["portfolio_win_month_pct"] = (monthly_returns > 0).mean()
     
     # Yearly returns
-    yearly_returns = pd.Series(returns, index=dates).resample("Y").sum()
+    yearly_returns = pd.Series(returns, index=dates).resample("YE").sum()
     
     metrics["portfolio_yearly_mean_actual"] = yearly_returns.mean()
     metrics["portfolio_yearly_std_actual"] = yearly_returns.std()

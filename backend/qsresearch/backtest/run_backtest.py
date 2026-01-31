@@ -286,8 +286,8 @@ def _simulate_portfolio(
         # Pivot prices to wide format (Index: Date, Columns: Symbol)
         price_matrix = prices.pivot(index='date', columns='symbol', values='close')
         
-        # Calculate daily returns
-        returns_matrix = price_matrix.pct_change().fillna(0)
+        # Calculate daily returns (Pandas 2.2+ compatible)
+        returns_matrix = price_matrix.pct_change(fill_method=None).fillna(0)
         
         # Align signals to returns (fill missing dates/symbols with 0)
         # Assuming signals are 1 for hold, 0 for cash

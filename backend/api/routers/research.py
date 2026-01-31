@@ -13,14 +13,17 @@ from qsresearch.features.factor_engine import FactorEngine
 router = APIRouter()
 
 @router.post("/update_factors")
-def trigger_factor_update():
-    """Trigger the Factor Engine to recalculate universe rankings."""
+def trigger_factor_update(
+    min_mcap: Optional[float] = Query(None, description="Minimum market cap filter"),
+    min_volume: Optional[float] = Query(None, description="Minimum volume filter")
+):
+    """Trigger the Factor Engine to recalculate universe rankings with optional filters."""
     try:
         client = get_qs_client()
         # Pass the shared client's DB manager to avoid locking issues
         engine = FactorEngine(db_mgr=client._db_manager)
-        count = engine.calculate_universe_ranks()
-        return {"status": "success", "ranked_symbols": count}
+        count = engine.calculate_universe_ranks(min_mcap=min_mcap, min_volume=min_volume)
+        return {"status": "success", "ranked_symbols": count, "filters": {"min_mcap": min_mcap, "min_volume": min_volume}}
     except Exception as e:
         logger.error(f"Factor update failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

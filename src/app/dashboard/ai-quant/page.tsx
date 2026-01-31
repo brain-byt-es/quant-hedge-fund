@@ -4,11 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { api } from "@/lib/api"
-import { Sparkles, Code, Play, ArrowRight, Terminal, Settings, Save, Loader2, Search, Bot, Users, Activity, CheckCircle2 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Play, ArrowRight, Terminal, Save, Loader2, Search, Users, Activity, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -18,6 +15,8 @@ interface Hypothesis {
   strategy_name: string;
   style: string;
   reasoning: string;
+  factor_weights?: Record<string, number>;
+  top_n?: number;
   [key: string]: string | number | undefined | unknown;
 }
 
@@ -28,14 +27,30 @@ interface ChatMessage {
   content?: string;
   tool?: string;
   type?: ChatMessageType;
-  data?: any;
+  data?: Record<string, unknown> | Hypothesis[] | null;
   timestamp?: number;
+}
+
+interface StressTest {
+  scenario: string;
+  impact_percent: number;
+}
+
+interface BacktestRunData {
+  strategy_name: string;
+  status: string;
+  sharpe_ratio: number;
+  annual_return: number;
+  max_drawdown: number;
+  volatility: number;
+  alpha?: number;
+  tags: Record<string, string>;
 }
 
 export default function AIQuantPage() {
   
   // --- STATE ---
-  const [services, setServices] = useState({
+  const [services] = useState({
       mlflow: { active: false, url: "http://127.0.0.1:5000" },
       prefect: { active: false, url: "http://127.0.0.1:4200" }
   })
@@ -47,21 +62,9 @@ export default function AIQuantPage() {
   const [loadingChat, setLoadingChat] = useState(false)
   const [agentStatus, setAgentStatus] = useState<string | null>(null)
   
-  // Keep these for the "Expert Mode" accordions
-  const [hypotheses, setHypotheses] = useState<Hypothesis[]>([])
-  const [loadingHypotheses, setLoadingHypotheses] = useState(false)
-  
   const [editorCode, setEditorCode] = useState<string>("# Waiting for Alpha Factor code injection...")
   const [customFactorDeployed, setCustomFactorDeployed] = useState(false)
   
-  const [strategyConfig, setStrategyConfig] = useState<string>(JSON.stringify({
-      strategy_name: "New_Strategy",
-      start_date: "2021-01-01",
-      end_date: "2024-12-31",
-      capital: 100000,
-      params: {}
-  }, null, 2))
-
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // --- EFFECTS ---
@@ -106,7 +109,8 @@ export default function AIQuantPage() {
               if (res.error) {
                   setChatHistory(prev => [...prev, { role: 'ai', content: `Risk Engine Error: ${res.error}`, tool: "Omega Risk Engine", type: 'text' }])
               } else {
-                  const topStress = res.data && res.data.stress_tests ? res.data.stress_tests[0] : null
+                  const stressTests = (res.data?.stress_tests as StressTest[]) || []
+                  const topStress = stressTests.length > 0 ? stressTests[0] : null
                   const varSummary = res.summary || "0.00% (Calculation Pending)"
                   
                   setChatHistory(prev => [...prev, { 
@@ -123,8 +127,6 @@ export default function AIQuantPage() {
               const res = await api.generateFactorCode(input)
               
               setEditorCode(res.code || "# Error")
-              // Auto-deploy for UX? No, let user confirm via chat card.
-              // For now we show a preview card in chat
               
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
@@ -140,7 +142,6 @@ export default function AIQuantPage() {
               const res = await api.generateHypotheses(3)
               
               if (Array.isArray(res)) {
-                  setHypotheses(res as Hypothesis[]) // Sync legacy state
                   setChatHistory(prev => [...prev, { 
                       role: 'ai', 
                       content: "I've analyzed the current market regime and generated 3 potential strategy candidates. Select one to configure the backtest.",
@@ -171,7 +172,7 @@ export default function AIQuantPage() {
       try {
           const res = await api.deployFactorCode(code)
           setCustomFactorDeployed(true)
-          setEditorCode(code) // Sync editor
+          setEditorCode(code)
           toast.success("AI Factor Injected", { description: res.message })
           return true
       } catch (err) {
@@ -181,10 +182,9 @@ export default function AIQuantPage() {
   }
 
   const handleSelectHypothesis = (h: Hypothesis) => {
-      // 1. Transform Hypothesis to Config
       try {
-          const weights = (h.factor_weights as Record<string, number>) || { momentum: 0.5, quality: 0.3, value: 0.2 };
-          const topN = (h.top_n as number) || 20;
+          const weights = h.factor_weights || { momentum: 0.5, quality: 0.3, value: 0.2 };
+          const topN = h.top_n || 20;
           
           let momMin = 60;
           if (weights.momentum && weights.momentum > 0.5) momMin = 90;
@@ -195,7 +195,7 @@ export default function AIQuantPage() {
           if (qualityWeight > 0.4) fMin = 7;
           if (qualityWeight > 0.7) fMin = 8;
 
-          const useDynamic = customFactorDeployed; // Relies on state being set if code was deployed previously
+          const useDynamic = customFactorDeployed; 
 
           const executionConfig = {
               strategy_name: h.strategy_name || "AI_Strategy",
@@ -219,9 +219,7 @@ export default function AIQuantPage() {
           };
 
           const configStr = JSON.stringify(executionConfig, null, 2)
-          setStrategyConfig(configStr) // Sync legacy state
 
-          // 2. Push Confirmation Card to Chat
           setChatHistory(prev => [...prev, {
               role: 'ai',
               tool: 'Architect',
@@ -238,7 +236,7 @@ export default function AIQuantPage() {
   const handleExecuteRun = async (configStr: string) => {
       try {
           const config = JSON.parse(configStr)
-          const res = await api.runBacktest(config) // Returns { run_name: ... }
+          const res = await api.runBacktest(config) 
           
           toast.success("Backtest Initiated", {
             description: `Run '${config.strategy_name}' started.`,
@@ -251,12 +249,10 @@ export default function AIQuantPage() {
               type: 'text'
           }])
 
-          // Start Polling
           const pollInterval = setInterval(async () => {
               try {
                   const runs = await api.listBacktests(5)
-                  // Find our run by name
-                  const myRun = runs.find((r: any) => r.tags['mlflow.runName'] === res.run_name || r.strategy_name === config.strategy_name) 
+                  const myRun = (runs as unknown as BacktestRunData[]).find((r) => r.tags['mlflow.runName'] === res.run_name || r.strategy_name === config.strategy_name) 
                   
                   if (myRun && myRun.status === 'FINISHED') {
                       clearInterval(pollInterval)
@@ -266,7 +262,7 @@ export default function AIQuantPage() {
                           tool: 'Analyst',
                           type: 'result_card',
                           content: "Backtest complete.",
-                          data: myRun
+                          data: myRun as unknown as Record<string, unknown>
                       }])
                       
                       toast.success("Backtest Complete", { description: "Results analyzed." })
@@ -276,18 +272,15 @@ export default function AIQuantPage() {
               }
           }, 3000)
 
-          // Timeout after 60s
           setTimeout(() => clearInterval(pollInterval), 60000)
           
-      } catch (err) {
+      } catch {
           toast.error("Execution Failed", { description: "Invalid Config or Backend Error" })
       }
   }
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-background text-foreground overflow-hidden">
-      
-      {/* SIDEBAR: Settings (Hidden on mobile) */}
       <aside className="w-64 border-r border-border p-4 space-y-6 overflow-y-auto bg-card/20 backdrop-blur-sm shrink-0 hidden lg:block">
         <div>
           <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-4 tracking-widest">Data Settings</h3>
@@ -301,7 +294,6 @@ export default function AIQuantPage() {
             </Button>
           </div>
         </div>
-
         <div>
           <h3 className="text-sm font-bold uppercase text-muted-foreground mb-4 tracking-widest">Inference Hub</h3>
           <div className="space-y-2.5">
@@ -315,12 +307,9 @@ export default function AIQuantPage() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT: Chat & Agent-Flow */}
       <main className="flex-1 flex flex-col min-w-0 bg-background/50">
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8" ref={scrollRef}>
             <div className="max-w-4xl mx-auto space-y-10 pb-20">
-                
-                {/* Header */}
                 <section className="space-y-3 border-b border-border/50 pb-8">
                   <h1 className="text-4xl font-black tracking-tighter italic">AI QUANT TEAM</h1>
                   <p className="text-muted-foreground text-base max-w-2xl leading-relaxed">
@@ -328,7 +317,6 @@ export default function AIQuantPage() {
                   </p>
                 </section>
 
-                {/* Chat Stream */}
                 <section className="space-y-8 min-h-[400px]">
                      {chatHistory.map((msg, i) => (
                         <div key={i} className={cn("flex gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500", msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
@@ -347,9 +335,6 @@ export default function AIQuantPage() {
                                 {msg.tool && <Badge variant="secondary" className="text-[10px] h-5 px-2 uppercase tracking-widest font-bold border-primary/20 bg-primary/5 text-primary">{msg.tool}</Badge>}
                             </div>
                             
-                            {/* --- MESSAGE CONTENT SWITCHER --- */}
-                            
-                            {/* TYPE: TEXT */}
                             {(!msg.type || msg.type === 'text') && (
                                 <div className={cn(
                                     "p-4 rounded-2xl text-sm md:text-base leading-relaxed border shadow-md antialiased",
@@ -359,7 +344,6 @@ export default function AIQuantPage() {
                                 </div>
                             )}
 
-                            {/* TYPE: HYPOTHESES SELECTION */}
                             {msg.type === 'hypotheses' && msg.data && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mt-2">
                                     {(msg.data as Hypothesis[]).map((h, idx) => (
@@ -384,7 +368,6 @@ export default function AIQuantPage() {
                                 </div>
                             )}
 
-                            {/* TYPE: CONFIRMATION / EXECUTE */}
                             {msg.type === 'confirmation' && msg.data && (
                                 <div className="w-full max-w-md border border-primary/30 bg-primary/5 rounded-2xl p-5 shadow-lg">
                                     <h4 className="text-sm font-black uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
@@ -392,85 +375,82 @@ export default function AIQuantPage() {
                                     </h4>
                                     <div className="bg-background/50 rounded-lg p-3 border border-border/50 mb-4">
                                         <pre className="text-[10px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap">
-                                            {JSON.stringify(msg.data.config, null, 2).slice(0, 300) + "\n..."}
+                                            {JSON.stringify((msg.data as Record<string, unknown>).config, null, 2).slice(0, 300) + "\n..."}
                                         </pre>
                                     </div>
                                     <Button 
                                         className="w-full font-bold uppercase tracking-widest"
-                                        onClick={() => handleExecuteRun(msg.data.configStr)}
+                                        onClick={() => handleExecuteRun((msg.data as Record<string, string>).configStr)}
                                     >
                                         <Play className="h-4 w-4 mr-2 fill-current" /> Confirm & Execute Run
                                     </Button>
                                 </div>
                             )}
 
-                            {/* TYPE: CODE PREVIEW */}
                             {msg.type === 'code_preview' && msg.data && (
                                 <div className="w-full max-w-2xl border border-chart-3/30 bg-background/40 rounded-2xl overflow-hidden shadow-lg">
                                     <div className="bg-muted/50 px-4 py-2 border-b border-border/50 flex justify-between items-center">
                                         <span className="text-[10px] font-mono font-bold text-chart-3 uppercase">strategy.py</span>
-                                        <Button size="sm" variant="ghost" className="h-6 text-[10px] hover:bg-chart-3 hover:text-white transition-colors" onClick={() => handleDeployFactor(msg.data.code)}>
+                                        <Button size="sm" variant="ghost" className="h-6 text-[10px] hover:bg-chart-3 hover:text-white transition-colors" onClick={() => handleDeployFactor((msg.data as Record<string, string>).code)}>
                                             <Save className="h-3 w-3 mr-1" /> Deploy
                                         </Button>
                                     </div>
                                     <div className="p-4 overflow-x-auto bg-black/20">
                                         <pre className="text-[10px] font-mono text-muted-foreground">
-                                            {msg.data.code}
+                                            {(msg.data as Record<string, string>).code}
                                         </pre>
                                     </div>
                                 </div>
                             )}
 
-                            {/* TYPE: RESULT CARD */}
                             {msg.type === 'result_card' && msg.data && (
                                 <div className="w-full max-w-lg border border-border bg-card/50 rounded-2xl overflow-hidden shadow-xl animate-in zoom-in-95 duration-300">
                                     <div className="bg-muted/30 px-5 py-3 border-b border-border/50 flex justify-between items-center">
                                         <div className="flex items-center gap-2">
                                             <Activity className="h-4 w-4 text-primary" />
-                                            <span className="text-xs font-black uppercase tracking-widest text-foreground">{msg.data.strategy_name}</span>
+                                            <span className="text-xs font-black uppercase tracking-widest text-foreground">{(msg.data as unknown as BacktestRunData).strategy_name}</span>
                                         </div>
-                                        <Badge variant="outline" className={cn("text-[9px] font-mono", msg.data.sharpe_ratio > 1 ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20")}>
-                                            SHARPE: {msg.data.sharpe_ratio?.toFixed(2)}
+                                        <Badge variant="outline" className={cn("text-[9px] font-mono", (msg.data as unknown as BacktestRunData).sharpe_ratio > 1 ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20")}>
+                                            SHARPE: {(msg.data as unknown as BacktestRunData).sharpe_ratio?.toFixed(2)}
                                         </Badge>
                                     </div>
                                     <div className="p-5 grid grid-cols-2 gap-6">
                                         <div>
                                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Total Return</p>
-                                            <p className={cn("text-2xl font-black font-mono", msg.data.annual_return > 0 ? "text-green-500" : "text-red-500")}>
-                                                {(msg.data.annual_return * 100).toFixed(1)}% <span className="text-xs text-muted-foreground font-sans font-medium">CAGR</span>
+                                            <p className={cn("text-2xl font-black font-mono", (msg.data as unknown as BacktestRunData).annual_return > 0 ? "text-green-500" : "text-red-500")}>
+                                                {((msg.data as unknown as BacktestRunData).annual_return * 100).toFixed(1)}% <span className="text-xs text-muted-foreground font-sans font-medium">CAGR</span>
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Max Drawdown</p>
                                             <p className="text-2xl font-black font-mono text-red-400">
-                                                {(msg.data.max_drawdown * 100).toFixed(1)}%
+                                                {((msg.data as unknown as BacktestRunData).max_drawdown * 100).toFixed(1)}%
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Volatility</p>
                                             <p className="text-lg font-bold font-mono text-foreground">
-                                                {(msg.data.volatility * 100).toFixed(1)}%
+                                                {((msg.data as unknown as BacktestRunData).volatility * 100).toFixed(1)}%
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Alpha</p>
                                             <p className="text-lg font-bold font-mono text-foreground">
-                                                {msg.data.alpha?.toFixed(2) || "-"}
+                                                {(msg.data as unknown as BacktestRunData).alpha?.toFixed(2) || "-"}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="px-5 pb-4">
                                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                            <div className="h-full bg-primary" style={{ width: `${Math.min(Math.max((msg.data.sharpe_ratio / 3) * 100, 0), 100)}%` }} />
+                                            <div className="h-full bg-primary" style={{ width: `${Math.min(Math.max(((msg.data as unknown as BacktestRunData).sharpe_ratio / 3) * 100, 0), 100)}%` }} />
                                         </div>
                                         <div className="flex justify-between text-[9px] text-muted-foreground mt-1 font-mono">
                                             <span>Risk Profile</span>
-                                            <span>{msg.data.sharpe_ratio > 1.5 ? "EXCELLENT" : msg.data.sharpe_ratio > 1 ? "GOOD" : "POOR"}</span>
+                                            <span>{(msg.data as unknown as BacktestRunData).sharpe_ratio > 1.5 ? "EXCELLENT" : (msg.data as unknown as BacktestRunData).sharpe_ratio > 1 ? "GOOD" : "POOR"}</span>
                                         </div>
                                     </div>
                                 </div>
                             )}
-
                           </div>
                         </div>
                      ))}
@@ -488,7 +468,6 @@ export default function AIQuantPage() {
             </div>
         </div>
 
-        {/* Input Bar */}
         <div className="sticky bottom-0 bg-background/80 backdrop-blur-2xl border-t border-border pt-6 pb-10 px-8 shrink-0 z-20">
           <div className="max-w-4xl mx-auto relative group">
             <div className="absolute -inset-1.5 bg-gradient-to-r from-primary/30 to-chart-4/30 rounded-3xl blur-md opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
@@ -508,7 +487,6 @@ export default function AIQuantPage() {
             </Button>
           </div>
           
-          {/* Quick Prompts */}
           <div className="max-w-4xl mx-auto mt-4 flex gap-2 justify-center">
              <Button variant="ghost" className="text-[10px] h-6 text-muted-foreground hover:text-primary" onClick={() => handleChat("Find a balanced strategy")}>Find Strategy</Button>
              <span className="text-muted-foreground/20">|</span>

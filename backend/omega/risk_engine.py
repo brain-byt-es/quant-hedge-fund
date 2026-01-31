@@ -134,7 +134,41 @@ class RiskManager:
         if leverage > max_leverage:
             return False, f"Portfolio leverage {leverage:.2f} exceeds limit {max_leverage}"
 
+        # 6. Asset-Specific Safety Check (Institutional Readiness)
+        is_safe, safety_reason = self._validate_asset_safety(symbol, asset_class)
+        if not is_safe:
+            return False, f"SAFETY REJECTED: {safety_reason}"
+
         return True, "Risk validation passed"
+
+    def _validate_asset_safety(self, symbol: str, asset_class: str) -> (bool, str):
+        """
+        Differentiated safety check based on asset class.
+        Stocks require fundamental health (F-Score).
+        Other assets (Crypto, Gold) rely on liquidity/volatility.
+        """
+        if asset_class != "STK":
+            # Non-stock assets are exempt from fundamental checks
+            # (Ready for BTC, GLD, etc.)
+            return True, "Safety OK (Non-equity)"
+
+        try:
+            # Check F-Score from Factor Engine Snapshot
+            from qsconnect.database.duckdb_manager import DuckDBManager
+            from config.settings import get_settings
+            db = DuckDBManager(get_settings().duckdb_path, read_only=True)
+            
+            res = db.query(f"SELECT f_score FROM factor_ranks_snapshot WHERE symbol = '{symbol}'")
+            if not res.is_empty():
+                f_score = res["f_score"][0]
+                if f_score is not None and f_score < 3:
+                    return False, f"Piotroski F-Score too low ({f_score}/9). High financial distress risk."
+            
+            return True, "Fundamental Safety OK"
+        except Exception as e:
+            # If DB fails, we default to Warning but don't block
+            logger.warning(f"Safety check DB error for {symbol}: {e}")
+            return True, "Safety check skipped (DB error)"
 
     def calculate_portfolio_var(self, positions: List[Dict[str, Any]], confidence_level: float = 0.95) -> float:
         """

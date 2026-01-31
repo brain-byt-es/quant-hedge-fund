@@ -85,6 +85,17 @@ export const api = {
     return handleResponse(res);
   },
 
+  triggerFactorUpdate: async (min_mcap?: number, min_volume?: number) => {
+    let url = `${API_BASE_URL}/research/update_factors`;
+    const params = new URLSearchParams();
+    if (min_mcap) params.append("min_mcap", min_mcap.toString());
+    if (min_volume) params.append("min_volume", min_volume.toString());
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const res = await fetch(url, { method: "POST" });
+    return handleResponse(res);
+  },
+
   getCompanyProfile: async (symbol: string) => {
     const res = await fetch(`${API_BASE_URL}/research/profile/${symbol}`);
     return handleResponse(res);

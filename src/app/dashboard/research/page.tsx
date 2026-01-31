@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { SignalControlCenter } from "@/components/research/signal-control-center"
 import { RankScatter } from "@/components/research/rank-scatter"
 import { PriceAnalysisChart } from "@/components/research/price-chart"
@@ -10,6 +10,7 @@ import { MarketOverviewTable } from "@/components/research/market-overview-table
 import { BacktestHistoryTable } from "@/components/research/backtest-history-table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api } from "@/lib/api"
+import { toast } from "sonner"
 
 interface SignalData {
   rank: number;
@@ -33,6 +34,7 @@ interface BacktestRun {
   annual_return: number
   max_drawdown: number
   volatility: number
+  tags: Record<string, string>
 }
 
 interface ProfileData {
@@ -58,6 +60,9 @@ interface ProfileData {
 export default function ResearchPage() {
   const [symbol, setSymbol] = useState("")
   const [lookback, setLookback] = useState(252)
+  const [minMCap, setMinMCap] = useState(500) // Millions
+  const [minVolume, setMinVolume] = useState(1) // Millions
+  const [isUpdating, setIsUpdating] = useState(false)
   
   const [signals, setSignals] = useState<SignalData[]>([])
   const [backtests, setBacktests] = useState<BacktestRun[]>([])
@@ -66,27 +71,44 @@ export default function ResearchPage() {
   const [loadingProfile, setLoadingProfile] = useState(false)
 
   // Fetch Signals & Backtests
-  useEffect(() => {
-      const loadData = async () => {
-          try {
-              const [sigData, runData] = await Promise.all([
-                  api.getResearchSignals(lookback),
-                  api.listBacktests(50)
-              ])
-              
-              if (Array.isArray(sigData)) {
-                  setSignals(sigData)
-                  if (sigData.length > 0 && !symbol) setSymbol(sigData[0].symbol)
-              }
-              if (Array.isArray(runData)) {
-                  setBacktests(runData as unknown as BacktestRun[])
-              }
-          } catch {
-              console.debug("Research Lab: Backend busy...")
+  const loadData = useCallback(async () => {
+      try {
+          const [sigData, runData] = await Promise.all([
+              api.getResearchSignals(lookback),
+              api.listBacktests(50)
+          ])
+          
+          if (Array.isArray(sigData)) {
+              setSignals(sigData)
+              if (sigData.length > 0 && !symbol) setSymbol(sigData[0].symbol)
           }
+          if (Array.isArray(runData)) {
+              setBacktests(runData as unknown as BacktestRun[])
+          }
+      } catch {
+          console.debug("Research Lab: Backend busy...")
       }
-      loadData()
   }, [lookback, symbol])
+
+  useEffect(() => {
+      loadData()
+  }, [loadData]) 
+
+  const handleUpdateUniverse = async () => {
+      setIsUpdating(true)
+      try {
+          // Convert Millions to absolute for API
+          const res = await api.triggerFactorUpdate(minMCap * 1000000, minVolume * 1000000)
+          toast.success("Universe Updated", {
+              description: `Ranked ${res.ranked_symbols} symbols with new institutional filters.`
+          })
+          await loadData() // Refresh list
+      } catch (err) {
+          toast.error("Update Failed", { description: String(err) })
+      } finally {
+          setIsUpdating(false)
+      }
+  }
 
   // Fetch Symbol Details
   useEffect(() => {
@@ -133,6 +155,12 @@ export default function ResearchPage() {
                     setSymbol={setSymbol} 
                     lookback={lookback} 
                     setLookback={setLookback} 
+                    minMCap={minMCap}
+                    setMinMCap={setMinMCap}
+                    minVolume={minVolume}
+                    setMinVolume={setMinVolume}
+                    onUpdateUniverse={handleUpdateUniverse}
+                    isUpdating={isUpdating}
                     allSymbols={signals.map(s => s.symbol)}
                 />
             </div>

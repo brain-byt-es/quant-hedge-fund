@@ -18,12 +18,15 @@ class FactorEngine:
             from qsconnect.database.duckdb_manager import DuckDBManager
             self.db_mgr = DuckDBManager(self.settings.duckdb_path, read_only=False)
 
-    def calculate_universe_ranks(self) -> int:
+    def calculate_universe_ranks(self, min_mcap: float = None, min_volume: float = None) -> int:
         """
         Calculates percentile ranks for the entire universe across 5 factors.
         Stores the result in `factor_ranks_snapshot`.
         """
-        logger.info("Starting Factor Engine: Calculating Universe Ranks...")
+        if min_mcap is None: min_mcap = self.settings.min_market_cap
+        if min_volume is None: min_volume = self.settings.min_volume
+
+        logger.info(f"Starting Factor Engine: Calculating Universe Ranks (Min Cap: ${min_mcap:,.0f}, Min Vol: {min_volume:,.0f})...")
         
         # 1. Prepare Base View (Combine Industries & Latest Prices)
         # We need to unite Normal, Banks, Insurance fundamentals
@@ -48,11 +51,11 @@ class FactorEngine:
                     change_1d DOUBLE,
                     
                     -- Raw Metrics (for transparency)
-                    raw_momentum DOUBLE,
+                    raw_mom DOUBLE,
                     raw_roe DOUBLE,
                     raw_growth DOUBLE,
                     raw_earnings_yield DOUBLE,
-                    raw_volatility DOUBLE,
+                    raw_vola DOUBLE,
                     
                     -- Scores
                     momentum_score DOUBLE,
@@ -67,7 +70,7 @@ class FactorEngine:
             """)
             
             # The Mega-Query
-            sql = """
+            sql = f"""
             INSERT OR REPLACE INTO factor_ranks_snapshot
             WITH 
             -- A. Latest Prices & Momentum
@@ -94,135 +97,148 @@ class FactorEngine:
             ),
             
             -- B. Unified Fundamentals (Most recent quarter)
-                                    Fundamentals AS (
-                                        -- Normal
-                                        SELECT 
-                                            i.symbol, 
-                                            i."Net Income" as net_income, 
-                                            i."Revenue" as revenue, 
-                                            i."Gross Profit" as gross_profit,
-                                            i."Shares (Basic)" as shares,
-                                            b."Total Equity" as equity,
-                                            b."Total Assets" as total_assets,
-                                            b."Long Term Debt" as lt_debt,
-                                            b."Total Current Assets" as curr_assets,
-                                            b."Total Current Liabilities" as curr_liab,
-                                            c."Net Cash from Operating Activities" as op_cashflow,
-                                            i.date as report_date
-                                        FROM bulk_income_quarter_fmp i
-                                        JOIN bulk_balance_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
-                                        JOIN bulk_cashflow_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
-                                        WHERE i.date > CURRENT_DATE - INTERVAL 500 DAY
-                                        
-                                        UNION ALL
-                                        
-                                        -- Banks (Mapping restricted by available columns)
-                                        SELECT 
-                                            i.symbol, 
-                                            i."Net Income" as net_income, 
-                                            i."Revenue" as revenue,
-                                            0 as gross_profit, -- Not applicable/standard
-                                            i."Shares (Basic)" as shares,
-                                            b."Total Equity" as equity,
-                                            b."Total Assets" as total_assets,
-                                            b."Long Term Debt" as lt_debt, -- Often exists, check CSV if needed, assumed present or null
-                                            0 as curr_assets, -- Banks structure differs
-                                            0 as curr_liab,
-                                            c."Net Cash from Operating Activities" as op_cashflow,
-                                            i.date as report_date
-                                        FROM bulk_income_banks_quarter_fmp i
-                                        JOIN bulk_balance_banks_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
-                                        JOIN bulk_cashflow_banks_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
-                                        WHERE i.date > CURRENT_DATE - INTERVAL 500 DAY
-                                    ),
-                                    
-                                    -- C. Metric Lags (YoY = Lag 4 Quarters)
-                                    MetricCalc AS (
-                                        SELECT 
-                                            symbol, 
-                                            report_date,
-                                            -- Current Values
-                                            net_income, op_cashflow, total_assets, lt_debt, 
-                                            curr_assets, curr_liab, shares, gross_profit, revenue, equity,
-                                            
-                                            -- Lagged Values (YoY)
-                                            LAG(net_income, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_net_income,
-                                            LAG(total_assets, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_total_assets,
-                                            LAG(lt_debt, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_lt_debt,
-                                            LAG(curr_assets, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_curr_assets,
-                                            LAG(curr_liab, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_curr_liab,
-                                            LAG(shares, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_shares,
-                                            LAG(gross_profit, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_gross_profit,
-                                            LAG(revenue, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_revenue
-                                        FROM Fundamentals
-                                    ),
-                                    LatestMetrics AS (
-                                        SELECT *,
-                                            -- Derived Ratios Current
-                                            (net_income / NULLIF(total_assets, 0)) as roa,
-                                            (curr_assets / NULLIF(curr_liab, 0)) as current_ratio,
-                                            (gross_profit / NULLIF(revenue, 0)) as gross_margin,
-                                            (revenue / NULLIF(total_assets, 0)) as asset_turnover,
-                                            (lt_debt / NULLIF(total_assets, 0)) as leverage,
-                                            
-                                            -- Derived Ratios Previous
-                                            (prev_net_income / NULLIF(prev_total_assets, 0)) as prev_roa,
-                                            (prev_curr_assets / NULLIF(prev_curr_liab, 0)) as prev_current_ratio,
-                                            (prev_gross_profit / NULLIF(prev_revenue, 0)) as prev_gross_margin,
-                                            (prev_revenue / NULLIF(prev_total_assets, 0)) as prev_asset_turnover,
-                                            (prev_lt_debt / NULLIF(prev_total_assets, 0)) as prev_leverage,
-                                            
-                                            -- Growth Proxy for ranking
-                                            (revenue - prev_revenue) / NULLIF(prev_revenue, 0) as rev_growth,
-                                            (net_income / NULLIF(equity, 0)) as roe -- Keeping ROE for Quality Factor Rank
-                                            
-                                        FROM MetricCalc
-                                        QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY report_date DESC) = 1
-                                    ),
-                                    
-                                    -- D. Combine & Score
-                                    RawFactors AS (
-                                        SELECT 
-                                            p.symbol,
-                                            p.date_now as as_of,
-                                            
-                                            -- Market Data
-                                            p.price_now as price,
-                                            p.volume_now as volume,
-                                            (p.price_now * COALESCE(m.shares, 0)) as market_cap,
-                                            p.change_1d,
-                                            
-                                            -- Factors for Ranking
-                                            (p.price_now / NULLIF(pp.price_12m, 0)) - 1.0 as raw_mom,
-                                            m.roe as raw_roe,
-                                            m.rev_growth as raw_growth,
-                                            0.0 as raw_val, 
-                                            v.vola_90d as raw_vola,
-                                            
-                                                                -- PIOTROSKI F-SCORE (9 Point Standard) - Robust Handling
-                                                                -- A. Profitability
-                                                                (CASE WHEN COALESCE(m.net_income, 0) > 0 THEN 1 ELSE 0 END) +
-                                                                (CASE WHEN COALESCE(m.op_cashflow, 0) > 0 THEN 1 ELSE 0 END) +
-                                                                (CASE WHEN COALESCE(m.roa, 0) >= COALESCE(m.prev_roa, 0) THEN 1 ELSE 0 END) +
-                                                                (CASE WHEN COALESCE(m.op_cashflow, 0) > COALESCE(m.net_income, 0) THEN 1 ELSE 0 END) +
-                                                                
-                                                                -- B. Leverage & Liquidity
-                                                                -- Leverage: Lower is better. If 0 and stays 0, that's good.
-                                                                (CASE WHEN COALESCE(m.leverage, 0) <= COALESCE(m.prev_leverage, 0) THEN 1 ELSE 0 END) +
-                                                                -- Current Ratio: Higher is better.
-                                                                (CASE WHEN COALESCE(m.current_ratio, 0) >= COALESCE(m.prev_current_ratio, 0) THEN 1 ELSE 0 END) +
-                                                                -- Shares: No dilution (lower or equal is better).
-                                                                (CASE WHEN COALESCE(m.shares, 0) <= COALESCE(m.prev_shares, 0) THEN 1 ELSE 0 END) +
-                                                                
-                                                                -- C. Operating Efficiency
-                                                                (CASE WHEN COALESCE(m.gross_margin, 0) >= COALESCE(m.prev_gross_margin, 0) THEN 1 ELSE 0 END) +
-                                                                (CASE WHEN COALESCE(m.asset_turnover, 0) >= COALESCE(m.prev_asset_turnover, 0) THEN 1 ELSE 0 END) 
-                                                                as f_score                                            
-                                        FROM LatestPrices p
-                                        LEFT JOIN PastPrices pp ON p.symbol = pp.symbol
-                                        LEFT JOIN LatestMetrics m ON p.symbol = m.symbol
-                                        LEFT JOIN Volatility v ON p.symbol = v.symbol
-                                    )
+            Fundamentals AS (
+                -- Normal
+                SELECT 
+                    i.symbol, 
+                    i."Net Income" as net_income, 
+                    i."Revenue" as revenue, 
+                    i."Gross Profit" as gross_profit,
+                    i."Shares (Basic)" as shares,
+                    b."Total Equity" as equity,
+                    b."Total Assets" as total_assets,
+                    b."Long Term Debt" as lt_debt,
+                    b."Total Current Assets" as curr_assets,
+                    b."Total Current Liabilities" as curr_liab,
+                    c."Net Cash from Operating Activities" as op_cashflow,
+                    i.date as report_date
+                FROM bulk_income_quarter_fmp i
+                JOIN bulk_balance_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
+                JOIN bulk_cashflow_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
+                WHERE i.date > CURRENT_DATE - INTERVAL 500 DAY
+                
+                UNION ALL
+                
+                -- Banks
+                SELECT 
+                    i.symbol, 
+                    i."Net Income" as net_income, 
+                    i."Revenue" as revenue,
+                    0 as gross_profit, 
+                    i."Shares (Basic)" as shares,
+                    b."Total Equity" as equity,
+                    b."Total Assets" as total_assets,
+                    b."Long Term Debt" as lt_debt, 
+                    0 as curr_assets, 
+                    0 as curr_liab,
+                    c."Net Cash from Operating Activities" as op_cashflow,
+                    i.date as report_date
+                FROM bulk_income_banks_quarter_fmp i
+                JOIN bulk_balance_banks_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
+                JOIN bulk_cashflow_banks_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
+                WHERE i.date > CURRENT_DATE - INTERVAL 500 DAY
+
+                UNION ALL
+                
+                -- Insurance
+                SELECT 
+                    i.symbol, 
+                    i."Net Income" as net_income, 
+                    i."Revenue" as revenue,
+                    0 as gross_profit, 
+                    i."Shares (Basic)" as shares,
+                    b."Total Equity" as equity,
+                    b."Total Assets" as total_assets,
+                    b."Long Term Debt" as lt_debt, 
+                    0 as curr_assets, 
+                    0 as curr_liab,
+                    c."Net Cash from Operating Activities" as op_cashflow,
+                    i.date as report_date
+                FROM bulk_income_insurance_quarter_fmp i
+                JOIN bulk_balance_insurance_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
+                JOIN bulk_cashflow_insurance_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
+                WHERE i.date > CURRENT_DATE - INTERVAL 500 DAY
+            ),
+            
+            -- C. Metric Lags (YoY = Lag 4 Quarters)
+            MetricCalc AS (
+                SELECT 
+                    symbol, 
+                    report_date,
+                    -- Current Values
+                    net_income, op_cashflow, total_assets, lt_debt, 
+                    curr_assets, curr_liab, shares, gross_profit, revenue, equity,
+                    
+                    -- Lagged Values (YoY)
+                    LAG(net_income, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_net_income,
+                    LAG(total_assets, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_total_assets,
+                    LAG(lt_debt, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_lt_debt,
+                    LAG(curr_assets, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_curr_assets,
+                    LAG(curr_liab, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_curr_liab,
+                    LAG(shares, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_shares,
+                    LAG(gross_profit, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_gross_profit,
+                    LAG(revenue, 4) OVER (PARTITION BY symbol ORDER BY report_date) as prev_revenue
+                FROM Fundamentals
+            ),
+            LatestMetrics AS (
+                SELECT *,
+                    -- Derived Ratios Current
+                    (net_income / NULLIF(total_assets, 0)) as roa,
+                    (curr_assets / NULLIF(curr_liab, 0)) as current_ratio,
+                    (gross_profit / NULLIF(revenue, 0)) as gross_margin,
+                    (revenue / NULLIF(total_assets, 0)) as asset_turnover,
+                    (lt_debt / NULLIF(total_assets, 0)) as leverage,
+                    
+                    -- Derived Ratios Previous
+                    (prev_net_income / NULLIF(prev_total_assets, 0)) as prev_roa,
+                    (prev_curr_assets / NULLIF(prev_curr_liab, 0)) as prev_current_ratio,
+                    (prev_gross_profit / NULLIF(prev_revenue, 0)) as prev_gross_margin,
+                    (prev_revenue / NULLIF(prev_total_assets, 0)) as prev_asset_turnover,
+                    (prev_lt_debt / NULLIF(prev_total_assets, 0)) as prev_leverage,
+                    
+                    -- Growth Proxy for ranking
+                    (revenue - prev_revenue) / NULLIF(prev_revenue, 0) as rev_growth,
+                    (net_income / NULLIF(equity, 0)) as roe -- Keeping ROE for Quality Factor Rank
+                    
+                FROM MetricCalc
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY report_date DESC) = 1
+            ),
+            
+            -- D. Combine & Score
+            RawFactors AS (
+                SELECT 
+                    p.symbol,
+                    p.date_now as as_of,
+                    
+                    -- Market Data
+                    p.price_now as price,
+                    p.volume_now as volume,
+                    (p.price_now * COALESCE(m.shares, 0)) as market_cap,
+                    p.change_1d,
+                    
+                    -- Factors for Ranking
+                    (p.price_now / NULLIF(pp.price_12m, 0)) - 1.0 as raw_mom,
+                    m.roe as raw_roe,
+                    m.rev_growth as raw_growth,
+                    (m.net_income / NULLIF(p.price_now * m.shares, 0)) as raw_earnings_yield, 
+                    v.vola_90d as raw_vola,
+                    
+                    -- PIOTROSKI F-SCORE (9 Point Standard)
+                    (CASE WHEN COALESCE(m.net_income, 0) > 0 THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.op_cashflow, 0) > 0 THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.roa, 0) >= COALESCE(m.prev_roa, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.op_cashflow, 0) > COALESCE(m.net_income, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.leverage, 0) <= COALESCE(m.prev_leverage, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.current_ratio, 0) >= COALESCE(m.prev_current_ratio, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.shares, 0) <= COALESCE(m.prev_shares, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.gross_margin, 0) >= COALESCE(m.prev_gross_margin, 0) THEN 1 ELSE 0 END) +
+                    (CASE WHEN COALESCE(m.asset_turnover, 0) >= COALESCE(m.prev_asset_turnover, 0) THEN 1 ELSE 0 END) 
+                    as f_score                                            
+                FROM LatestPrices p
+                LEFT JOIN PastPrices pp ON p.symbol = pp.symbol
+                LEFT JOIN LatestMetrics m ON p.symbol = m.symbol
+                LEFT JOIN Volatility v ON p.symbol = v.symbol
+            )
             
             -- E. Rank (Percentiles)
             SELECT
@@ -232,12 +248,12 @@ class FactorEngine:
                 -- Market Data
                 price, volume, market_cap, change_1d,
                 
-                raw_mom, raw_roe, raw_growth, raw_val, raw_vola,
+                raw_mom, raw_roe, raw_growth, raw_earnings_yield, raw_vola,
                 
                 PERCENT_RANK() OVER (ORDER BY raw_mom ASC) * 100 as momentum_score,
                 PERCENT_RANK() OVER (ORDER BY raw_roe ASC) * 100 as quality_score,
                 PERCENT_RANK() OVER (ORDER BY raw_growth ASC) * 100 as growth_score,
-                PERCENT_RANK() OVER (ORDER BY raw_val ASC) * 100 as value_score,
+                PERCENT_RANK() OVER (ORDER BY raw_earnings_yield ASC) * 100 as value_score,
                 PERCENT_RANK() OVER (ORDER BY raw_vola DESC) * 100 as safety_score,
                 
                 f_score,
@@ -245,7 +261,9 @@ class FactorEngine:
                 CURRENT_TIMESTAMP
             FROM RawFactors
             WHERE raw_mom IS NOT NULL 
-              AND raw_mom < 20 -- Exclude reverse split artifacts (>2000% return)
+              AND raw_mom < 20 -- Exclude reverse split artifacts
+              AND market_cap >= {min_mcap} 
+              AND volume >= {min_volume}
             """
             
             conn.execute(sql)
@@ -275,10 +293,11 @@ class FactorEngine:
                         {"factor": "Safety", "score": row["safety_score"] or 50},
                     ],
                     "raw_metrics": {
-                        "momentum_12m": row["raw_momentum"],
+                        "momentum_12m": row["raw_mom"],
                         "roe": row["raw_roe"],
                         "growth_yoy": row["raw_growth"],
-                        "volatility": row["raw_volatility"],
+                        "earnings_yield": row["raw_earnings_yield"],
+                        "volatility": row["raw_vola"],
                         "f_score": row["f_score"]
                     }
                 }
