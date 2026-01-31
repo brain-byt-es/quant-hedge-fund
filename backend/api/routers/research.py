@@ -211,11 +211,42 @@ def get_company_profile(symbol: str):
             "raw_factor_metrics": ranks["raw_metrics"]
         }
 
-        # News & Insider Trading
+        # News
         try:
             response["latest_news"] = client._fmp_client.get_stock_news(symbol, limit=5)
-            response["insider_sentiment"] = client.get_insider_sentiment(symbol)
-        except: pass
+        except Exception as news_err:
+            logger.debug(f"News fetch failed for {symbol}: {news_err}")
+
+        # Smart Insider Sentiment (Net Value Flow)
+        try:
+            insider_df = client._fmp_client.get_insider_trades(symbol, limit=100)
+            if not insider_df.empty:
+                # Filter for Open Market transactions (P = Purchase, S = Sale)
+                buys = insider_df[insider_df["transactionType"].str.contains("Purchase|Buy|P-Purchase", case=False, na=False)]
+                sells = insider_df[insider_df["transactionType"].str.contains("Sale|Sell|S-Sale", case=False, na=False)]
+                
+                # Calculate volumes safely
+                buy_vol = (buys["securitiesTransacted"] * buys["price"]).sum() if not buys.empty else 0
+                sell_vol = (sells["securitiesTransacted"] * sells["price"]).sum() if not sells.empty else 0
+                
+                net_flow = buy_vol - sell_vol
+                
+                if net_flow > 5_000_000:
+                    response["insider_sentiment"] = "STRONG BUY"
+                elif net_flow > 500_000:
+                    response["insider_sentiment"] = "BULLISH"
+                elif net_flow < -5_000_000:
+                    response["insider_sentiment"] = "DUMPING"
+                elif net_flow < -500_000:
+                    response["insider_sentiment"] = "BEARISH"
+                else:
+                    response["insider_sentiment"] = "NEUTRAL"
+            else:
+                response["insider_sentiment"] = "NEUTRAL"
+                
+        except Exception as ins_err:
+            logger.debug(f"Insider analysis failed for {symbol}: {ins_err}")
+            response["insider_sentiment"] = "NEUTRAL"
 
         return response
         

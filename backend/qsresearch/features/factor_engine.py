@@ -244,7 +244,8 @@ class FactorEngine:
                 
                 CURRENT_TIMESTAMP
             FROM RawFactors
-            WHERE raw_mom IS NOT NULL
+            WHERE raw_mom IS NOT NULL 
+              AND raw_mom < 20 -- Exclude reverse split artifacts (>2000% return)
             """
             
             conn.execute(sql)

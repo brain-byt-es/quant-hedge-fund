@@ -5,7 +5,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recha
 import { useMemo } from "react"
 
 interface DistributionData {
-  factor_signal: number;
+  momentum?: number;
   [key: string]: unknown;
 }
 
@@ -15,13 +15,17 @@ export function FactorDistributionChart({ data }: { data: DistributionData[] }) 
       if (!data || data.length === 0) return []
       
       const bins = 20
-      const scores = data.map(d => d.factor_signal)
+      // Use Momentum as the primary distribution metric
+      const scores = data.map(d => d.momentum).filter(s => typeof s === 'number') as number[]
+      
+      if (scores.length === 0) return []
+
       const min = Math.min(...scores)
       const max = Math.max(...scores)
       const binWidth = (max - min) / bins
       
       const hist = Array.from({length: bins}, (_, i) => ({
-          binStart: (min + i * binWidth).toFixed(1),
+          binStart: (min + i * binWidth).toFixed(0),
           count: 0
       }))
       
@@ -36,7 +40,7 @@ export function FactorDistributionChart({ data }: { data: DistributionData[] }) 
   return (
     <Card className="h-full border-border/50 bg-card/40 backdrop-blur-md flex flex-col overflow-hidden">
         <CardHeader className="py-2 px-3 border-b border-border/50 flex flex-row items-center justify-between">
-            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Factor Distribution</CardTitle>
+            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Momentum Distribution</CardTitle>
             <div className="flex gap-1">
                 <div className="h-1 w-3 rounded-full bg-muted" />
                 <div className="h-1 w-3 rounded-full bg-border" />

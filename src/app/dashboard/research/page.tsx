@@ -132,7 +132,7 @@ export default function ResearchPage() {
 
                     {/* Row 3: Full Table */}
                     <div className="h-[600px] shrink-0 pb-4">
-                         <MarketOverviewTable data={signals} />
+                         <MarketOverviewTable data={signals} onSelectSymbol={setSymbol} />
                     </div>
                 </div>
 

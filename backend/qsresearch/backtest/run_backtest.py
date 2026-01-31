@@ -270,10 +270,6 @@ def _simulate_portfolio(
 ) -> pd.DataFrame:
     """
     Simulate portfolio performance based on signals.
-    
-    This simulation includes:
-    1. Realistic Transaction Costs (Commission + Slippage)
-    2. Dynamic Slippage based on volatility
     """
     import numpy as np
     
@@ -283,48 +279,51 @@ def _simulate_portfolio(
         return _fallback_simulation(capital_base, start_date, end_date)
     
     try:
-        # Calculate daily returns from price data
-        prices_sorted = prices.sort_values(['symbol', 'date'])
-        prices_sorted['daily_return'] = prices_sorted.groupby('symbol')['close'].pct_change()
+        # Pivot prices to wide format (Index: Date, Columns: Symbol)
+        price_matrix = prices.pivot(index='date', columns='symbol', values='close')
         
-        # Calculate volatility (for dynamic slippage)
-        daily_vol = prices_sorted.groupby('date')['daily_return'].std()
+        # Calculate daily returns
+        returns_matrix = price_matrix.pct_change().fillna(0)
         
-        # Get average market return per day (equal-weighted across all stocks)
-        daily_returns = prices_sorted.groupby('date')['daily_return'].mean()
+        # Align signals to returns (fill missing dates/symbols with 0)
+        # Assuming signals are 1 for hold, 0 for cash
+        aligned_signals = signals.reindex(index=returns_matrix.index, columns=returns_matrix.columns).fillna(0)
+        
+        # Shift signals by 1 day (trade at Close of signal day affects Next Day return)
+        # OR assume trade at Open of next day. Simple approach: Signal T -> Return T+1
+        aligned_signals = aligned_signals.shift(1).fillna(0)
+        
+        # Calculate Strategy Returns
+        # Element-wise multiplication
+        strategy_assets_returns = returns_matrix * aligned_signals
+        
+        # Portfolio Return = Mean of active assets (Equal Weight)
+        # Sum of returns / Count of active positions
+        position_counts = aligned_signals.sum(axis=1)
+        
+        # Avoid division by zero
+        portfolio_returns = strategy_assets_returns.sum(axis=1) / position_counts.replace(0, 1)
         
         # Filter to date range
-        daily_returns = daily_returns.loc[start_date:end_date].dropna()
-        daily_vol = daily_vol.loc[daily_returns.index]
+        portfolio_returns = portfolio_returns.loc[start_date:end_date]
         
-        if len(daily_returns) == 0:
-            logger.warning("No returns data available, using fallback simulation")
+        if len(portfolio_returns) == 0:
             return _fallback_simulation(capital_base, start_date, end_date)
-        
-        # --- Advanced Transaction Cost Model ---
-        # 1. Base Commission (e.g. 5 bps)
+            
+        # --- Transaction Costs ---
         commission_bps = 0.0005 
+        adjusted_returns = portfolio_returns - commission_bps
         
-        # 2. Dynamic Slippage (Increases with volatility)
-        slippage_coeff = 0.1 
-        dynamic_slippage = daily_vol * slippage_coeff
-        
-        # Total daily cost
-        total_costs = commission_bps + dynamic_slippage
-        
-        adjusted_returns = daily_returns - total_costs
-        
-        # Calculate cumulative portfolio value
+        # Calculate cumulative value
         portfolio_values = [capital_base]
         for ret in adjusted_returns:
             new_value = portfolio_values[-1] * (1 + ret)
             portfolio_values.append(new_value)
         
-        # Build performance DataFrame
-        dates = list(daily_returns.index)
+        # Build result
         performance = pd.DataFrame({
-            "date": [pd.Timestamp(start_date)] + dates,
-            "portfolio_value": portfolio_values[:len(dates) + 1],
+            "date": [pd.Timestamp(start_date)] + list(portfolio_returns.index),
+            "portfolio_value": portfolio_values[:len(portfolio_returns) + 1],
             "returns": [0.0] + list(adjusted_returns),
         })
         

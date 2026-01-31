@@ -20,7 +20,7 @@ interface MarketData {
 
 type SortKey = keyof MarketData;
 
-export function MarketOverviewTable({ data }: { data: MarketData[] }) {
+export function MarketOverviewTable({ data, onSelectSymbol }: { data: MarketData[], onSelectSymbol: (s: string) => void }) {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: 'asc' | 'desc' }>({ 
       key: 'market_cap', 
       direction: 'desc' 
@@ -110,7 +110,11 @@ export function MarketOverviewTable({ data }: { data: MarketData[] }) {
                 </TableHeader>
                 <TableBody>
                     {sorted.map((row, i) => (
-                        <TableRow key={row.symbol} className="border-border/30 hover:bg-primary/5 transition-colors group">
+                        <TableRow 
+                            key={row.symbol} 
+                            className="border-border/30 hover:bg-primary/5 transition-colors group cursor-pointer"
+                            onClick={() => onSelectSymbol(row.symbol)}
+                        >
                             <TableCell className="py-2 text-[10px] font-mono text-muted-foreground text-center px-3">{i + 1}</TableCell>
                             <TableCell className="py-2 text-xs font-mono font-bold text-foreground px-3 group-hover:text-primary">
                                 {row.symbol}

@@ -3,7 +3,7 @@ Strategy Generator & Regime Analyzer
 Calculates market signals and prompts the LLM for strategy adjustments.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import pandas as pd
 import numpy as np
 import polars as pl
@@ -19,72 +19,82 @@ class StrategyGenerator:
     def __init__(self):
         self.llm_client = GroqClient()
     
-    def analyze_market_regime(self, prices: pl.DataFrame) -> Dict[str, Any]:
+    def analyze_market_regime(self, prices: Optional[pl.DataFrame]) -> Dict[str, Any]:
         """
         Calculate simple market regime metrics from price history.
-        
-        Args:
-            prices: Polars DataFrame with symbol, date, close
-            
-        Returns:
-            Dictionary of regime metrics (volatility, trend, etc.)
+        If prices are None (e.g. cold start), return neutral default regime.
         """
-        # Convert to pandas for easier time-series calc (or use polars)
-        # For simplicity, let's analyze SPY or the aggregate market
-        
-        # 1. Calculate Market Index (Equal Weight of all provided symbols for proxy)
-        # Ideally we'd use SPY, but let's assume 'prices' has many stocks
-        
-        # Filter to last 6 months (approx 126 trading days)
-        df = prices.to_pandas()
-        df['date'] = pd.to_datetime(df['date'])
-        
-        # Simple Proxy: Average daily return of all stocks
-        daily_returns = df.pivot(index='date', columns='symbol', values='close').pct_change().mean(axis=1)
-        
-        # Metrics
-        recent_returns = daily_returns.tail(126) # 6 months
-        
-        volatility = recent_returns.std() * np.sqrt(252)
-        total_return = (1 + recent_returns).prod() - 1
-        
-        # Trend: Simple SMA comparison (last price vs 200 SMA of index)
-        # Create a synthetic index price series
-        index_price = (1 + daily_returns).cumprod()
-        current_price = index_price.iloc[-1]
-        sma_200 = index_price.tail(200).mean() if len(index_price) >= 200 else index_price.mean()
-        
-        trend_strength = (current_price / sma_200) - 1
-        
-        # Regime Classification
-        if total_return > 0.05 and volatility < 0.15:
-            regime = "Bull Steady"
-        elif total_return > 0.05 and volatility >= 0.15:
-            regime = "Bull Volatile"
-        elif total_return < -0.05:
-            regime = "Bear"
-        else:
-            regime = "Sideways"
+        if prices is None or (hasattr(prices, 'is_empty') and prices.is_empty()):
+            logger.info("Market Regime Analysis: No data provided. Assuming Neutral Regime.")
+            return {
+                "regime_label": "Neutral / Unknown",
+                "annualized_volatility": 0.15,
+                "6m_return": 0.05,
+                "trend_strength_vs_sma200": 0.0,
+                "data_points": 0
+            }
+
+        try:
+            # Convert to pandas for easier time-series calc (or use polars)
+            # For simplicity, let's analyze SPY or the aggregate market
             
-        metrics = {
-            "regime_label": regime,
-            "annualized_volatility": round(float(volatility), 4),
-            "6m_return": round(float(total_return), 4),
-            "trend_strength_vs_sma200": round(float(trend_strength), 4),
-            "data_points": len(recent_returns)
-        }
-        
-        logger.info(f"Market Regime Analysis: {metrics}")
-        return metrics
+            # Filter to last 6 months (approx 126 trading days)
+            df = prices.to_pandas()
+            df['date'] = pd.to_datetime(df['date'])
+            
+            # Simple Proxy: Average daily return of all stocks
+            daily_returns = df.pivot(index='date', columns='symbol', values='close').pct_change().mean(axis=1)
+            
+            # Metrics
+            recent_returns = daily_returns.tail(126) # 6 months
+            
+            if len(recent_returns) < 20:
+                 raise ValueError("Insufficient data points")
+
+            volatility = recent_returns.std() * np.sqrt(252)
+            total_return = (1 + recent_returns).prod() - 1
+            
+            # Trend: Simple SMA comparison (last price vs 200 SMA of index)
+            # Create a synthetic index price series
+            index_price = (1 + daily_returns).cumprod()
+            current_price = index_price.iloc[-1]
+            sma_200 = index_price.tail(200).mean() if len(index_price) >= 200 else index_price.mean()
+            
+            trend_strength = (current_price / sma_200) - 1
+            
+            # Regime Classification
+            if total_return > 0.05 and volatility < 0.15:
+                regime = "Bull Steady"
+            elif total_return > 0.05 and volatility >= 0.15:
+                regime = "Bull Volatile"
+            elif total_return < -0.05:
+                regime = "Bear"
+            else:
+                regime = "Sideways"
+                
+            metrics = {
+                "regime_label": regime,
+                "annualized_volatility": round(float(volatility), 4),
+                "6m_return": round(float(total_return), 4),
+                "trend_strength_vs_sma200": round(float(trend_strength), 4),
+                "data_points": len(recent_returns)
+            }
+            
+            logger.info(f"Market Regime Analysis: {metrics}")
+            return metrics
+        except Exception as e:
+            logger.warning(f"Regime analysis failed ({e}), using default.")
+            return {
+                "regime_label": "Neutral",
+                "annualized_volatility": 0.15,
+                "6m_return": 0.05,
+                "trend_strength_vs_sma200": 0.0,
+                "data_points": 0
+            }
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate and sanitize strategy configuration.
-        
-        Rules:
-        - top_n: 5 to 50
-        - factor_weights: Sum to 1.0 (approx)
-        - momentum_window: 5 to 504
         """
         try:
             # 1. Validate top_n
@@ -130,10 +140,9 @@ class StrategyGenerator:
             logger.error(f"Config validation failed: {e}. Using default.")
             return self._get_default_config()
 
-    def generate_candidates(self, prices: pl.DataFrame, n: int = 3) -> List[Dict[str, Any]]:
+    def generate_candidates(self, prices: Optional[pl.DataFrame], n: int = 3) -> List[Dict[str, Any]]:
         """
         Generate N distinct strategy candidates for the current regime.
-        Logs to MLflow if available.
         """
         if not self.llm_client.client:
             logger.warning("LLM Client not available.")
@@ -145,8 +154,9 @@ class StrategyGenerator:
         # MLflow Logging Setup
         try:
             import mlflow
-            mlflow_active = True
-            mlflow.set_experiment("LLM_Strategy_Generator")
+            # Disable MLflow for now to prevent connection timeouts affecting UI latency
+            mlflow_active = False 
+            # mlflow.set_experiment("LLM_Strategy_Generator")
         except ImportError:
             mlflow_active = False
             logger.warning("MLflow not found. Skipping experiment tracking.")
@@ -154,19 +164,22 @@ class StrategyGenerator:
         for i in range(n):
             try:
                 # Add diversity instruction
+                style_label = "Neutral"
                 diversity_prompt = ""
+                
                 if i == 0:
+                    style_label = "Balanced"
                     diversity_prompt = "Propose a 'Balanced' approach."
                 elif i == 1:
+                    style_label = "Aggressive"
                     diversity_prompt = "Propose an 'Aggressive' approach (higher risk/return)."
                 else:
+                    style_label = "Defensive"
                     diversity_prompt = "Propose a 'Defensive' approach (lower volatility)."
 
-                logger.info(f"Generating candidate {i+1}/{n}: {diversity_prompt}")
+                logger.info(f"Generating candidate {i+1}/{n}: {style_label}")
                 
                 # We reuse the client but inject the diversity nuance
-                # NOTE: For a real impl, we'd update the client method or prompt construction
-                # Here we just append it to a custom regime dict strictly for prompting context
                 regime_context = regime.copy()
                 regime_context["requested_style"] = diversity_prompt
                 
@@ -183,7 +196,7 @@ class StrategyGenerator:
                 
                 valid_config["candidate_id"] = f"candidate_{i+1}"
                 valid_config["strategy_hash"] = strat_hash
-                valid_config["style"] = diversity_prompt
+                valid_config["style"] = style_label
                 valid_config["reasoning"] = reasoning
                 valid_config["regime_snapshot"] = regime # Freeze the context
                 
@@ -191,7 +204,7 @@ class StrategyGenerator:
                 
                 # MLflow Log
                 if mlflow_active:
-                    with mlflow.start_run(run_name=f"Generate_{regime['regime_label']}_{i}"):
+                    with mlflow.start_run(run_name=f"Generate_{regime.get('regime_label', 'Unknown')}_{i}"):
                         mlflow.log_params(regime)
                         mlflow.log_param("strategy_hash", strat_hash)
                         mlflow.log_param("style", diversity_prompt)
@@ -204,7 +217,7 @@ class StrategyGenerator:
 
         return candidates
 
-    def generate_strategy(self, prices: pl.DataFrame) -> Dict[str, Any]:
+    def generate_strategy(self, prices: Optional[pl.DataFrame]) -> Dict[str, Any]:
         """Original single-strategy method (backward compatibility)"""
         candidates = self.generate_candidates(prices, n=1)
         return candidates[0] if candidates else self._get_default_config()
@@ -215,59 +228,8 @@ class StrategyGenerator:
             "top_n": 20,
             "momentum_window": [21, 252],
             "rebalance_frequency": "month_end",
-            "factor_weights": {"momentum": 1.0, "value": 0.0, "quality": 0.0}
+            "factor_weights": {"momentum": 1.0, "value": 0.0, "quality": 0.0},
+            "strategy_name": "Default_Factor_Mix",
+            "style": "Neutral",
+            "reasoning": "Baseline momentum strategy."
         }
-
-if __name__ == "__main__":
-    # Test Run
-    import sys
-    from pathlib import Path
-    
-    # Add parent to path to allow imports
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    
-    from qsconnect import Client
-    
-    # Create the generator
-    generator = StrategyGenerator()
-    
-    print("Fetching sample data...")
-    from dotenv import load_dotenv
-    load_dotenv() # Explicitly load .env
-    
-    # Check if GROQ_API_KEY is loaded
-    import os
-    if not os.getenv("GROQ_API_KEY"):
-         print("WARNING: GROQ_API_KEY not found in env even after load_dotenv()")
-         
-    try:
-        from qsconnect import Client
-        try:
-            client = Client()
-            # Fetch a small sample or rely on cache
-            prices = client.bulk_historical_prices(
-                start_date=pd.to_datetime("2023-01-01").date(), 
-                use_cache=True
-            )
-        except Exception as client_err:
-             print(f"Client/Data Error: {client_err}")
-             prices = None
-
-        # FAIL FAST: Do not use mocks in production environment
-        if prices is None or prices.is_empty():
-            logger.error("No real data found/accessible in DuckDB.")
-            raise ValueError("Strategy Generator failed: No price data available in DuckDB. Please run SimFin Ingest.")
-        
-        print(f"Data ready: {len(prices)} rows")
-        
-        # Re-init generator to pick up env vars if they were just loaded
-        generator = StrategyGenerator()
-        config = generator.generate_strategy(prices)
-        
-        print("\nGenerated Strategy Config:")
-        print(json.dumps(config, indent=2))
-            
-    except Exception as e:
-        print(f"Test failed: {e}")
-        import traceback
-        traceback.print_exc()

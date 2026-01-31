@@ -85,13 +85,17 @@ class LLMClient:
         You are an expert Quantitative Researcher assistant.
         Your goal is to analyze market regime metrics and suggest optimal parameters for a Factor-based strategy.
         
-        The strategy has these tunable parameters:
-        - top_n: Number of stocks to hold (10-50)
-        - momentum_window: Tuple of (fast_period, slow_period)
-        - rebalance_frequency: 'month_end' or 'quarter_end'
-        - factor_weights: Dict of {'momentum': float, 'value': float, 'quality': float} (must sum to 1.0)
-        
-        Output ONLY valid JSON.
+        Output MUST be a JSON object with this exact structure:
+        {
+            "config": {
+                "strategy_name": "Creative_Name_Here", // e.g., 'Vol_Crusher_Alpha', 'Steady_Growth_Quality'
+                "top_n": int, // 10-50
+                "momentum_window": [int, int], // (fast, slow)
+                "rebalance_frequency": "month_end" or "quarter_end",
+                "factor_weights": {"momentum": float, "value": float, "quality": float} // Sum to 1.0
+            },
+            "reasoning": "Detailed explanation of why these params fit the regime."
+        }
         """
         
         regime_str = json.dumps(market_regime, indent=2)

@@ -80,19 +80,24 @@ export default function AIQuantPage() {
       setAgentStatus("Routing query...")
 
       try {
-          if (input.toLowerCase().includes("alpha") || input.toLowerCase().includes("top")) {
+          const lowerInput = input.toLowerCase()
+          const isStrategyRequest = lowerInput.includes("build") || lowerInput.includes("create") || lowerInput.includes("strategy") || lowerInput.includes("generate")
+
+          if (!isStrategyRequest && (lowerInput.includes("alpha") || lowerInput.includes("top"))) {
               setAgentStatus("Querying Factor Database...")
               const res = await api.agenticQuery('alpha')
+              const signalList = Array.isArray(res.data) ? res.data.map((s: {symbol: string}) => s.symbol).join(', ') : "No signals found."
+              
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
-                  content: `${res.summary} Top signals: ${res.data.map((s: {symbol: string}) => s.symbol).join(', ')}.`,
+                  content: `${res.summary} Top signals: ${signalList}.`,
                   tool: "Intelligence Core"
               }])
           }
           else if (input.toLowerCase().includes("risk") || input.toLowerCase().includes("var")) {
               setAgentStatus("Simulating Crash Scenarios...")
               const res = await api.agenticQuery('risk')
-              const topStress = res.data.stress_tests ? res.data.stress_tests[0] : null
+              const topStress = res.data && res.data.stress_tests ? res.data.stress_tests[0] : null
               
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
@@ -152,9 +157,16 @@ export default function AIQuantPage() {
       }
   }
 
+  const [activeAccordion, setActiveAccordion] = useState<string[]>(["hypotheses", "config"])
+
   const loadHypothesis = (h: Hypothesis) => {
       setStrategyConfig(JSON.stringify(h, null, 2))
-      setChatHistory(prev => [...prev, { role: 'ai', content: `Loaded hypothesis: ${h.strategy_name}`, tool: "Forge" }])
+      setChatHistory(prev => [...prev, { role: 'ai', content: `Loaded hypothesis: ${h.strategy_name} into configuration engine. Review parameters and execute.`, tool: "Forge" }])
+      // Ensure config panel is open and highlight it
+      if (!activeAccordion.includes("config")) {
+          setActiveAccordion(prev => [...prev, "config"])
+      }
+      // Scroll to config (optional, simplified here)
   }
 
   const handleDeploy = async () => {
@@ -297,7 +309,7 @@ export default function AIQuantPage() {
 
                   {/* AGENT TOOLS: Accordions for Results & Code */}
                   <div className="mt-8 space-y-4">
-                      <Accordion type="multiple" className="w-full space-y-4">
+                      <Accordion type="multiple" value={activeAccordion} onValueChange={setActiveAccordion} className="w-full space-y-4">
                         <AccordionItem value="hypotheses" className="border border-border rounded-2xl px-6 bg-background/40 shadow-sm">
                           <div className="flex items-center justify-between">
                             <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-chart-4 flex-1 font-bold">
@@ -324,20 +336,22 @@ export default function AIQuantPage() {
                                     </div>
                                 )}
                                 {hypotheses.map((h, i) => (
-                                    <div key={i} className="w-[320px] shrink-0 border border-border bg-card p-5 rounded-2xl hover:border-chart-4/50 transition-all group relative shadow-xl">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <span className="font-black text-sm text-foreground truncate pr-2 uppercase tracking-tight">{h.strategy_name}</span>
-                                            <Badge variant="outline" className="text-[10px] h-5 border-chart-4/30 text-chart-4 bg-chart-4/5 uppercase tracking-widest font-bold">{h.style}</Badge>
-                                        </div>
-                                        <div className="text-xs text-muted-foreground leading-relaxed h-[50px] overflow-hidden line-clamp-3 mb-5 font-medium italic">
-                                            {h.reasoning}
+                                    <div key={i} className="w-[340px] h-[280px] shrink-0 border border-border bg-gradient-to-br from-card to-background p-5 rounded-2xl hover:border-chart-4/50 transition-all group relative shadow-lg hover:shadow-2xl hover:shadow-chart-4/10 flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex items-start justify-between gap-3 mb-4">
+                                                <span className="font-black text-sm text-foreground truncate min-w-0 flex-1 uppercase tracking-tight" title={h.strategy_name}>{(h.strategy_name || "Unknown Strategy").replace(/_/g, " ")}</span>
+                                                <Badge variant="outline" className="text-[9px] h-5 border-chart-4/30 text-chart-4 bg-chart-4/10 uppercase tracking-widest font-bold px-2 shrink-0">{h.style}</Badge>
+                                            </div>
+                                            <div className="text-[11px] text-muted-foreground leading-relaxed h-[120px] overflow-y-auto pr-2 custom-scrollbar mb-2 font-medium italic" title={h.reasoning}>
+                                                {h.reasoning}
+                                            </div>
                                         </div>
                                         <Button 
                                             variant="secondary" 
-                                            className="w-full h-10 text-xs bg-muted hover:bg-chart-4 hover:text-white transition-all uppercase tracking-[0.2em] font-black border-none shadow-sm"
+                                            className="w-full h-9 text-[10px] bg-muted hover:bg-chart-4 hover:text-white transition-all uppercase tracking-[0.2em] font-black border-none shadow-sm flex items-center gap-2"
                                             onClick={() => loadHypothesis(h)}
                                         >
-                                            Commit to Core
+                                            <Play className="h-3 w-3" /> Load & Configure
                                         </Button>
                                     </div>
                                 ))}

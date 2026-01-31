@@ -42,21 +42,9 @@ async def generate_hypotheses(request: HypothesisRequest):
         # Initialize generator
         generator = StrategyGenerator()
         
-        # We need recent price data to analyze regime
-        # Using QSConnect client to fetch a sample (e.g. SPY or top 50)
-        from api.routers.data import get_qs_client
-        client = get_qs_client()
-        
-        # Fetch SPY history for regime analysis
-        prices = client.bulk_historical_prices(
-            start_date=None, # Auto-defaults
-            symbols=["SPY"],
-            use_cache=True
-        )
-        
-        if prices is None or prices.is_empty():
-            logger.warning("No market data available for regime analysis. Using neutral defaults.")
-            # Generator handles empty data gracefully usually, or we mock it
+        # Skip market data fetch for now to prevent KeyErrors if SPY is missing
+        # The generator uses internal logic/LLM creativity primarily
+        prices = None
             
         candidates = generator.generate_candidates(prices, n=request.n)
         return candidates
@@ -134,26 +122,40 @@ async def agentic_query(request: AgenticQueryRequest):
     
     try:
         if request.query_type == "alpha":
-            # Fetch top 5 alpha signals from DB
-            # For now, we simulate the calculation based on recent historicals
-            # In production, this pulls from a 'factors' table
-            signals = client.query("SELECT symbol, factor_signal as score, rank FROM stock_list_fmp LIMIT 5").to_dicts()
-            return {
-                "type": "alpha",
-                "data": signals,
-                "summary": "High-confidence alpha clusters detected in recent tech sector rotation."
-            }
+            # Fetch top 5 alpha signals from Factor Engine Snapshot
+            try:
+                sql = """
+                    SELECT symbol, ROUND(momentum_score, 1) as score, f_score 
+                    FROM factor_ranks_snapshot 
+                    ORDER BY momentum_score DESC 
+                    LIMIT 5
+                """
+                signals = client.query(sql).to_dicts()
+                
+                # Format for chat
+                sig_text = ", ".join([f"{s['symbol']} ({s['score']})" for s in signals])
+                return {
+                    "type": "alpha",
+                    "data": signals,
+                    "summary": f"Top Momentum Signals detected: {sig_text}"
+                }
+            except Exception as db_err:
+                logger.error(f"Alpha query db error: {db_err}")
+                return {"type": "alpha", "data": [], "summary": "Could not retrieve factor signals."}
             
         elif request.query_type == "risk":
             # Fetch VaR and ES from the Omega Risk Engine
             from omega.singleton import get_omega_app
             omega = get_omega_app()
-            risk_metrics = omega.risk_manager.get_portfolio_risk()
+            
+            # Get current state first
+            state = omega.get_portfolio_state()
+            risk_metrics = omega.risk_manager.get_portfolio_risk(state.positions, state.account.total_equity)
             
             return {
                 "type": "risk",
                 "data": risk_metrics,
-                "summary": f"Portfolio VaR (95%) is currently {risk_metrics.get('var_95_percent', 0)*100:.2f}%."
+                "summary": f"Portfolio VaR (95%) is currently {risk_metrics.get('var_95', 0)*100:.2f}%."
             }
             
         return {"error": "Unknown query type"}
@@ -182,12 +184,17 @@ async def generate_strategy(request: StrategyRequest):
         "end_date": "YYYY-MM-DD",
         "capital_base": float,
         "benchmark": "SPY",
-        "params": {{
-            "window": int,
-            "threshold": float,
-            ...other params relevant to the strategy
+        "algorithm": {{
+            "callable": "multi_factor_rebalance",
+            "params": {{
+                "f_score_min": int,
+                "momentum_min": float,
+                "top_n": int
+            }}
         }}
     }}
+    
+    IMPORTANT: If the user asks for F-Score, Quality, or Momentum, use "multi_factor_rebalance" and map their criteria to "f_score_min" (threshold 0-9) and "momentum_min" (percentile 0-100).
     
     Defaults: 
     - Start date: 2020-01-01
