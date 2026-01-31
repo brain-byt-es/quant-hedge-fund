@@ -45,8 +45,12 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
     </Card>
   )
 
+  const rawMetrics = profile.raw_factor_metrics || {};
+  const fScore = (rawMetrics.f_score as number) ?? 0;
+  const insiderScore = (rawMetrics.insider_score as number) ?? 0;
+  const isHighConviction = insiderScore >= 100;
+
   // Piotroski Coloring (0-9 Scale)
-  const fScore = profile.raw_factor_metrics?.f_score ?? 0;
   let fScoreColor = "text-muted-foreground";
   let fScoreBg = "bg-muted";
   
@@ -58,18 +62,22 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
         {/* --- Sticky Header --- */}
         <div className="p-5 border-b border-border bg-card/30 shrink-0">
             <div className="flex justify-between items-start">
-                <div className="space-y-1.5">
-                    <h2 className="text-xl font-bold text-foreground tracking-tight leading-none italic truncate max-w-[200px]">
-                        {profile.company_name}
-                    </h2>
+                <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-foreground tracking-tight leading-none italic truncate">
+                            {profile.company_name}
+                        </h2>
+                        {isHighConviction && <span className="text-xl animate-pulse" title="Insider Cluster Buy detected!">🔥</span>}
+                    </div>
                     <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs h-5 px-2 border-border bg-background text-muted-foreground font-mono uppercase">{profile.symbol}</Badge>
-                        <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider truncate max-w-[140px]">
+                        {isHighConviction && <Badge className="text-[8px] h-4 bg-orange-500 hover:bg-orange-600 text-white border-none font-black px-1.5">HIGH CONVICTION</Badge>}
+                        <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider truncate">
                             {profile.sector}
                         </span>
                     </div>
                 </div>
-                <div className="text-right flex flex-col items-end">
+                <div className="text-right flex flex-col items-end ml-4 shrink-0">
                     <div className="text-3xl font-mono font-black text-primary leading-none tracking-tighter">
                         ${profile.price?.toFixed(2) || "0.00"}
                     </div>
@@ -121,14 +129,17 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                             </div>
                             <div className={cn(
                                 "p-3.5 rounded-xl border",
+                                isHighConviction ? "bg-orange-500/10 border-orange-500/30" : 
                                 profile.insider_sentiment === "BULLISH" ? "bg-primary/10 border-primary/30" : "bg-muted border-border"
                             )}>
                                 <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest block mb-1.5">Insider</span>
                                 <div className={cn(
-                                    "text-base font-mono font-bold",
+                                    "text-base font-mono font-bold flex items-center gap-2",
+                                    isHighConviction ? "text-orange-500" : 
                                     profile.insider_sentiment === "BULLISH" ? "text-primary" : "text-muted-foreground"
                                 )}>
-                                    {profile.insider_sentiment || "NEUTRAL"}
+                                    {isHighConviction ? "CLUSTER BUY" : (profile.insider_sentiment || "NEUTRAL")}
+                                    {isHighConviction && <span className="text-xs">🔥</span>}
                                 </div>
                             </div>
                         </div>

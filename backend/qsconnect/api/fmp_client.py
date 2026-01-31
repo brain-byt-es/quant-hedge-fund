@@ -421,22 +421,38 @@ class FMPClient(BaseAPIClient):
     # =====================
 
     def get_insider_trades(self, symbol: str, limit: int = 100) -> pd.DataFrame:
-        """Get recent insider trades for a symbol."""
-        url = f"https://financialmodelingprep.com/stable/insider-trading"
+        """
+        Get recent insider trades for a symbol using the stable search endpoint.
+        Focuses on open market transactions.
+        """
+        # Note: In stable API, searching by symbol requires /search suffix
+        url = "https://financialmodelingprep.com/stable/insider-trading/search"
         params = {"symbol": symbol, "limit": limit}
         data = self._make_request(url, params=params)
-        return pd.DataFrame(data) if data else pd.DataFrame()
+        
+        if not data:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(data)
+        
+        # Filter logic for 'Institutional Grade' signal:
+        # Focus on "P-Purchase" (Open market purchase) 
+        if "transactionType" in df.columns:
+            df["is_purchase"] = df["transactionType"].str.contains("Purchase|Buy", case=False, na=False)
+            df["is_derivative"] = df["transactionType"].str.contains("Option|Exempt", case=False, na=False)
+            
+        return df
 
     def get_senate_trades(self, symbol: str) -> pd.DataFrame:
-        """Get recent senate/house trading for a symbol."""
-        url = f"https://financialmodelingprep.com/stable/senate-trading"
+        """Get recent senate/house trading for a symbol using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/senate-trading"
         params = {"symbol": symbol}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
     def get_stock_news(self, symbol: str, limit: int = 50) -> pd.DataFrame:
-        """Get recent news for a symbol (for AI sentiment analysis)."""
-        url = f"https://financialmodelingprep.com/stable/stock_news"
+        """Get recent news for a symbol using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/stock_news"
         params = {"symbol": symbol, "limit": limit}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()

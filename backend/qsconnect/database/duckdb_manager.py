@@ -489,6 +489,39 @@ class DuckDBManager:
             except: pass
             conn.close()
 
+    def upsert_insider_trades(self, df: pd.DataFrame) -> int:
+        """Upsert insider trading data."""
+        if df.empty: return 0
+        conn = self.connect()
+        try:
+            # Map FMP columns to our schema
+            mapping = {
+                "transactionDate": "transaction_date",
+                "reportingName": "reporting_name",
+                "typeOfOwner": "type_of_owner",
+                "transactionType": "transaction_type",
+                "securitiesTransacted": "securities_transacted"
+            }
+            df = df.rename(columns=mapping)
+            df["updated_at"] = datetime.now()
+            
+            # Keep only columns that exist in schema
+            target_cols = ["symbol", "transaction_date", "reporting_name", "type_of_owner", "transaction_type", "securities_transacted", "price", "updated_at"]
+            available_cols = [c for c in target_cols if c in df.columns]
+            df = df[available_cols]
+
+            conn.register("temp_insider", df)
+            
+            conn.execute(f"""
+                INSERT INTO insider_trades ({', '.join(available_cols)})
+                SELECT {', '.join(available_cols)} FROM temp_insider
+            """)
+            return len(df)
+        finally:
+            try: conn.unregister("temp_insider")
+            except: pass
+            conn.close()
+
     # =====================
     # Operational Methods
     # =====================

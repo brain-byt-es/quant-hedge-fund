@@ -235,6 +235,14 @@ def get_company_profile(symbol: str):
         # Smart Insider Sentiment (Net Value Flow)
         try:
             insider_df = client._fmp_client.get_insider_trades(symbol, limit=100)
+            
+            # Persist to DB so Factor Engine can calculate score
+            if not insider_df.empty:
+                try:
+                    client._db_manager.upsert_insider_trades(insider_df)
+                except Exception as db_ins_err:
+                    logger.debug(f"Failed to persist JIT insider trades for {symbol}: {db_ins_err}")
+
             if not insider_df.empty:
                 # Filter for Open Market transactions (P = Purchase, S = Sale)
                 buys = insider_df[insider_df["transactionType"].str.contains("Purchase|Buy|P-Purchase", case=False, na=False)]
