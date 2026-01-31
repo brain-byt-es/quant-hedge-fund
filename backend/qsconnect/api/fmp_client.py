@@ -452,8 +452,8 @@ class FMPClient(BaseAPIClient):
 
     def get_stock_news(self, symbol: str, limit: int = 50) -> pd.DataFrame:
         """Get recent news for a symbol using the stable endpoint."""
-        url = "https://financialmodelingprep.com/stable/stock_news"
-        params = {"symbol": symbol, "limit": limit}
+        url = "https://financialmodelingprep.com/stable/news/stock"
+        params = {"symbols": symbol, "limit": limit}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
 

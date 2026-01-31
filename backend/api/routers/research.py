@@ -228,9 +228,11 @@ def get_company_profile(symbol: str):
 
         # News
         try:
-            response["latest_news"] = client._fmp_client.get_stock_news(symbol, limit=5)
+            news_df = client._fmp_client.get_stock_news(symbol, limit=5)
+            response["latest_news"] = news_df.to_dict(orient="records") if not news_df.empty else []
         except Exception as news_err:
             logger.debug(f"News fetch failed for {symbol}: {news_err}")
+            response["latest_news"] = []
 
         # Smart Insider Sentiment (Net Value Flow)
         try:
