@@ -144,10 +144,12 @@ def get_company_profile(symbol: str):
         # 3. JIT Fallback (FMP)
         current_price = profile_data.get("price")
         current_mcap = profile_data.get("market_cap")
+        current_beta = profile_data.get("beta")
+        current_ipo = profile_data.get("ipo_date")
         
-        if not profile_data.get("company_name") or not current_price or not current_mcap:
+        if not profile_data.get("company_name") or not current_price or not current_mcap or current_beta is None or not current_ipo:
             try:
-                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Profile/Price/MCap)")
+                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Profile/Price/MCap/Beta/IPO)")
                 api_profile = client._fmp_client.get_company_profile(symbol)
                 
                 if api_profile:
@@ -162,13 +164,20 @@ def get_company_profile(symbol: str):
                             "ceo": api_profile.get("ceo", ""),
                             "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
                             "exchange": api_profile.get("exchangeShortName", "NASDAQ"),
-                            "ipo_date": api_profile.get("ipoDate", "N/A")
+                            "ipo_date": api_profile.get("ipoDate", "N/A"),
+                            "beta": float(api_profile.get("beta", 0.0)) if api_profile.get("beta") else 0.0
                         })
 
                     if not profile_data.get("price") and api_profile.get("price"):
                         profile_data["price"] = float(api_profile["price"])
                     if not profile_data.get("market_cap") and api_profile.get("mktCap"):
                         profile_data["market_cap"] = float(api_profile["mktCap"])
+                    if not profile_data.get("beta") and api_profile.get("beta"):
+                        profile_data["beta"] = float(api_profile["beta"])
+                    if not profile_data.get("ipo_date") and api_profile.get("ipoDate"):
+                        profile_data["ipo_date"] = api_profile["ipoDate"]
+                    if not profile_data.get("exchange") and api_profile.get("exchangeShortName"):
+                        profile_data["exchange"] = api_profile["exchangeShortName"]
                         
                     # Cache back to DB
                     try:
@@ -210,6 +219,9 @@ def get_company_profile(symbol: str):
             "price": profile_data.get("price"),
             "updated_at": profile_data.get("updated_at"),
             "market_cap": profile_data.get("market_cap"),
+            "beta": profile_data.get("beta"),
+            "ipo_date": profile_data.get("ipo_date"),
+            "exchange": profile_data.get("exchange"),
             "factor_attribution": ranks["factor_attribution"],
             "raw_factor_metrics": ranks["raw_metrics"]
         }

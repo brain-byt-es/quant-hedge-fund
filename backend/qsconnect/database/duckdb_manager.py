@@ -135,9 +135,25 @@ class DuckDBManager:
                     ceo VARCHAR,
                     full_time_employees BIGINT,
                     price DOUBLE,
+                    beta DOUBLE,
+                    ipo_date VARCHAR,
+                    exchange VARCHAR,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Migration: Add missing columns if they don't exist
+            try:
+                cols = conn.execute("PRAGMA table_info('bulk_company_profiles_fmp')").fetchall()
+                col_names = [c[1] for c in cols]
+                if 'beta' not in col_names:
+                    conn.execute("ALTER TABLE bulk_company_profiles_fmp ADD COLUMN beta DOUBLE")
+                if 'ipo_date' not in col_names:
+                    conn.execute("ALTER TABLE bulk_company_profiles_fmp ADD COLUMN ipo_date VARCHAR")
+                if 'exchange' not in col_names:
+                    conn.execute("ALTER TABLE bulk_company_profiles_fmp ADD COLUMN exchange VARCHAR")
+            except Exception as mig_err:
+                logger.debug(f"Migration for profiles failed (likely already up to date): {mig_err}")
 
             # 14. Strategy Audit Log (Change Governance)
             conn.execute("""
@@ -450,9 +466,9 @@ class DuckDBManager:
             
             conn.execute("""
                 INSERT INTO bulk_company_profiles_fmp (
-                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees, price, updated_at
+                    symbol, company_name, sector, industry, description, website, ceo, full_time_employees, price, beta, ipo_date, exchange, updated_at
                 )
-                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, price, updated_at FROM temp_profiles
+                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, price, beta, ipoDate, exchangeShortName, updated_at FROM temp_profiles
                 ON CONFLICT (symbol) DO UPDATE SET
                     company_name = EXCLUDED.company_name,
                     sector = EXCLUDED.sector,
@@ -462,6 +478,9 @@ class DuckDBManager:
                     ceo = EXCLUDED.ceo,
                     full_time_employees = EXCLUDED.full_time_employees,
                     price = EXCLUDED.price,
+                    beta = EXCLUDED.beta,
+                    ipo_date = EXCLUDED.ipo_date,
+                    exchange = EXCLUDED.exchange,
                     updated_at = EXCLUDED.updated_at
             """)
             return len(df)
