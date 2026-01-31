@@ -150,12 +150,22 @@ async def agentic_query(request: AgenticQueryRequest):
             
             # Get current state first
             state = omega.get_portfolio_state()
+            
+            # Safe calculation: if no positions, risk is 0
+            if not state.positions:
+                return {
+                    "type": "risk",
+                    "data": {"var_95": 0, "expected_shortfall": 0, "stress_tests": []},
+                    "summary": "0.00% (No active market exposure)"
+                }
+                
             risk_metrics = omega.risk_manager.get_portfolio_risk(state.positions, state.account.total_equity)
+            var_val = risk_metrics.get('var_95', 0)
             
             return {
                 "type": "risk",
                 "data": risk_metrics,
-                "summary": f"Portfolio VaR (95%) is currently {risk_metrics.get('var_95', 0)*100:.2f}%."
+                "summary": f"{var_val*100:.2f}%"
             }
             
         return {"error": "Unknown query type"}

@@ -14,6 +14,13 @@ from qsresearch.governance.manager import GovernanceManager
 from omega.data.candle_engine import CandleAggregator, BarCloseEventBus, Tick
 from omega.risk_engine import RiskManager
 
+class PortfolioState:
+    """Snapshot of current portfolio state."""
+    def __init__(self, positions: List[Dict], account: Dict[str, Any]):
+        self.positions = positions
+        self.account = account
+        # Ensure total_equity is accessible directly
+        self.total_equity = float(account.get("NetLiquidation", 0.0) or 0.0)
 
 
 class TradingApp:
@@ -192,6 +199,13 @@ class TradingApp:
     def get_portfolio_value(self) -> float:
         info = self.get_account_info()
         return info.get("NetLiquidation", 0.0)
+
+    def get_portfolio_state(self) -> PortfolioState:
+        """
+        Get a snapshot of the current portfolio state.
+        Used by Risk Engine and AI Agents.
+        """
+        return PortfolioState(self.get_positions(), self.get_account_info())
     
     # =====================
     # Position Management

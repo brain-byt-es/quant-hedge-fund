@@ -97,13 +97,24 @@ export default function AIQuantPage() {
           else if (input.toLowerCase().includes("risk") || input.toLowerCase().includes("var")) {
               setAgentStatus("Simulating Crash Scenarios...")
               const res = await api.agenticQuery('risk')
-              const topStress = res.data && res.data.stress_tests ? res.data.stress_tests[0] : null
+              console.log("Risk Query Response:", res)
               
-              setChatHistory(prev => [...prev, { 
-                  role: 'ai', 
-                  content: `Risk analysis complete. Portfolio VaR (95%) is ${res.summary}. Under a '${topStress?.scenario || 'Market Correction'}' scenario, the estimated impact would be ${topStress?.impact_percent ? (topStress.impact_percent * 100).toFixed(2) : '-5.0'}%. All exposures remain within limits.`,
-                  tool: "Omega Risk Engine"
-              }])
+              if (res.error) {
+                  setChatHistory(prev => [...prev, { 
+                      role: 'ai', 
+                      content: `Risk Engine Error: ${res.error}`,
+                      tool: "Omega Risk Engine"
+                  }])
+              } else {
+                  const topStress = res.data && res.data.stress_tests ? res.data.stress_tests[0] : null
+                  const varSummary = res.summary || "0.00% (Calculation Pending)"
+                  
+                  setChatHistory(prev => [...prev, { 
+                      role: 'ai', 
+                      content: `Risk analysis complete. Portfolio VaR (95%) is ${varSummary}. Under a '${topStress?.scenario || 'Market Correction'}' scenario, the estimated impact would be ${topStress?.impact_percent ? (topStress.impact_percent * 100).toFixed(2) : '-5.0'}%. All exposures remain within limits.`,
+                      tool: "Omega Risk Engine"
+                  }])
+              }
           }
           else if (input.toLowerCase().includes("mlflow") || input.toLowerCase().includes("research")) {
               setAgentStatus("Querying MLflow Registry...")
