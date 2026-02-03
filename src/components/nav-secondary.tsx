@@ -21,6 +21,7 @@ export function NavSecondary({
     title: string
     url: string
     icon: Icon
+    onClick?: () => void
   }[]
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
@@ -29,7 +30,16 @@ export function NavSecondary({
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild size="sm">
+              <SidebarMenuButton 
+                asChild 
+                size="sm"
+                onClick={(e) => {
+                    if (item.onClick) {
+                        e.preventDefault();
+                        item.onClick();
+                    }
+                }}
+              >
                 <Link href={item.url}>
                   <item.icon className="!size-3.5" />
                   <span className="text-[11px] font-medium">{item.title}</span>

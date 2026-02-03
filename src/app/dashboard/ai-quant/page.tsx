@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
-import { Play, ArrowRight, Terminal, Save, Loader2, Search, Users, Activity, CheckCircle2 } from "lucide-react"
+import { Play, ArrowRight, Terminal, Save, Loader2, Search, Users, Activity, CheckCircle2, Code2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 // --- TYPES ---
 
@@ -65,6 +67,11 @@ export default function AIQuantPage() {
   const [editorCode, setEditorCode] = useState<string>("# Waiting for Alpha Factor code injection...")
   const [customFactorDeployed, setCustomFactorDeployed] = useState(false)
   
+  // Manual Algorithm Editor State
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [manualCode, setManualCode] = useState("")
+  const [isSavingCode, setIsSavingCode] = useState(false)
+  
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // --- EFFECTS ---
@@ -75,6 +82,29 @@ export default function AIQuantPage() {
   }, [chatHistory, loadingChat])
 
   // --- HANDLERS ---
+
+  const handleOpenManualEditor = async () => {
+      setIsEditorOpen(true)
+      try {
+          const res = await api.getAlgorithmsCode()
+          setManualCode(res.code)
+      } catch (err) {
+          toast.error("Failed to load algorithms.py")
+      }
+  }
+
+  const handleSaveManualEditor = async () => {
+      setIsSavingCode(true)
+      try {
+          await api.updateAlgorithmsCode(manualCode)
+          toast.success("Algorithms Updated", { description: "backend/qsresearch/strategies/factor/algorithms.py has been updated." })
+          setIsEditorOpen(false)
+      } catch (err) {
+          toast.error("Failed to save code")
+      } finally {
+          setIsSavingCode(false)
+      }
+  }
 
   const handleChat = async (overridePrompt?: string) => {
       const input = overridePrompt || chatInput
@@ -303,6 +333,13 @@ export default function AIQuantPage() {
                    MLFLOW LIVE: 5000
                  </p>
               </div>
+              <Button 
+                variant="outline" 
+                className="w-full h-10 text-[10px] border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 uppercase tracking-widest font-black flex items-center gap-2"
+                onClick={handleOpenManualEditor}
+              >
+                <Code2 className="h-4 w-4" /> Manual Editor
+              </Button>
           </div>
         </div>
       </aside>
@@ -496,6 +533,52 @@ export default function AIQuantPage() {
           </div>
         </div>
       </main>
+
+      {/* Manual Algorithm Editor Dialog */}
+      <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+        <DialogContent className="max-w-[90vw] w-[1200px] h-[85vh] flex flex-col p-0 overflow-hidden border-border bg-background shadow-2xl">
+            <div className="p-6 border-b bg-muted/30 shrink-0">
+                <DialogHeader>
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                            <Code2 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl font-black tracking-tighter italic uppercase">Strategy Algorithm Editor</DialogTitle>
+                            <DialogDescription className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+                                Editing: backend/qsresearch/strategies/factor/algorithms.py
+                            </DialogDescription>
+                        </div>
+                    </div>
+                </DialogHeader>
+            </div>
+
+            <div className="flex-1 p-6 overflow-hidden bg-black/20">
+                <Textarea 
+                    className="h-full w-full font-mono text-sm bg-transparent border-none focus-visible:ring-0 resize-none custom-scrollbar p-0 text-chart-3 leading-relaxed"
+                    value={manualCode}
+                    onChange={(e) => setManualCode(e.target.value)}
+                    placeholder="# Import libraries and define your algorithms here..."
+                    spellCheck={false}
+                />
+            </div>
+
+            <DialogFooter className="p-6 border-t bg-muted/30 gap-4">
+                <Button variant="ghost" onClick={() => setIsEditorOpen(false)} className="font-bold uppercase tracking-widest text-xs">
+                    Cancel
+                </Button>
+                <Button 
+                    onClick={handleSaveManualEditor} 
+                    disabled={isSavingCode}
+                    className="font-black uppercase tracking-widest text-xs px-8"
+                >
+                    {isSavingCode ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save & Deploy Algorithms
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

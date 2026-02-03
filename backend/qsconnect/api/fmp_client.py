@@ -450,10 +450,14 @@ class FMPClient(BaseAPIClient):
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
-    def get_stock_news(self, symbol: str, limit: int = 50) -> pd.DataFrame:
+    def get_stock_news(self, symbol: str, limit: int = 50, from_date: str = None, to_date: str = None) -> pd.DataFrame:
         """Get recent news for a symbol using the stable endpoint."""
         url = "https://financialmodelingprep.com/stable/news/stock"
         params = {"symbols": symbol, "limit": limit}
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
@@ -470,6 +474,60 @@ class FMPClient(BaseAPIClient):
         params = {"symbol": symbol}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_quote(self, symbol: str) -> Dict[str, Any]:
+        """Get real-time quote for a symbol."""
+        url = "https://financialmodelingprep.com/stable/quote"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        if data and len(data) > 0:
+            return data[0]
+        return {}
+
+    def get_quotes_batch(self, symbols: List[str]) -> pd.DataFrame:
+        """Get batch quotes for multiple symbols."""
+        if not symbols:
+            return pd.DataFrame()
+        # Limit to 500 symbols per batch as per general API limits, although FMP is generous
+        chunk_size = 500
+        all_data = []
+        
+        for i in range(0, len(symbols), chunk_size):
+            chunk = symbols[i:i + chunk_size]
+            symbols_str = ",".join(chunk)
+            # Use specific batch endpoint or standard quote with comma separated
+            # Checking docs: stable/quote?symbol=A,B might work, or stable/batch-quote
+            # Using stable/quote as it's often more reliable for small batches, but let's try batch-quote as per docs
+            url = "https://financialmodelingprep.com/stable/batch-quote" 
+            params = {"symbols": symbols_str}
+            data = self._make_request(url, params=params)
+            if data:
+                all_data.extend(data)
+                
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
+
+    def get_intraday_chart(self, symbol: str, interval: str = "1min") -> pd.DataFrame:
+        """
+        Get intraday price chart data for a symbol.
+        
+        Args:
+            symbol: Stock symbol
+            interval: Time interval ('1min', '5min', '15min', '30min', '1hour', '4hour')
+            
+        Returns:
+            DataFrame with 'date', 'open', 'high', 'low', 'close', 'volume'
+        """
+        # Validate interval
+        valid_intervals = ['1min', '5min', '15min', '30min', '1hour', '4hour']
+        if interval not in valid_intervals:
+            interval = '1min'
+            
+        endpoint = f"https://financialmodelingprep.com/stable/historical-chart/{interval}/{symbol}"
+        data = self._make_request(endpoint)
+        
+        if data:
+            return pd.DataFrame(data)
+        return pd.DataFrame()
 
     # =====================
     # Bulk Financial Data

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from api.routers import data, backtest, ai, live, governance, status, research
+from api.routers import data, backtest, ai, live, governance, status, research, tactical
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(live.router, prefix="/live", tags=["live"])
 api_router.include_router(governance.router, prefix="/governance", tags=["governance"])
 api_router.include_router(status.router, prefix="/status", tags=["status"])
 api_router.include_router(research.router, prefix="/research", tags=["research"])
+api_router.include_router(tactical.router, prefix="/tactical", tags=["tactical"])

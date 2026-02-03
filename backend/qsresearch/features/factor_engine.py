@@ -193,6 +193,7 @@ class FactorEngine:
                     p.symbol, p.date_now as as_of, p.price_now as price, p.volume_now as volume, (p.price_now * COALESCE(m.shares, 0)) as market_cap, p.change_1d,
                     (p.price_now / NULLIF(pp.price_12m, 0)) - 1.0 as raw_mom,
                     m.roe as raw_roe, m.rev_growth as raw_growth, (m.net_income / NULLIF(p.price_now * m.shares, 0)) as raw_earnings_yield, v.vola_90d as raw_vola,
+                    ins.insider_score,
                     
                     -- PIOTROSKI F-SCORE
                     (CASE WHEN COALESCE(m.net_income, 0) > 0 THEN 1 ELSE 0 END) +

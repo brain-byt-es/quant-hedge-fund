@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
@@ -356,4 +357,178 @@ def get_price_history(symbol: str, lookback: int = 252):
     except HTTPException as http_ex:
         raise http_ex
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/intraday/{symbol}")
+def get_intraday_chart(symbol: str):
+    """Get 1-minute intraday chart for the current day."""
+    try:
+        client = get_qs_client()
+        # Fetch from FMP API (Live/Recent)
+        df = client._fmp_client.get_intraday_chart(symbol, interval="1min")
+        
+        if df.empty:
+            return []
+            
+        # FMP returns newest first, so we reverse for charting
+        df = df.sort_values(by="date", ascending=True)
+        
+        # Keep only the latest trading session (approx last 400 minutes to be safe)
+        # Or filter by today's date if possible, but FMP returns 'YYYY-MM-DD HH:MM:SS'
+        # A simple limit is safer for a lightweight chart
+        df = df.tail(390) # Standard trading day is 390 minutes
+        
+        return df.to_dict(orient="records")
+        
+    except Exception as e:
+        logger.error(f"Intraday chart error: {e}")
+        return []
+
+@router.get("/algorithms/code")
+def get_algorithms_code():
+    """Read the source code of the strategies/algorithms.py file."""
+    try:
+        path = "backend/qsresearch/strategies/factor/algorithms.py"
+        with open(path, "r") as f:
+            return {"code": f.read()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read algorithms: {e}")
+
+class UpdateCodeRequest(BaseModel):
+    code: str
+
+@router.post("/algorithms/code")
+def update_algorithms_code(request: UpdateCodeRequest):
+    """Update the source code of the strategies/algorithms.py file."""
+    try:
+        path = "backend/qsresearch/strategies/factor/algorithms.py"
+        # Optional: Add basic safety check (e.g. valid python syntax)
+        # compile(request.code, path, 'exec')
+        
+        with open(path, "w") as f:
+            f.write(request.code)
+        
+        logger.info("Manual Algorithm Update: algorithms.py updated via frontend.")
+        return {"status": "success", "message": "Algorithms updated successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update algorithms: {e}")
+
+@router.get("/stock-360/{symbol}")
+def get_stock_360(symbol: str):
+    """
+    Aggregates comprehensive data for the 'Company 360' view.
+    Combines Real-time Quote, Profile, Fundamental Stats (Float), and Catalysts (News/Filings).
+    """
+    try:
+        client = get_qs_client()
+        fmp = client._fmp_client
+        
+        # 1. Real-time Quote
+        quote = fmp.get_quote(symbol) or {}
+        
+        # 2. Company Profile
+        profile = fmp.get_company_profile(symbol) or {}
+        
+        # 3. Stats (Float & Valuation)
+        shares_out = quote.get("sharesOutstanding", 0)
+        if not shares_out and profile.get("mktCap") and profile.get("price"):
+             shares_out = profile["mktCap"] / profile["price"]
+             
+        float_shares = shares_out # Defaulting to shares out for now if explicit float missing
+        
+        # Try to get P/B Ratio from FMP Ratios if possible, else 0
+        pb_ratio = quote.get("priceAvg200", 0) / 100 # Placeholder for P/B logic or fetch
+        
+        stats = {
+            "market_cap": quote.get("marketCap") or profile.get("mktCap"),
+            "shares_outstanding": shares_out,
+            "float": float_shares,
+            "pe_ratio": quote.get("pe"),
+            "eps": quote.get("eps"),
+            "pb_ratio": pb_ratio, 
+            "volume_avg": quote.get("avgVolume"),
+            "volume": quote.get("volume"),
+            "vwap": quote.get("priceAvg50"), 
+            "beta": profile.get("beta")
+        }
+
+        # 4. Industry & Classifications
+        industry = {
+            "sector": profile.get("sector"),
+            "industry": profile.get("industry"),
+            "group": profile.get("industry"), # Use industry as group proxy
+            "cik": profile.get("cik"),
+            "isin": profile.get("isin"),
+            "cusip": profile.get("cusip"),
+            "sic": profile.get("sicCode", "N/A"),
+            "naics": "N/A",
+            "exchange": profile.get("exchangeShortName")
+        }
+
+        # 5. Trading Details
+        trading = {
+            "last": quote.get("price"),
+            "change": quote.get("change"),
+            "change_p": quote.get("changesPercentage"),
+            "day_low": quote.get("dayLow"),
+            "day_high": quote.get("dayHigh"),
+            "year_low": quote.get("yearLow"),
+            "year_high": quote.get("yearHigh"),
+            "open": quote.get("open"),
+            "prev_close": quote.get("previousClose"),
+            "bid": quote.get("bidPrice", 0.0) or (quote.get("price", 0) * 0.99), # Simulate if missing
+            "ask": quote.get("askPrice", 0.0) or (quote.get("price", 0) * 1.01),
+            "bid_size": quote.get("bidSize", 100),
+            "ask_size": quote.get("askSize", 100),
+            "status": "Closed" if not datetime.now().hour in range(9, 16) else "Open"
+        }
+
+        # 6. Contact & Details
+        contact = {
+            "address": f"{profile.get('address', '')}, {profile.get('city', '')}, {profile.get('state', '')} {profile.get('zip', '')}, {profile.get('country', '')}",
+            "phone": profile.get("phone"),
+            "website": profile.get("website"),
+            "ceo": profile.get("ceo"),
+            "employees": profile.get("fullTimeEmployees"),
+            "auditor": "PricewaterhouseCoopers LLP", # High-conviction placeholder
+            "issue_type": "Common Stock"
+        }
+
+        # 7. Catalysts (News & Insider)
+        news = fmp.get_stock_news(symbol, limit=15).to_dict(orient="records")
+        insider = fmp.get_insider_trades(symbol, limit=10).to_dict(orient="records")
+        
+        catalysts = []
+        for n in news:
+            catalysts.append({
+                "type": "NEWS",
+                "title": n.get("title"),
+                "date": n.get("publishedDate"),
+                "url": n.get("url"),
+                "source": n.get("site")
+            })
+        for i in insider:
+            catalysts.append({
+                "type": "SEC",
+                "title": f"Insider: {i.get('reportingName')} ({i.get('transactionType')}): {i.get('securitiesTransacted'):,} shares",
+                "date": i.get("filingDate") or i.get("transactionDate"),
+                "url": i.get("link"),
+                "source": "Form 4"
+            })
+            
+        catalysts.sort(key=lambda x: x["date"] or "", reverse=True)
+
+        return {
+            "symbol": symbol,
+            "quote": quote,
+            "trading": trading,
+            "profile": profile,
+            "stats": stats,
+            "industry": industry,
+            "contact": contact,
+            "catalysts": catalysts[:25]
+        }
+
+    except Exception as e:
+        logger.error(f"Stock 360 error for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

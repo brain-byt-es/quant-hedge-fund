@@ -2,18 +2,20 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
-import { ExposureChart } from "@/components/dashboard/exposure-chart"
-import { PortfolioChart } from "@/components/dashboard/portfolio-chart"
 import { api } from "@/lib/api"
 import { 
-  Clock,
+  Rocket,
+  ArrowRight,
+  FlaskConical,
+  ShieldCheck,
+  Zap,
+  Activity,
+  Search,
 } from "lucide-react"
-import { useWebSocket } from "@/hooks/use-websocket"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardDescription,
   CardFooter,
   CardHeader,
@@ -21,12 +23,13 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { 
-    IconTrendingUp, 
     IconActivity, 
     IconShield, 
-    IconBolt,
     IconChartBar
 } from "@tabler/icons-react"
+import { useStock360 } from "@/components/providers/stock-360-provider"
+import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 interface DashboardPosition {
   symbol: string
@@ -43,8 +46,15 @@ interface LiveStatusData {
   daily_pnl_usd?: number
   trades_count?: number
   sharpe_ratio?: number
-  portfolio_var_95_usd?: number
-  portfolio_var_95_percent?: number
+}
+
+interface ScannerSignal {
+    symbol: string
+    change_percent: number
+    catalyst: string
+    rvol: number
+    sector?: string
+    [key: string]: unknown
 }
 
 export default function DashboardPage() {
@@ -57,32 +67,31 @@ export default function DashboardPage() {
     trades_count: 0,
     sharpe_ratio: 0
   })
-  const [, setDataStatus] = useState("connected")
-  const { status: wsStatus } = useWebSocket("/live/ws/ticks")
+  const [activeSignals, setActiveSignals] = useState<ScannerSignal[]>([])
+  const { openStock360 } = useStock360()
 
   const fetchData = useCallback(async () => {
     try {
-      const dStatus = await api.getIngestionStatus()
-      setDataStatus(dStatus.status || "error")
-
       const lStatus = await api.getLiveStatus()
       setLiveStatus(lStatus)
       
       const pos = await api.getPortfolio()
       setPositions(pos as DashboardPosition[])
+
+      const signals = await api.getTacticalScanner()
+      setActiveSignals(signals || [])
     } catch {
       console.debug("Dashboard: Backend busy, retrying...")
-      setDataStatus("busy")
     }
   }, [])
 
   useEffect(() => {
-    const init = async () => {
-        await fetchData()
+    const timer = setTimeout(() => fetchData(), 0)
+    const interval = setInterval(fetchData, 10000)
+    return () => {
+        clearTimeout(timer)
+        clearInterval(interval)
     }
-    init()
-    const interval = setInterval(fetchData, 5000)
-    return () => clearInterval(interval)
   }, [fetchData])
 
   const handleHalt = async () => {
@@ -90,164 +99,153 @@ export default function DashboardPage() {
       fetchData()
   }
 
-  const handleResume = async () => {
-      await api.resumeSystem()
-      fetchData()
-  }
+  const avgFScore = 7.4 // Placeholder: In a real app, calculate from portfolio
+  const marketHeat = activeSignals.length > 0 
+    ? (activeSignals.reduce((acc, s) => acc + s.rvol, 0) / activeSignals.length).toFixed(1)
+    : "1.0"
 
-  const isHalted = liveStatus.engine_halted
+  const topSector = activeSignals.length > 0 
+    ? (() => {
+        const counts = activeSignals.reduce((acc, s) => {
+            const sec = s.sector || "Mixed";
+            acc[sec] = (acc[sec] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+      })()
+    : "Quiet"
 
-  // Initial Chart Data (Day 0)
-  const initialChartData = Array.from({ length: 30 }, (_, i) => ({
-      time: `Day ${i}`,
-      value: 100000,
-      benchmark: 100000
-  }));
+  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6
 
   return (
-    <div className="flex flex-col gap-6 py-4 md:gap-8 md:py-6">
+    <div className="flex flex-col gap-8 py-6">
       
-      {/* 1. TOP METRICS (SaaS Style) */}
-      <div className="grid grid-cols-1 gap-4 px-0 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="@container/card bg-gradient-to-t from-primary/5 to-card border-primary/10 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Total Equity</CardDescription>
-            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
-              ${(liveStatus.net_liquidation || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary font-bold">
-                <IconTrendingUp className="size-3 mr-1" /> Live
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
-             <Clock className="size-3" /> Last Calc: Just Now
-          </CardFooter>
-        </Card>
-
-        <Card className="@container/card border-border/50 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Daily P&L</CardDescription>
-            <CardTitle className={`text-2xl font-black tabular-nums font-mono tracking-tighter ${(liveStatus.daily_pnl_usd || 0) >= 0 ? "text-primary" : "text-destructive"}`}>
-              {(liveStatus.daily_pnl_usd || 0) >= 0 ? "+" : ""}${(liveStatus.daily_pnl_usd || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
-            </CardTitle>
-            <CardAction>
-              <IconBolt className="size-4 text-primary animate-pulse" />
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
-             <IconActivity className="size-3" /> Realtime Feed Active
-          </CardFooter>
-        </Card>
-
-        <Card className="@container/card border-border/50 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Sharpe Ratio</CardDescription>
-            <CardTitle className="text-2xl font-black tabular-nums font-mono tracking-tighter">
-              {liveStatus.trades_count && liveStatus.trades_count > 0 ? (liveStatus.sharpe_ratio || 0).toFixed(2) : "N/A"}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className="border-chart-3/20 bg-chart-3/5 text-chart-3 font-bold">
-                {liveStatus.trades_count && liveStatus.trades_count > 0 ? "Statistical" : "No Data"}
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="pt-0 flex flex-row items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
-             <IconShield className="size-3" /> {liveStatus.trades_count && liveStatus.trades_count > 0 ? "Risk Adjusted OK" : "Awaiting First Trade"}
-          </CardFooter>
-        </Card>
-
-        <Card className="@container/card border-border/50 shadow-sm overflow-hidden relative">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase tracking-widest font-bold opacity-70">Engine Status</CardDescription>
-            <div className="flex items-center gap-3">
-                <CardTitle className="text-xl font-black uppercase italic tracking-tighter">
-                  {isHalted ? "Halted" : "Active"}
-                </CardTitle>
-                <div className={`h-2 w-2 rounded-full ${isHalted ? "bg-destructive shadow-[0_0_8px_var(--destructive)]" : "bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]"}`} />
+      {/* 1. UNIFIED MISSION CONTROL HEADER */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* --- LEFT: QUANT SCIENCE (LONG TERM) --- */}
+        <Card className="border-emerald-500/20 bg-emerald-500/5 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <FlaskConical className="size-24 text-emerald-500" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-             {isHalted ? (
-                <Button size="sm" variant="outline" className="h-7 text-[10px] w-full font-black border-primary text-primary hover:bg-primary/10" onClick={handleResume}>
-                    RESUME TRADING
-                </Button>
-             ) : (
-                <Button size="sm" variant="destructive" className="h-7 text-[10px] w-full font-black" onClick={handleHalt}>
-                    EMERGENCY HALT
-                </Button>
-             )}
-          </CardContent>
+            <CardHeader className="pb-2">
+                <div className="flex justify-between items-center">
+                    <CardDescription className="text-[10px] uppercase tracking-[0.2em] font-black text-emerald-500">Quant Science Mode</CardDescription>
+                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 text-[10px]">STRATEGIC</Badge>
+                </div>
+                <CardTitle className="text-3xl font-black tracking-tighter">Mission Control</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Portfolio Health</span>
+                    <div className="text-xl font-mono font-bold text-emerald-500 flex items-center gap-2">
+                        <ShieldCheck className="size-4" /> {avgFScore} <span className="text-[10px] text-muted-foreground">AVG F-SCORE</span>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Equity State</span>
+                    <div className="text-xl font-mono font-bold text-foreground">
+                        ${(liveStatus.net_liquidation || 100000).toLocaleString()}
+                    </div>
+                </div>
+            </CardContent>
+            <CardFooter className="bg-emerald-500/10 border-t border-emerald-500/10 py-3">
+                <Link href="/dashboard/research" className="w-full">
+                    <Button variant="ghost" size="sm" className="w-full justify-between text-[10px] font-black uppercase tracking-widest text-emerald-500 hover:bg-emerald-500/20 px-0">
+                        Enter Factor Lab <ArrowRight className="size-3" />
+                    </Button>
+                </Link>
+            </CardFooter>
         </Card>
-      </div>
 
-      {/* 2. MAIN CHARTS AREA */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* --- RIGHT: TACTICAL OPS (DAYTRADING) --- */}
+        <Card className="border-orange-500/20 bg-orange-500/5 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <Rocket className="size-24 text-orange-500" />
+            </div>
+            <CardHeader className="pb-2">
+                <div className="flex justify-between items-center">
+                    <CardDescription className="text-[10px] uppercase tracking-[0.2em] font-black text-orange-500">Tactical Ops Mode</CardDescription>
+                    <Badge variant="outline" className="border-orange-500/30 text-orange-500 text-[10px]">ACTIVE HUNT</Badge>
+                </div>
+                <CardTitle className="text-3xl font-black tracking-tighter">Market Heat</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Active Rockets</span>
+                    <div className="text-xl font-mono font-bold text-orange-500 flex items-center gap-2">
+                        <Zap className="size-4" /> {activeSignals.length} <span className="text-[10px] text-muted-foreground">SIGNALS</span>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Heat Index</span>
+                    <div className="text-xl font-mono font-bold text-foreground flex items-center gap-2">
+                        <Activity className="size-4 text-orange-500" /> {marketHeat}x <span className="text-[10px] text-muted-foreground uppercase">{topSector}</span>
+                    </div>
+                </div>
+            </CardContent>
+            <CardFooter className="bg-orange-500/10 border-t border-orange-500/10 py-3">
+                <Link href="/dashboard/tactical" className="w-full">
+                    <Button variant="ghost" size="sm" className="w-full justify-between text-[10px] font-black uppercase tracking-widest text-orange-500 hover:bg-orange-500/20 px-0">
+                        Enter Rocket Scanner <ArrowRight className="size-3" />
+                    </Button>
+                </Link>
+            </CardFooter>
+        </Card>
+
+      </section>
+
+      {/* 2. LIVE TELEMETRY & SYSTEM STATUS */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Performance Chart (8 Cols) */}
+        {/* Active Positions & Orders (8 Cols) */}
         <div className="lg:col-span-8">
-            <PortfolioChart data={initialChartData} />
-        </div>
-
-        {/* Exposure Distribution (4 Cols) */}
-        <div className="lg:col-span-4">
-            <ExposureChart positions={positions} />
-        </div>
-
-      </div>
-
-      {/* 3. HOLDINGS & SYSTEM STATUS */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Top Holdings Table (8 Cols) */}
-        <div className="lg:col-span-8 h-full">
             <TopHoldings positions={positions} />
         </div>
 
-        {/* Real-time Telemetry (4 Cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-            <Card className="flex-1 border-border/50 bg-card/20 backdrop-blur-sm">
+        {/* Global Control & Metrics (4 Cols) */}
+        <div className="lg:col-span-4 space-y-6">
+            <Card className="border-border/50 bg-card/20 backdrop-blur-sm">
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <CardTitle className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
                         <IconChartBar className="size-3.5 text-primary" /> System Telemetry
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 p-4 pt-0">
+                <CardContent className="space-y-4 p-4 pt-0">
                     <div className="flex justify-between items-center text-xs font-mono">
-                        <span className="text-muted-foreground uppercase">IBKR Link</span>
-                        <Badge variant={liveStatus.ib_connected ? "default" : "destructive"} className="h-4 text-[9px] uppercase font-black">
-                            {liveStatus.ib_connected ? "Stable" : "Lost"}
+                        <span className="text-muted-foreground uppercase tracking-tighter">Execution Node</span>
+                        <Badge variant={liveStatus.ib_connected ? "default" : "destructive"} className="h-4 text-[9px] uppercase font-black px-1.5">
+                            {liveStatus.ib_connected ? "STABLE" : "OFFLINE"}
                         </Badge>
                     </div>
                     <div className="flex justify-between items-center text-xs font-mono">
-                        <span className="text-muted-foreground uppercase">DuckDB OLAP</span>
-                        <Badge variant="outline" className="h-4 text-[9px] uppercase font-black border-primary/30 text-primary">
-                            Connected
-                        </Badge>
+                        <span className="text-muted-foreground uppercase tracking-tighter">Daily Alpha</span>
+                        <span className={cn("font-bold text-sm", (liveStatus.daily_pnl_usd || 0) >= 0 ? "text-primary" : "text-destructive")}>
+                            {(liveStatus.daily_pnl_usd || 0) >= 0 ? "+" : ""}${(liveStatus.daily_pnl_usd || 0).toLocaleString()}
+                        </span>
                     </div>
-                    <div className="flex justify-between items-center text-xs font-mono">
-                        <span className="text-muted-foreground uppercase">WebSocket</span>
-                        <div className="flex items-center gap-1.5">
-                            <div className="h-1 w-1 rounded-full bg-primary animate-ping" />
-                            <span className="text-[10px] text-foreground font-black uppercase tracking-tighter">{wsStatus}</span>
-                        </div>
-                    </div>
+                    <Button variant={liveStatus.engine_halted ? "default" : "destructive"} size="sm" className="w-full h-8 text-[10px] font-black uppercase tracking-widest mt-2" onClick={handleHalt}>
+                        {liveStatus.engine_halted ? "Resume Core Engine" : "Global Emergency Halt"}
+                    </Button>
                 </CardContent>
             </Card>
 
-            <Card className="border-border/50 bg-primary text-primary-foreground shadow-2xl">
-                <CardHeader className="p-4">
-                    <CardTitle className="text-xs uppercase tracking-[0.2em] font-black italic">Alpha Intelligence</CardTitle>
-                    <CardDescription className="text-primary-foreground/70 text-[10px] leading-relaxed">
-                        Supervisor Agent is scanning the tech sector for momentum clusters. 
-                        New hypothesis available in AI Lab.
+            <Card className="border-primary/20 bg-primary/5 shadow-2xl relative overflow-hidden group hover:border-primary/40 transition-all cursor-pointer">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <IconShield className="size-20" />
+                </div>
+                <CardHeader className="p-5" onClick={() => window.dispatchEvent(new CustomEvent("toggle-command-menu"))}>
+                    <CardTitle className="text-xs uppercase tracking-[0.2em] font-black italic text-primary flex items-center gap-2">
+                        <Search className="size-3" /> Quick Intelligence
+                    </CardTitle>
+                    <CardDescription className="text-foreground/70 text-[11px] leading-relaxed mt-2">
+                        Press <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono mx-1">⌘K</Badge> to search any ticker and open the <strong>360&deg; Intelligence Card</strong> instantly.
                     </CardDescription>
                 </CardHeader>
             </Card>
         </div>
 
-      </div>
+      </section>
 
     </div>
   )

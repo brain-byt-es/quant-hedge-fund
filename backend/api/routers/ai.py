@@ -45,20 +45,52 @@ class AgenticQueryRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
 
+def get_best_runs(limit: int = 5):
+    """
+    Retrieve the top performing backtest runs from MLflow.
+    """
+    client = get_mlflow_client()
+    try:
+        experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
+        if not experiment:
+            return []
+            
+        runs = client.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            max_results=limit,
+            order_by=["metrics.sharpe DESC"] # Sort by Sharpe Ratio
+        )
+        return [_format_run(run) for run in runs]
+    except Exception as e:
+        logger.error(f"Failed to query MLflow: {e}")
+        return []
+
 # --- Endpoints ---
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
     """
     General conversational endpoint for the Supervisor Agent.
+    Integrated with MLflow Experiment Tracking context.
     """
     analyst = get_market_analyst()
     if not analyst:
         raise HTTPException(status_code=503, detail="AI Service unavailable")
         
+    # Inject Best Runs context
+    best_runs = get_best_runs(3)
+    runs_context = ""
+    if best_runs:
+        runs_context = "\nRecent Top Backtests:\n" + "\n".join([
+            f"- {r['strategy_name']}: Sharpe {r['sharpe_ratio']:.2f}, Return {r['annual_return']:.1%}"
+            for r in best_runs
+        ])
+
     prompt = f"""
     You are the 'Supervisor Agent' of a high-frequency quantitative hedge fund platform.
     Your user is an institutional portfolio manager.
+    
+    Current System Intelligence:{runs_context}
     
     Answer the following question or request concisely and professionally.
     If the user asks about strategy optimization (e.g. lowering drawdown), suggest specific techniques (volatility targeting, stop-losses, beta hedging).
@@ -223,6 +255,15 @@ async def agentic_query(request: AgenticQueryRequest):
                 "type": "risk",
                 "data": risk_metrics,
                 "summary": f"{var_val*100:.2f}%"
+            }
+            
+        elif request.query_type == "backtest_stats":
+            best_runs = get_best_runs(5)
+            summary = ", ".join([f"{r['strategy_name']} ({r['sharpe_ratio']:.2f})" for r in best_runs])
+            return {
+                "type": "backtest_stats",
+                "data": best_runs,
+                "summary": f"Top strategies by Sharpe: {summary}"
             }
             
         return {"error": "Unknown query type"}

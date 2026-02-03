@@ -106,6 +106,39 @@ export const api = {
     return handleResponse(res);
   },
 
+  getIntradayChart: async (symbol: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/intraday/${symbol}`);
+    return handleResponse(res);
+  },
+
+  getAlgorithmsCode: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/algorithms/code`);
+    return handleResponse(res);
+  },
+
+  updateAlgorithmsCode: async (code: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/algorithms/code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+    });
+    return handleResponse(res);
+  },
+
+  getStock360: async (symbol: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/stock-360/${symbol}`);
+    return handleResponse(res);
+  },
+
+  getTacticalScanner: async (min_price = 2.0, max_price = 20.0, min_gain = 10.0, date?: string) => {
+    let url = `${API_BASE_URL}/tactical/momentum-scanner?min_price=${min_price}&max_price=${max_price}&min_gain=${min_gain}`;
+    if (date) {
+        url += `&date=${date}`;
+    }
+    const res = await fetch(url);
+    return handleResponse(res);
+  },
+
   // Research Layer
   runBacktest: async (params: BacktestParams) => {
     const res = await fetch(`${API_BASE_URL}/backtest/run`, {

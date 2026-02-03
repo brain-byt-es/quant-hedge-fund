@@ -22,6 +22,8 @@ export function NavMain({
     title: string
     url: string
     icon?: Icon
+    id?: string
+    onClick?: () => void
   }[]
 }) {
   const pathname = usePathname()
@@ -36,12 +38,18 @@ export function NavMain({
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
+            <SidebarMenuItem key={item.title} id={item.id}>
               <SidebarMenuButton 
                 asChild 
                 tooltip={item.title}
                 isActive={pathname === item.url || pathname.startsWith(item.url + "/")}
                 className="rounded-lg transition-all duration-200"
+                onClick={(e) => {
+                    if (item.onClick) {
+                        e.preventDefault();
+                        item.onClick();
+                    }
+                }}
               >
                 <Link href={item.url}>
                   {item.icon && <item.icon className="!size-4" />}

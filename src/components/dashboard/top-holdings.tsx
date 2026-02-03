@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useStock360 } from "@/components/providers/stock-360-provider"
 
 interface Position {
   symbol: string;
@@ -22,6 +23,7 @@ interface TopHoldingsProps {
 }
 
 export function TopHoldings({ positions = [] }: TopHoldingsProps) {
+  const { openStock360 } = useStock360();
   // Sort by market value descending
   const sortedPositions = [...positions].sort((a, b) => Math.abs(b.market_value) - Math.abs(a.market_value)).slice(0, 10); // Show top 10
 
@@ -52,9 +54,12 @@ export function TopHoldings({ positions = [] }: TopHoldingsProps) {
                   const pnlSign = pos.unrealized_pnl >= 0 ? "+" : "";
                   
                   return (
-                  <TableRow key={pos.symbol}>
-                    <TableCell className="font-medium font-mono">
-                        {pos.symbol}
+                  <TableRow key={pos.symbol} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => openStock360(pos.symbol)}>
+                    <TableCell className="font-medium font-mono text-primary group">
+                        <div className="flex items-center gap-2">
+                            {pos.symbol}
+                            <div className="text-[10px] text-muted-foreground font-sans px-1.5 py-0.5 rounded bg-muted border border-border opacity-0 group-hover:opacity-100 transition-opacity">ANALYSIS</div>
+                        </div>
                         <div className="text-xs text-muted-foreground font-sans">{pos.asset_class || "STK"}</div>
                     </TableCell>
                     <TableCell>

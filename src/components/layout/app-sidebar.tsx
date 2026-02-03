@@ -10,9 +10,13 @@ import {
   IconFlask,
   IconHelp,
   IconLayoutGrid,
+  IconRocket,
   IconSearch,
   IconSettings,
   IconShieldCheck,
+  IconChartBar,
+  IconTarget,
+  type Icon,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -28,44 +32,55 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
+interface NavItem {
+  title: string
+  url: string
+  icon: Icon
+  id?: string
+  onClick?: () => void
+}
+
 const data = {
   user: {
     name: "Henrik",
     email: "manager@quant-science.fund",
     avatar: "/avatars/user.jpg",
   },
-  navOperations: [
+  navQuantScience: [
     {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: IconDashboard,
+      title: "Factor Lab",
+      url: "/dashboard/research",
+      icon: IconFlask,
+      id: "sidebar-research-lab",
     },
     {
-      title: "Live Ops",
-      url: "/dashboard/live",
-      icon: IconActivity,
+      title: "Backtest Arena",
+      url: "/dashboard/signals", // Reusing signals or we'll add a dedicated backtest link if needed
+      icon: IconTarget,
     },
     {
-      title: "Governance",
+      title: "Portfolio Auditor",
       url: "/dashboard/governance",
       icon: IconShieldCheck,
     },
   ],
-  navIntelligence: [
+  navTacticalOps: [
     {
-      title: "Research Lab",
-      url: "/dashboard/research",
-      icon: IconFlask,
+      title: "Rocket Scanner",
+      url: "/dashboard/tactical",
+      icon: IconRocket,
+      id: "sidebar-tactical-scanner",
+    },
+    {
+      title: "Live Execution",
+      url: "/dashboard/live",
+      icon: IconActivity,
+      id: "sidebar-live-ops",
     },
     {
       title: "AI Quant Team",
       url: "/dashboard/ai-quant",
       icon: IconRobot,
-    },
-    {
-      title: "Signal Terminal",
-      url: "/dashboard/signals",
-      icon: IconChartCandle,
     },
   ],
   navSecondary: [
@@ -83,6 +98,9 @@ const data = {
       title: "Global Search",
       url: "#",
       icon: IconSearch,
+      onClick: () => {
+        window.dispatchEvent(new CustomEvent("toggle-command-menu"));
+      }
     },
   ],
   navSystem: [
@@ -90,6 +108,7 @@ const data = {
       name: "Data Hub",
       url: "/dashboard/data",
       icon: IconDatabase,
+      id: "sidebar-data-hub",
     },
   ],
 }
@@ -119,10 +138,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain label="Operations" items={data.navOperations} />
-        <NavMain label="Alpha Intelligence" items={data.navIntelligence} />
-        <NavMain label="Infrastructure" items={data.navSystem.map(i => ({ title: i.name, url: i.url, icon: i.icon }))} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        {/* SECTION 1: QUANT SCIENCE */}
+        <div className="group/quant relative px-2 pt-4">
+            <NavMain label="Quant Science" items={data.navQuantScience as NavItem[]} />
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-r opacity-0 group-hover/quant:opacity-100 transition-opacity" />
+        </div>
+
+        {/* SECTION 2: TACTICAL OPS */}
+        <div className="group/tactical relative px-2 pt-4 border-t border-border/50">
+            <NavMain label="Tactical Ops" items={data.navTacticalOps as NavItem[]} />
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 rounded-r opacity-0 group-hover/tactical:opacity-100 transition-opacity" />
+        </div>
+
+        <NavMain label="Infrastructure" items={data.navSystem.map(i => ({ title: i.name, url: i.url, icon: i.icon, id: i.id })) as NavItem[]} />
+        <NavSecondary items={data.navSecondary as NavItem[]} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />
