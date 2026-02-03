@@ -1,9 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { Badge } from "@/components/ui/badge"
-import { Activity, FlaskConical, Radio } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { FlaskConical, Radio } from "lucide-react"
 
 export function HeaderContextBadge() {
   const pathname = usePathname()

@@ -1,0 +1,64 @@
+scanners:
+  # WATCH LIST SCANNERS
+  - id: top_gainers
+    name: "Top Gainers"
+    category: "Watch List"
+    filters:
+      min_day_change: 15.0
+      min_volume: 500000
+  
+  - id: top_rvol
+    name: "Top RVOL"
+    category: "Watch List"
+    filters:
+      min_rvol: 5.0
+      min_price: 2.0
+
+  - id: penny_momentum
+    name: "Penny Momentum"
+    category: "Watch List"
+    filters:
+      price: [0.5, 2.0]
+      min_volume: 1000000
+
+  - id: large_cap_momentum
+    name: "Large Cap"
+    category: "Watch List"
+    filters:
+      min_mcap: 10000000000
+      min_day_change: 3.0
+
+  # ALERT SCANNERS
+  - id: low_float_rocket
+    name: "Small-Cap Rocket"
+    category: "Alert"
+    filters:
+      price: [2.0, 20.0]
+      max_float: 10000000
+      min_rvol: 5.0
+      min_day_change: 10.0
+      require_news: true
+
+  - id: small_cap_squeeze
+    name: "Small-Cap Squeeze"
+    category: "Alert"
+    filters:
+      price: [1.0, 10.0]
+      max_float: 5000000
+      min_day_change: 5.0
+      min_rvol: 3.0
+
+  - id: halt_alerts
+    name: "Halt Alerts"
+    category: "Alert"
+    filters:
+      min_rvol: 2.0
+      proxy_halt: true
+
+  - id: reversal_scanner
+    name: "Reversals"
+    category: "Alert"
+    filters:
+      near_52w_low: true
+      min_rvol: 3.0
+      min_day_change: 2.0

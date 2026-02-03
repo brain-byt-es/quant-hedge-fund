@@ -130,8 +130,8 @@ export const api = {
     return handleResponse(res);
   },
 
-  getTacticalScanner: async (min_price = 2.0, max_price = 20.0, min_gain = 10.0, date?: string) => {
-    let url = `${API_BASE_URL}/tactical/momentum-scanner?min_price=${min_price}&max_price=${max_price}&min_gain=${min_gain}`;
+  getTacticalScanner: async (min_price = 2.0, max_price = 20.0, min_gain = 10.0, date?: string, type = "low_float_rocket") => {
+    let url = `${API_BASE_URL}/tactical/momentum-scanner?min_price=${min_price}&max_price=${max_price}&min_gain=${min_gain}&type=${type}`;
     if (date) {
         url += `&date=${date}`;
     }

@@ -11,6 +11,7 @@ import {
   Zap,
   Activity,
   Search,
+  Shield
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,8 +24,6 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { 
-    IconActivity, 
-    IconShield, 
     IconChartBar
 } from "@tabler/icons-react"
 import { useStock360 } from "@/components/providers/stock-360-provider"
@@ -114,8 +113,6 @@ export default function DashboardPage() {
         return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
       })()
     : "Quiet"
-
-  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6
 
   return (
     <div className="flex flex-col gap-8 py-6">
@@ -232,7 +229,7 @@ export default function DashboardPage() {
 
             <Card className="border-primary/20 bg-primary/5 shadow-2xl relative overflow-hidden group hover:border-primary/40 transition-all cursor-pointer">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <IconShield className="size-20" />
+                    <Shield className="size-20" />
                 </div>
                 <CardHeader className="p-5" onClick={() => window.dispatchEvent(new CustomEvent("toggle-command-menu"))}>
                     <CardTitle className="text-xs uppercase tracking-[0.2em] font-black italic text-primary flex items-center gap-2">

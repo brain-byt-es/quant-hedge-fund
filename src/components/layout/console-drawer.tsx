@@ -16,13 +16,22 @@ interface LogEntry {
 
 export function ConsoleDrawer() {
   const [isOpen, setIsOpen] = useState(false)
-  const [logs, setLogs] = useState<LogEntry[]>([
-    { timestamp: new Date().toLocaleTimeString(), level: "SYSTEM", source: "Neural Bridge", message: "Interface established. Monitoring Truth Layer." },
-    { timestamp: new Date().toLocaleTimeString(), level: "INFO", source: "Omega", message: "Execution Singleton synchronized with Alpaca." },
-  ])
+  const [mounted, setMounted] = useState(false)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+
+  useEffect(() => {
+    setTimeout(() => {
+        setMounted(true)
+        setLogs([
+          { timestamp: new Date().toLocaleTimeString(), level: "SYSTEM", source: "Neural Bridge", message: "Interface established. Monitoring Truth Layer." },
+          { timestamp: new Date().toLocaleTimeString(), level: "INFO", source: "Omega", message: "Execution Singleton synchronized with Alpaca." },
+        ])
+    }, 0)
+  }, [])
 
   // Simulate incoming logs for demo
   useEffect(() => {
+    if (!mounted) return
     const interval = setInterval(() => {
       if (Math.random() > 0.8) {
         const levels: LogEntry["level"][] = ["INFO", "WARN", "INFO"]
@@ -47,7 +56,7 @@ export function ConsoleDrawer() {
     }, 5000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [mounted])
 
   return (
     <div className={cn(

@@ -2,10 +2,8 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Globe, Users, DollarSign, Loader2, Radar as RadarIcon } from "lucide-react"
+import { Globe, Users, DollarSign, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, PolarRadiusAxis } from "recharts"
-
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface ProfileData {
@@ -97,27 +95,25 @@ export function CompanyProfile({ profile, isLoading }: { profile: ProfileData | 
                     <AccordionTrigger className="hover:no-underline py-4 text-xs font-mono uppercase tracking-[0.2em] text-primary font-bold">
                         Alpha Intelligence
                     </AccordionTrigger>
-                    <AccordionContent className="pb-5 space-y-4">
-                        {/* Radar Chart: Factor Attribution */}
-                        <div className="h-[180px] w-full bg-card/20 rounded-xl border border-border/30 p-2 relative overflow-hidden shadow-inner">
-                            <div className="absolute top-2 left-3 flex items-center gap-1.5 opacity-50">
-                                <RadarIcon className="h-3 w-3" />
-                                <span className="text-[8px] font-mono uppercase tracking-widest">Factor Profile</span>
-                            </div>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <RadarChart data={profile.factor_attribution} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                                    <PolarGrid stroke="var(--border)" />
-                                    <PolarAngleAxis dataKey="factor" tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontWeight: 'bold' }} />
-                                    <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                                    <Radar
-                                        name={profile.symbol}
-                                        dataKey="score"
-                                        stroke="var(--primary)"
-                                        fill="var(--primary)"
-                                        fillOpacity={0.3}
-                                    />
-                                </RadarChart>
-                            </ResponsiveContainer>
+                    <AccordionContent className="pb-5 space-y-6">
+                        
+                        {/* Linear Attribution Bars (Standardized Look) */}
+                        <div className="space-y-4 px-1">
+                            <span className="text-[8px] font-black text-muted-foreground uppercase tracking-[0.3em] block mb-2">Factor Attribution Matrix</span>
+                            {profile.factor_attribution?.map((f, idx) => (
+                                <div key={idx} className="space-y-1.5">
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-[10px] font-bold font-mono text-foreground/80 uppercase">{f.factor}</span>
+                                        <span className="text-[10px] font-mono text-primary font-black">{f.score.toFixed(0)}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden border border-border/10">
+                                        <div 
+                                            className="h-full bg-primary rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(var(--primary-rgb),0.3)]"
+                                            style={{ width: `${f.score}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">

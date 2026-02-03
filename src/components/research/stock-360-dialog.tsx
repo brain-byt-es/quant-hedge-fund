@@ -91,8 +91,10 @@ interface Stock360Props {
 export function Stock360Dialog({ symbol, open, onOpenChange }: Stock360Props) {
   const [data, setData] = useState<Stock360Data | null>(null)
   const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     let isMounted = true
     async function loadData() {
       if (!open || !symbol) return
@@ -164,7 +166,7 @@ export function Stock360Dialog({ symbol, open, onOpenChange }: Stock360Props) {
                 
                 <div className="text-right space-y-1">
                     <div className="text-xs font-mono font-bold text-muted-foreground">
-                        {format(new Date(), "MMMM dd, yyyy h:mm a")} ET
+                        {mounted ? format(new Date(), "MMMM dd, yyyy h:mm a") : "---"} ET
                     </div>
                     <div className="text-sm font-mono flex items-center justify-end gap-2">
                         <span className="text-muted-foreground uppercase">Volume:</span>

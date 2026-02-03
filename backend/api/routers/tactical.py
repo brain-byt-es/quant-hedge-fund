@@ -13,16 +13,12 @@ def get_tactical_scanner(
     max_price: float = 20.0,
     max_mcap: float = 300000000.0,
     min_gain: float = 10.0,
-    date: Optional[str] = Query(None, description="Target date for historical review (YYYY-MM-DD)")
+    date: Optional[str] = Query(None, description="Target date for historical review (YYYY-MM-DD)"),
+    type: str = Query("LowFloatSqueeze", description="Scanner preset type")
 ):
     """
-    Tactical Scanner Endpoint ("Small-Cap Rocket").
-    Returns stocks matching:
-    - Price $2-$20
-    - Market Cap < $300M
-    - Intraday Gain > 10%
-    - RVOL > 5x
-    - Gap Up > 4%
+    Tactical Scanner Endpoint.
+    Supported types: LowFloatSqueeze, HaltScanner, ReversalScanner
     """
     try:
         client = get_qs_client()
@@ -32,7 +28,8 @@ def get_tactical_scanner(
             max_price=max_price,
             max_mcap=max_mcap,
             min_gain_pct=min_gain,
-            target_date=date
+            target_date=date,
+            scanner_type=type
         )
         return signals
     except Exception as e:

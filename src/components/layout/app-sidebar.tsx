@@ -4,8 +4,6 @@ import * as React from "react"
 import {
   IconActivity,
   IconRobot,
-  IconChartCandle,
-  IconDashboard,
   IconDatabase,
   IconFlask,
   IconHelp,
@@ -14,7 +12,6 @@ import {
   IconSearch,
   IconSettings,
   IconShieldCheck,
-  IconChartBar,
   IconTarget,
   type Icon,
 } from "@tabler/icons-react"
@@ -55,7 +52,7 @@ const data = {
     },
     {
       title: "Backtest Arena",
-      url: "/dashboard/signals", // Reusing signals or we'll add a dedicated backtest link if needed
+      url: "/dashboard/signals",
       icon: IconTarget,
     },
     {

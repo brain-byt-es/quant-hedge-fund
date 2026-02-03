@@ -1,0 +1,1609 @@
+Getting started
+Requirements
+Lightweight Charts™ is a client-side library that is not designed to work on the server side, for example, with Node.js.
+
+The library code targets the ES2020 language specification. Therefore, the browsers you work with should support this language revision. Consider the following table to ensure the browser compatibility.
+
+To support previous revisions, you can set up a transpilation process for the lightweight-charts package in your build system using tools such as Babel. If you encounter any issues, open a GitHub issue with detailed information, and we will investigate potential solutions.
+
+Installation
+To set up the library, install the lightweight-charts npm package:
+
+npm install --save lightweight-charts
+
+The package includes TypeScript declarations, enabling seamless integration within TypeScript projects.
+
+Build variants
+The library ships with the following build variants:
+
+Dependencies included	Mode	ES module	IIFE (window.LightweightCharts)
+No	PROD	lightweight-charts.production.mjs	N/A
+No	DEV	lightweight-charts.development.mjs	N/A
+Yes (standalone)	PROD	lightweight-charts.standalone.production.mjs	lightweight-charts.standalone.production.js
+Yes (standalone)	DEV	lightweight-charts.standalone.development.mjs	lightweight-charts.standalone.development.js
+License and attribution
+The Lightweight Charts™ license requires specifying TradingView as the product creator. You should add the following attributes to a public page of your website or mobile application:
+
+Attribution notice from the NOTICE file
+The https://www.tradingview.com link
+Creating a chart
+As a first step, import the library to your file:
+
+import { createChart } from 'lightweight-charts';
+
+To create a chart, use the createChart function. You can call the function multiple times to create as many charts as needed:
+
+import { createChart } from 'lightweight-charts';
+
+// ...
+const firstChart = createChart(document.getElementById('firstContainer'));
+const secondChart = createChart(document.getElementById('secondContainer'));
+
+As a result, createChart returns an IChartApi object that allows you to interact with the created chart.
+
+Creating a series
+When the chart is created, you can display data on it.
+
+The basic primitive to display data is a series. The library supports the following series types:
+
+Area
+Bar
+Baseline
+Candlestick
+Histogram
+Line
+To create a series, use the addSeries method from IChartApi. As a parameter, specify a series type you would like to create:
+
+import { AreaSeries, BarSeries, BaselineSeries, createChart } from 'lightweight-charts';
+
+const chart = createChart(container);
+
+const areaSeries = chart.addSeries(AreaSeries);
+const barSeries = chart.addSeries(BarSeries);
+const baselineSeries = chart.addSeries(BaselineSeries);
+// ...
+
+Note that a series cannot be transferred from one type to another one, since different series types require different data and options types.
+
+Setting and updating a data
+When the series is created, you can populate it with data. Note that the API calls remain the same regardless of the series type, although the data format may vary.
+
+Setting the data to a series
+To set the data to a series, you should call the ISeriesApi.setData method:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const areaSeries = chart.addSeries(AreaSeries, {
+    lineColor: '#2962FF', topColor: '#2962FF',
+    bottomColor: 'rgba(41, 98, 255, 0.28)',
+});
+areaSeries.setData([
+    { time: '2018-12-22', value: 32.51 },
+    { time: '2018-12-23', value: 31.11 },
+    { time: '2018-12-24', value: 27.02 },
+    { time: '2018-12-25', value: 27.32 },
+    { time: '2018-12-26', value: 25.17 },
+    { time: '2018-12-27', value: 28.89 },
+    { time: '2018-12-28', value: 25.46 },
+    { time: '2018-12-29', value: 23.92 },
+    { time: '2018-12-30', value: 22.68 },
+    { time: '2018-12-31', value: 22.67 },
+]);
+
+const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+    wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+});
+candlestickSeries.setData([
+    { time: '2018-12-22', open: 75.16, high: 82.84, low: 36.16, close: 45.72 },
+    { time: '2018-12-23', open: 45.12, high: 53.90, low: 45.12, close: 48.09 },
+    { time: '2018-12-24', open: 60.71, high: 60.71, low: 53.39, close: 59.29 },
+    { time: '2018-12-25', open: 68.26, high: 68.26, low: 59.04, close: 60.50 },
+    { time: '2018-12-26', open: 67.71, high: 105.85, low: 66.67, close: 91.04 },
+    { time: '2018-12-27', open: 91.04, high: 121.40, low: 82.70, close: 111.40 },
+    { time: '2018-12-28', open: 111.51, high: 142.83, low: 103.34, close: 131.25 },
+    { time: '2018-12-29', open: 131.33, high: 151.17, low: 77.68, close: 96.43 },
+    { time: '2018-12-30', open: 106.33, high: 110.20, low: 90.39, close: 98.10 },
+    { time: '2018-12-31', open: 109.87, high: 114.69, low: 85.66, close: 111.26 },
+]);
+
+chart.timeScale().fitContent();
+
+
+
+You can also use setData to replace all data items.
+
+Updating the data in a series
+If your data is updated, for example in real-time, you may also need to refresh the chart accordingly. To do this, call the ISeriesApi.update method that allows you to update the last data item or add a new one.
+
+import { AreaSeries, CandlestickSeries, createChart } from 'lightweight-charts';
+
+const chart = createChart(container);
+
+const areaSeries = chart.addSeries(AreaSeries);
+areaSeries.setData([
+    // Other data items
+    { time: '2018-12-31', value: 22.67 },
+]);
+
+const candlestickSeries = chart.addSeries(CandlestickSeries);
+candlestickSeries.setData([
+    // Other data items
+    { time: '2018-12-31', open: 109.87, high: 114.69, low: 85.66, close: 111.26 },
+]);
+
+// ...
+
+// Update the most recent bar
+areaSeries.update({ time: '2018-12-31', value: 25 });
+candlestickSeries.update({ time: '2018-12-31', open: 109.87, high: 114.69, low: 85.66, close: 112 });
+
+// Creating the new bar
+areaSeries.update({ time: '2019-01-01', value: 20 });
+candlestickSeries.update({ time: '2019-01-01', open: 112, high: 112, low: 100, close: 101 });
+
+
+We do not recommend calling ISeriesApi.setData to update the chart, as this method replaces all series data and can significantly affect the performance.
+
+Series
+This article describes supported series types and ways to customize them.
+
+Supported types
+Area
+Series Definition: AreaSeries
+Data format: SingleValueData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and AreaStyleOptions
+This series is represented with a colored area between the time scale and line connecting all data points:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const areaSeries = chart.addSeries(AreaSeries, { lineColor: '#2962FF', topColor: '#2962FF', bottomColor: 'rgba(41, 98, 255, 0.28)' });
+
+const data = [{ value: 0, time: 1642425322 }, { value: 8, time: 1642511722 }, { value: 10, time: 1642598122 }, { value: 20, time: 1642684522 }, { value: 3, time: 1642770922 }, { value: 43, time: 1642857322 }, { value: 41, time: 1642943722 }, { value: 43, time: 1643030122 }, { value: 56, time: 1643116522 }, { value: 46, time: 1643202922 }];
+
+areaSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Bar
+Series Definition: BarSeries
+Data format: BarData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and BarStyleOptions
+This series illustrates price movements with vertical bars. The length of each bar corresponds to the range between the highest and lowest price values. Open and close values are represented with the tick marks on the left and right side of the bar, respectively:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const barSeries = chart.addSeries(BarSeries, { upColor: '#26a69a', downColor: '#ef5350' });
+
+const data = [
+  { open: 10, high: 10.63, low: 9.49, close: 9.55, time: 1642427876 },
+  { open: 9.55, high: 10.30, low: 9.42, close: 9.94, time: 1642514276 },
+  { open: 9.94, high: 10.17, low: 9.92, close: 9.78, time: 1642600676 },
+  { open: 9.78, high: 10.59, low: 9.18, close: 9.51, time: 1642687076 },
+  { open: 9.51, high: 10.46, low: 9.10, close: 10.17, time: 1642773476 },
+  { open: 10.17, high: 10.96, low: 10.16, close: 10.47, time: 1642859876 },
+  { open: 10.47, high: 11.39, low: 10.40, close: 10.81, time: 1642946276 },
+  { open: 10.81, high: 11.60, low: 10.30, close: 10.75, time: 1643032676 },
+  { open: 10.75, high: 11.60, low: 10.49, close: 10.93, time: 1643119076 },
+  { open: 10.93, high: 11.53, low: 10.76, close: 10.96, time: 1643205476 },
+  { open: 10.96, high: 11.90, low: 10.80, close: 11.50, time: 1643291876 },
+  { open: 11.50, high: 12.00, low: 11.30, close: 11.80, time: 1643378276 },
+  { open: 11.80, high: 12.20, low: 11.70, close: 12.00, time: 1643464676 },
+  { open: 12.00, high: 12.50, low: 11.90, close: 12.30, time: 1643551076 },
+  { open: 12.30, high: 12.80, low: 12.10, close: 12.60, time: 1643637476 },
+  { open: 12.60, high: 13.00, low: 12.50, close: 12.90, time: 1643723876 },
+  { open: 12.90, high: 13.50, low: 12.70, close: 13.20, time: 1643810276 },
+  { open: 13.20, high: 13.70, low: 13.00, close: 13.50, time: 1643896676 },
+  { open: 13.50, high: 14.00, low: 13.30, close: 13.80, time: 1643983076 },
+  { open: 13.80, high: 14.20, low: 13.60, close: 14.00, time: 1644069476 },
+];
+
+barSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Baseline
+Series Definition: BaselineSeries
+Data format: SingleValueData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and BaselineStyleOptions
+This series is represented with two colored areas between the the base value line and line connecting all data points:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const baselineSeries = chart.addSeries(BaselineSeries, { baseValue: { type: 'price', price: 25 }, topLineColor: 'rgba( 38, 166, 154, 1)', topFillColor1: 'rgba( 38, 166, 154, 0.28)', topFillColor2: 'rgba( 38, 166, 154, 0.05)', bottomLineColor: 'rgba( 239, 83, 80, 1)', bottomFillColor1: 'rgba( 239, 83, 80, 0.05)', bottomFillColor2: 'rgba( 239, 83, 80, 0.28)' });
+
+const data = [{ value: 1, time: 1642425322 }, { value: 8, time: 1642511722 }, { value: 10, time: 1642598122 }, { value: 20, time: 1642684522 }, { value: 3, time: 1642770922 }, { value: 43, time: 1642857322 }, { value: 41, time: 1642943722 }, { value: 43, time: 1643030122 }, { value: 56, time: 1643116522 }, { value: 46, time: 1643202922 }];
+
+baselineSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Candlestick
+Series Definition: CandlestickSeries
+Data format: CandlestickData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and CandlestickStyleOptions
+This series illustrates price movements with candlesticks. The solid body of each candlestick represents the open and close values for the time period. Vertical lines, known as wicks, above and below the candle body represent the high and low values, respectively:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const candlestickSeries = chart.addSeries(CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
+
+const data = [{ open: 10, high: 10.63, low: 9.49, close: 9.55, time: 1642427876 }, { open: 9.55, high: 10.30, low: 9.42, close: 9.94, time: 1642514276 }, { open: 9.94, high: 10.17, low: 9.92, close: 9.78, time: 1642600676 }, { open: 9.78, high: 10.59, low: 9.18, close: 9.51, time: 1642687076 }, { open: 9.51, high: 10.46, low: 9.10, close: 10.17, time: 1642773476 }, { open: 10.17, high: 10.96, low: 10.16, close: 10.47, time: 1642859876 }, { open: 10.47, high: 11.39, low: 10.40, close: 10.81, time: 1642946276 }, { open: 10.81, high: 11.60, low: 10.30, close: 10.75, time: 1643032676 }, { open: 10.75, high: 11.60, low: 10.49, close: 10.93, time: 1643119076 }, { open: 10.93, high: 11.53, low: 10.76, close: 10.96, time: 1643205476 }];
+
+candlestickSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Histogram
+Series Definition: HistogramSeries
+Data format: HistogramData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and HistogramStyleOptions
+This series illustrates the distribution of values with columns:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const histogramSeries = chart.addSeries(HistogramSeries, { color: '#26a69a' });
+
+const data = [{ value: 1, time: 1642425322 }, { value: 8, time: 1642511722 }, { value: 10, time: 1642598122 }, { value: 20, time: 1642684522 }, { value: 3, time: 1642770922, color: 'red' }, { value: 43, time: 1642857322 }, { value: 41, time: 1642943722, color: 'red' }, { value: 43, time: 1643030122 }, { value: 56, time: 1643116522 }, { value: 46, time: 1643202922, color: 'red' }];
+
+histogramSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Line
+Series Definition: LineSeries
+Data format: LineData or WhitespaceData
+Style options: a mix of SeriesOptionsCommon and LineStyleOptions
+This series is represented with a set of data points connected by straight line segments:
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const lineSeries = chart.addSeries(LineSeries, { color: '#2962FF' });
+
+const data = [{ value: 0, time: 1642425322 }, { value: 8, time: 1642511722 }, { value: 10, time: 1642598122 }, { value: 20, time: 1642684522 }, { value: 3, time: 1642770922 }, { value: 43, time: 1642857322 }, { value: 41, time: 1642943722 }, { value: 43, time: 1643030122 }, { value: 56, time: 1643116522 }, { value: 46, time: 1643202922 }];
+
+lineSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Custom series (plugins)
+The library enables you to create custom series types, also known as series plugins, to expand its functionality. With this feature, you can add new series types, indicators, and other visualizations.
+
+To define a custom series type, create a class that implements the ICustomSeriesPaneView interface. This class defines the rendering code that Lightweight Charts™ uses to draw the series on the chart. Once your custom series type is defined, it can be added to any chart instance using the addCustomSeries() method. Custom series types function like any other series.
+
+For more information, refer to the Plugins article.
+
+Customization
+Each series type offers a unique set of customization options listed on the SeriesStyleOptionsMap page.
+
+You can adjust series options in two ways:
+
+Specify the default options using the corresponding parameter while creating a series:
+
+// Change default top & bottom colors of an area series in creating time
+const series = chart.addSeries(AreaSeries, {
+    topColor: 'red',
+    bottomColor: 'green',
+});
+
+Use the ISeriesApi.applyOptions method to apply other options on the fly:
+
+// Updating candlestick series options on the fly
+candlestickSeries.applyOptions({
+    upColor: 'red',
+    downColor: 'blue',
+});
+
+Chart types
+Lightweight Charts offers different types of charts to suit various data visualization needs. This article provides an overview of the available chart types and how to create them.
+
+Standard Time-based Chart
+The standard time-based chart is the most common type, suitable for displaying time series data.
+
+Creation method: createChart
+Horizontal scale: Time-based
+Use case: General-purpose charting for financial and time series data
+import { createChart } from 'lightweight-charts';
+
+const chart = createChart(document.getElementById('container'), options);
+
+This chart type uses time values for the horizontal scale and is ideal for most financial and time series data visualizations.
+
+const chartOptions = { layout: { textColor: 'black', background: { type: 'solid', color: 'white' } } };
+const chart = createChart(document.getElementById('container'), chartOptions);
+const areaSeries = chart.addSeries(AreaSeries, { lineColor: '#2962FF', topColor: '#2962FF', bottomColor: 'rgba(41, 98, 255, 0.28)' });
+
+const data = [{ value: 0, time: 1642425322 }, { value: 8, time: 1642511722 }, { value: 10, time: 1642598122 }, { value: 20, time: 1642684522 }, { value: 3, time: 1642770922 }, { value: 43, time: 1642857322 }, { value: 41, time: 1642943722 }, { value: 43, time: 1643030122 }, { value: 56, time: 1643116522 }, { value: 46, time: 1643202922 }];
+
+areaSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+
+Yield Curve Chart
+The yield curve chart is specifically designed for displaying yield curves, common in financial analysis.
+
+Creation method: createYieldCurveChart
+Horizontal scale: Linearly spaced, defined in monthly time duration units
+Key differences:
+Whitespace is ignored for crosshair and grid lines
+Specialized for yield curve representation
+import { createYieldCurveChart } from 'lightweight-charts';
+
+const chart = createYieldCurveChart(document.getElementById('container'), options);
+
+Use this chart type when you need to visualize yield curves or similar financial data where the horizontal scale represents time durations rather than specific dates.
+
+tip
+If you want to spread out the beginning of the plot further and don't need a linear time scale, you can enforce a minimum spacing around each point by increasing the minBarSpacing option in the TimeScaleOptions. To prevent the rest of the chart from spreading too wide, adjust the baseResolution to a larger number, such as 12 (months).
+
+const chartOptions = {
+    layout: { textColor: 'black', background: { type: 'solid', color: 'white' } },
+    yieldCurve: { baseResolution: 1, minimumTimeRange: 10, startTimeRange: 3 },
+    handleScroll: false, handleScale: false,
+};
+
+const chart = createYieldCurveChart(document.getElementById('container'), chartOptions);
+const lineSeries = chart.addSeries(LineSeries, { color: '#2962FF' });
+
+const curve = [{ time: 1, value: 5.378 }, { time: 2, value: 5.372 }, { time: 3, value: 5.271 }, { time: 6, value: 5.094 }, { time: 12, value: 4.739 }, { time: 24, value: 4.237 }, { time: 36, value: 4.036 }, { time: 60, value: 3.887 }, { time: 84, value: 3.921 }, { time: 120, value: 4.007 }, { time: 240, value: 4.366 }, { time: 360, value: 4.290 }];
+
+lineSeries.setData(curve);
+
+chart.timeScale().fitContent();
+
+
+
+Options Chart (Price-based)
+The options chart is a specialized type that uses price values on the horizontal scale instead of time.
+
+Creation method: createOptionsChart
+Horizontal scale: Price-based (numeric)
+Use case: Visualizing option chains, price distributions, or any data where price is the primary x-axis metric
+import { createOptionsChart } from 'lightweight-charts';
+
+const chart = createOptionsChart(document.getElementById('container'), options);
+
+This chart type is particularly useful for financial instruments like options, where the price is a more relevant x-axis metric than time.
+
+const chartOptions = {
+    layout: { textColor: 'black', background: { type: 'solid', color: 'white' } },
+};
+
+const chart = createOptionsChart(document.getElementById('container'), chartOptions);
+const lineSeries = chart.addSeries(LineSeries, { color: '#2962FF' });
+
+const data = [];
+for (let i = 0; i < 1000; i++) {
+    data.push({
+        time: i * 0.25,
+        value: Math.sin(i / 100) + i / 500,
+    });
+}
+
+lineSeries.setData(data);
+
+chart.timeScale().fitContent();
+
+
+Custom Horizontal Scale Chart
+For advanced use cases, Lightweight Charts allows creating charts with custom horizontal scale behavior.
+
+Creation method: createChartEx
+Horizontal scale: Custom-defined
+Use case: Specialized charting needs with non-standard horizontal scales
+import { createChartEx, defaultHorzScaleBehavior } from 'lightweight-charts';
+
+const customBehavior = new (defaultHorzScaleBehavior())();
+// Customize the behavior as needed
+
+const chart = createChartEx(document.getElementById('container'), customBehavior, options);
+
+This method provides the flexibility to define custom horizontal scale behavior, allowing for unique and specialized chart types.
+
+Choosing the Right Chart Type
+Use createChart for most standard time-based charting needs.
+Choose createYieldCurveChart when working specifically with yield curves or similar financial data.
+Opt for createOptionsChart when you need to visualize data with price as the primary horizontal axis, such as option chains.
+Use createChartEx when you need a custom horizontal scale behavior that differs from the standard time-based or price-based scales.
+Each chart type provides specific functionality and is optimized for different use cases. Consider your data structure and visualization requirements when selecting the appropriate chart type for your application.
+
+Price scale
+The price scale (or price axis) is a vertical scale that maps prices to coordinates and vice versa. The conversion rules depend on the price scale mode, the chart's height, and the visible part of the data.
+
+Price scales
+
+Create price scale
+By default, a chart has two visible price scales: left and right. Additionally, you can create an unlimited number of overlay price scales, which remain hidden in the UI. Overlay price scales allow series to be plotted without affecting the existing visible scales. This is particularly useful for indicators like Volume, where values can differ significantly from price data.
+
+To create an overlay price scale, assign priceScaleId to a series. Note that the priceScaleId value should differ from price scale IDs on the left and right. The chart will create an overlay price scale with the provided ID.
+
+If a price scale with such ID already exists, a series will be attached to the existing price scale. Further, you can use the provided price scale ID to retrieve its API object using the IChartApi.priceScale method.
+
+See the Price and Volume article for an example of adding a Volume indicator using an overlay price scale.
+
+Modify price scale
+To modify the left price scale, use the leftPriceScale option. For the right price scale, use rightPriceScale. To change the default settings for an overlay price scale, use the overlayPriceScales option.
+
+You can use the IChartApi.priceScale method to retrieve the API object for any price scale. Similarly, to access the API object for the price scale that a series is attached to, use the ISeriesApi.priceScale method.
+
+Remove price scale
+The default left and right price scales cannot be removed, you can only hide them by setting the visible option to false.
+
+An overlay price scale exists as long as at least one series is attached to it. To remove an overlay price scale, remove all series attached to this price scale.
+
+Time scale
+Overview
+Time scale (or time axis) is a horizontal scale that displays the time of data points at the bottom of the chart.
+
+Time scale
+
+The horizontal scale can also represent price or other custom values. Refer to the Chart types article for more information.
+
+Time scale appearance
+Use TimeScaleOptions to adjust the time scale appearance. You can specify these options in two ways:
+
+On chart initialization. To do this, provide the desired options as a timeScale parameter when calling createChart.
+On the fly using either the ITimeScaleApi.applyOptions or IChartApi.applyOptions method. Both methods produce the same result.
+Time scale API
+Call the IChartApi.timeScale method to get an instance of the ITimeScaleApi interface. This interface provides an extensive API for controlling the time scale. For example, you can adjust the visible range, convert a time point or index to a coordinate, and subscribe to events.
+
+chart.timeScale().resetTimeScale();
+
+Visible range
+Visible range is a chart area that is currently visible on the canvas. This area can be measured with both data and logical range. Data range usually includes bar timestamps, while logical range has bar indices.
+
+You can adjust the visible range using the following methods:
+
+setVisibleRange
+getVisibleRange
+setVisibleLogicalRange
+getVisibleLogicalRange
+Data range
+The data range includes only values from the first to the last bar visible on the chart. If the visible area has empty space, this part of the scale is not included in the data range.
+
+Note that you cannot extrapolate time with the setVisibleRange method. For example, the chart does not have data prior 2018-01-01 date. If you set the visible range from 2016-01-01, it will be automatically adjusted to 2018-01-01.
+
+If you want to adjust the visible range more flexible, operate with the logical range instead.
+
+Logical range
+The logical range represents a continuous line of values. These values are logical indices on the scale that illustrated as red lines in the image below:
+
+Logical range
+
+The logical range starts from the first data point across all series, with negative indices before it and positive ones after.
+
+The indices can have fractional parts. The integer part represents the fully visible bar, while the fractional part indicates partial visibility. For example, the 5.2 index means that the fifth bar is fully visible, while the sixth bar is 20% visible. A half-index, such as 3.5, represents the middle of the bar.
+
+In the library, the logical range is represented with the LogicalRange object. This object has the from and to properties, which are logical indices on the time scale. For example, the visible logical range on the chart above is approximately from -4.73 to 5.05.
+
+The setVisibleLogicalRange method allows you to specify the visible range beyond the bounds of the available data. This can be useful for setting a chart margin or aligning series visually.
+
+Chart margin
+Margin is the space between the chart's borders and the series. It depends on the following time scale options:
+
+barSpacing. The default value is 6.
+rightOffset. The default value is 0.
+You can specify these options as described above.
+
+Note that if a series contains only a few data points, the chart may have a large margin on the left side.
+
+A series with a few points
+
+In this case, you can call the fitContent method that adjust the view and fits all data within the chart.
+
+chart.timeScale().fitContent();
+
+If calling fitContent has no effect, it might be due to how the library displays data.
+
+The library allocates specific width for each data point to maintain consistency between different chart types. For example, for line series, the plot point is placed at the center of this allocated space, while candlestick series use most of the width for the candle body. The allocated space for each data point is proportional to the chart width. As a result, series with fewer data points may have a small margin on both sides.
+
+Margin
+
+You can specify the logical range with the setVisibleLogicalRange method to display the series exactly to the edges. For example, the code sample below adjusts the range by half a bar-width on both sides.
+
+const vr = chart.timeScale().getVisibleLogicalRange();
+chart.timeScale().setVisibleLogicalRange({ from: vr.from + 0.5, to: vr.to - 0.5 });
+
+Panes
+Panes are essential elements that help segregate data visually within a single chart. Panes are useful when you have a chart that needs to show more than one kind of data. For example, you might want to see a stock's price over time in one pane and its trading volume in another. This setup helps users get a fuller picture without cluttering the chart.
+
+By default, Lightweight Charts™ has a single pane, however, you can add more panes to the chart to display different series in separate areas. For detailed examples and code snippets on how to implement panes in your charts see tutorial.
+
+Customization Options
+Lightweight Charts™ offers a few customization options to tailor the appearance and behavior of panes:
+
+Pane Separator Color: Customize the color of the pane separators to match the chart design or improve visibility.
+
+Separator Hover Color: Enhance user interaction by changing the color of separators on mouse hover.
+
+Resizable Panes: Opt to enable or disable the resizing of panes by the user, offering flexibility in how data is displayed.
+
+Managing Panes
+While the specific methods to manipulate panes are covered in the detailed example, it's important to note that Lightweight Charts™ provides an API for pane management. This includes adding new panes, moving series between panes, adjusting pane height, and removing panes. The API ensures that developers have full control over the pane lifecycle and organization within their charts.
+
+Time zones
+Overview
+Lightweight Charts™ does not natively support time zones. If necessary, you should handle time zone adjustments manually.
+
+The library processes all date and time values in UTC. To support time zones, adjust each bar's timestamp in your dataset based on the appropriate time zone offset. Therefore, a UTC timestamp should correspond to the local time in the target time zone.
+
+Consider the example. A data point has the 2021-01-01T10:00:00.000Z timestamp in UTC. You want to display it in the Europe/Moscow time zone, which has the UTC+03:00 offset according to the IANA time zone database. To do this, adjust the original UTC timestamp by adding 3 hours. Therefore, the new timestamp should be 2021-01-01T13:00:00.000Z.
+
+info
+When converting time zones, consider the following:
+
+Adding a time zone offset could change not only the time but the date as well.
+An offset may vary due to DST (Daylight Saving Time) or other regional adjustments.
+If your data is measured in business days and does not include a time component, in most cases, you should not adjust it to a time zone.
+Approaches
+Consider the approaches below to convert time values to the required time zone.
+
+Using pure JavaScript
+For more information on this approach, refer to StackOverflow.
+
+function timeToTz(originalTime, timeZone) {
+    const zonedDate = new Date(new Date(originalTime * 1000).toLocaleString('en-US', { timeZone }));
+    return zonedDate.getTime() / 1000;
+}
+
+
+If you only need to support a client (local) time zone, you can use the following function:
+
+function timeToLocal(originalTime) {
+    const d = new Date(originalTime * 1000);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()) / 1000;
+}
+
+
+Using the date-fns-tz library
+You can use the utcToZonedTime function from the date-fns-tz library as follows:
+
+import { utcToZonedTime } from 'date-fns-tz';
+
+function timeToTz(originalTime, timeZone) {
+    const zonedDate = utcToZonedTime(new Date(originalTime * 1000), timeZone);
+    return zonedDate.getTime() / 1000;
+}
+
+Using the IANA time zone database
+If you process a large dataset and approaches above do not meet your performance requirements, consider using the tzdata.
+
+This approach can significantly improve performance for the following reasons:
+
+You do not need to calculate the time zone offset for every data point individually. Instead, you can look up the correct offset just once for the first timestamp using a fast binary search.
+After finding the starting offset, you go through the rest data and check whether an offset should be changed, for example, because of DST starting/ending.
+Why are time zones not supported?
+The approaches above were not implemented in Lightweight Charts™ for the following reasons:
+
+Using pure JavaScript is slow. In our tests, processing 100,000 data points took over 20 seconds.
+Using the date-fns-tz library introduces additional dependencies and is also slow. In our tests, processing 100,000 data points took 18 seconds.
+Incorporating the IANA time zone database increases the bundle size by 29.9 kB, which is nearly the size of the entire Lightweight Charts™ library.
+Since time zone support is not required for all users, it is intentionally left out of the library to maintain high performance and a lightweight package size.
+
+Plugins
+Plugins allow you to extend the library's functionality and render custom elements, such as new series, drawing tools, indicators, and watermarks.
+
+You can create plugins of the following types:
+
+Custom series — define new types of series.
+Primitives — define custom visualizations, drawing tools, and chart annotations that can be attached to an existing series (series primitives) or chart pane (pane primitives).
+Tips
+Use the create-lwc-plugin npm package to quickly scaffold a project for your custom plugin.
+Explore the Plugin Examples Demo page that hosts interactive examples of heatmaps, alerts, watermarks, and tooltips implemented with plugins. You can find the code of these examples in the plugin-examples folder in the Lightweight Charts™ repository.
+Custom series
+Custom series allow you to define new types of series with custom data structures and rendering logic. For implementation details, refer to the Custom Series Types article.
+
+Use the addCustomSeries method to add a custom series to the chart. Then, you can manage it through the same API available for built-in series. For example, call the setData method to populate the series with data.
+
+javascript
+class MyCustomSeries {
+    /* Class implementing the ICustomSeriesPaneView interface */
+}
+
+// Create an instantiated custom series
+const customSeriesInstance = new MyCustomSeries();
+
+const chart = createChart(document.getElementById('container'));
+const myCustomSeries = chart.addCustomSeries(customSeriesInstance, {
+    // Options for MyCustomSeries
+    customOption: 10,
+});
+
+const data = [
+    { time: 1642425322, value: 123, customValue: 456 },
+    /* ... more data */
+];
+
+myCustomSeries.setData(data);
+
+Primitives
+Primitives allow you to define custom visualizations, drawing tools, and chart annotations. You can render them at different levels in the visual stack to create complex, layered compositions.
+
+Series primitives
+Series primitives are attached to a specific series and can render on the main pane, price and time scales. For implementation details, refer to the Series Primitives article.
+
+Use the attachPrimitive method to add a primitive to the chart and attach it to the series.
+
+javascript
+class MyCustomPrimitive {
+    /* Class implementing the ISeriesPrimitive interface */
+}
+
+// Create an instantiated series primitive
+const myCustomPrimitive = new MyCustomPrimitive();
+
+const chart = createChart(document.getElementById('container'));
+const lineSeries = chart.addSeries(LineSeries);
+
+const data = [
+    { time: 1642425322, value: 123 },
+    /* ... more data */
+];
+
+// Attach the primitive to the series
+lineSeries.attachPrimitive(myCustomPrimitive);
+
+Pane primitives
+Pane primitives are attached to a chart pane rather than a specific series. You can use them to create chart-wide annotations and features like watermarks. For implementation details, refer to the Pane Primitives article.
+
+caution
+Note that pane primitives cannot render on the price or time scale.
+
+Use the attachPrimitive method to add a primitive to the chart and attach it to the pane.
+
+class MyCustomPanePrimitive {
+    /* Class implementing the IPanePrimitive interface */
+}
+
+// Create an instantiated pane primitive
+const myCustomPanePrimitive = new MyCustomPanePrimitive();
+
+const chart = createChart(document.getElementById('container'));
+// Get the main pane
+const mainPane = chart.panes()[0];
+
+// Attach the primitive to the pane
+mainPane.attachPrimitive(myCustomPanePrimitive);
+
+Series Primitives
+Primitives are extensions to the series which can define views and renderers to draw on the chart using CanvasRenderingContext2D.
+
+Primitives are defined by implementing the ISeriesPrimitive interface. The interface defines the basic functionality and structure required for creating custom primitives.
+
+Views
+The primary purpose of a series primitive is to provide one, or more, views to the library which contain the state and logic required to draw on the chart panes.
+
+There are two types of views which are supported within ISeriesPrimitive which are:
+
+IPrimitivePaneView
+ISeriesPrimitiveAxisView
+The library will evoke the following getter functions (if defined) to get references to the primitive's defined views for the corresponding section of the chart:
+
+paneViews
+priceAxisPaneViews
+timeAxisPaneViews
+priceAxisViews
+timeAxisViews
+The first three views allow drawing on the corresponding panes (main chart pane, price scale pane, and horizontal time scale pane) using the CanvasRenderingContext2D and should implement the ISeriesPrimitivePaneView interface.
+
+The views returned by the priceAxisViews and timeAxisViews getter methods should implement the ISeriesPrimitiveAxisView interface and are used to define labels to be drawn on the corresponding scales.
+
+Below is a visual example showing the various sections of the chart where a Primitive can draw.
+
+
+IPrimitivePaneView
+The IPrimitivePaneView interface can be used to define a view which provides a renderer (implementing the IPrimitivePaneRenderer interface) for drawing on the corresponding area of the chart using the CanvasRenderingContext2D API. The view can define a zOrder to control where in the visual stack the drawing will occur (See PrimitivePaneViewZOrder for more information).
+
+Renderers should provide a draw method which will be given a CanvasRenderingTarget2D target on which it can draw. Additionally, a renderer can optionally provide a drawBackground method for drawing beneath other elements on the same zOrder.
+
+tip
+CanvasRenderingTarget2D is explained in more detail on the Canvas Rendering Target page.
+
+Interactive Demo of zOrder layers
+Below is an interactive demo chart illustrating where each zOrder is drawn relative to the existing chart elements such as the grid, series, and crosshair.
+
+
+ISeriesPrimitiveAxisView
+The ISeriesPrimitiveAxisView interface can be used to define a label on the price or time axis.
+
+This interface provides several methods to define the appearance and position of the label, such as the coordinate method, which should return the desired coordinate for the label on the axis. It also defines optional methods to set the fixed coordinate, text, text color, background color, and visibility of the label.
+
+Please see the ISeriesPrimitiveAxisView interface for more details.
+
+Lifecycle Methods
+Your primitive can use the attached and detached lifecycle methods to manage the lifecycle of the primitive, such as creating or removing external objects and event handlers.
+
+attached
+This method is called when the primitive is attached to a chart. The attached method is evoked with a single argument containing properties for the chart, series, and a callback to request an update. The chart and series properties are references to the chart API and the series API instances for convenience purposes so that they don't need to be manually provided within the primitive's constructor (if needed by the primitive).
+
+The requestUpdate callback allows the primitive to notify the chart that it should be updated and redrawn.
+
+detached
+This method is called when the primitive is detached from a chart. This can be used to remove any external objects or event handlers that were created during the attached lifecycle method.
+
+Updating Views
+Your primitive should update the views in the updateAllViews() method such that when the renderers are evoked, they can draw with the latest information. The library invokes this method when it wants to update and redraw the chart. If you would like to notify the library that it should trigger an update then you can use the requestUpdate callback provided by the attached lifecycle method.
+
+Extending the Autoscale Info
+The autoscaleInfo() method can be provided to extend the base autoScale information of the series. This can be used to ensure that the chart is automatically scaled correctly to include all the graphics drawn by the primitive.
+
+Whenever the chart needs to calculate the vertical visible range of the series within the current time range then it will evoke this method. This method can be omitted and the library will use the normal autoscale information for the series. If the method is implemented then the returned values will be merged with the base autoscale information to define the vertical visible range.
+
+warning
+Please note that this method will be evoked very often during scrolling and zooming of the chart, thus it is recommended that this method is either simple to execute, or makes use of optimisations such as caching to ensure that the chart remains responsive.
+
+Pane Primitives
+In addition to Series Primitives, the library now supports Pane Primitives. These are essentially the same as Series Primitives but are designed to draw on the pane of a chart rather than being associated with a specific series. Pane Primitives can be used for features like watermarks or other chart-wide annotations.
+
+Key Differences from Series Primitives
+Pane Primitives are attached to the chart pane rather than a specific series.
+They cannot draw on the price and time scales.
+They are ideal for chart-wide features that are not tied to a particular series.
+Adding a Pane Primitive
+Pane Primitives can be added to a chart using the attachPrimitive method on the IPaneApi interface. Here's an example:
+
+const chart = createChart(document.getElementById('container'));
+const pane = chart.panes()[0]; // Get the first (main) pane
+
+const myPanePrimitive = new MyCustomPanePrimitive();
+pane.attachPrimitive(myPanePrimitive);
+
+Implementing a Pane Primitive
+To create a Pane Primitive, you should implement the IPanePrimitive interface. This interface is similar to ISeriesPrimitive, but with some key differences:
+
+It doesn't include methods for drawing on price and time scales.
+The paneViews method is used to define what will be drawn on the chart pane.
+Here's a basic example of a Pane Primitive implementation:
+
+class MyCustomPanePrimitive {
+    paneViews() {
+        return [
+            {
+                renderer: {
+                    draw: target => {
+                        // Custom drawing logic here
+                    },
+                },
+            },
+        ];
+    }
+
+    // Other methods as needed...
+}
+
+For more details on implementing Pane Primitives, refer to the IPanePrimitive interface documentation.
+
+Custom Series Types
+Custom series allow developers to create new types of series with their own data structures, and rendering logic (implemented using CanvasRenderingContext2D methods). These custom series extend the current capabilities of our built-in series, providing a consistent API which mirrors the built-in chart types.
+
+note
+These series are expected to have a uniform width for each data point, which ensures that the chart maintains a consistent look and feel across all series types. The only restriction on the data structure is that it should extend the CustomData interface (have a valid time property for each data point).
+
+Defining a Custom Series
+A custom series should implement the ICustomSeriesPaneView interface. The interface defines the basic functionality and structure required for creating a custom series view.
+
+It includes the following methods and properties:
+
+Renderer
+ICustomSeriesPaneView property: renderer
+This method should return a renderer which implements the ICustomSeriesPaneRenderer interface and is used to draw the series data on the main chart pane.
+
+The draw method of the renderer is evoked whenever the chart needs to draw the series.
+
+The PriceToCoordinateConverter provided as the 2nd argument to the draw method is a convenience function for changing prices into vertical coordinate values. It is provided since the series' original data will most likely be defined in price values, and the renderer needs to draw with coordinates. The values returned by the converter will be defined in mediaSize (unscaled by devicePixelRatio).
+
+tip
+CanvasRenderingTarget2D provided within the draw function is explained in more detail on the Canvas Rendering Target page.
+
+Update
+ICustomSeriesPaneView property: update
+This method will be called with the latest data for the renderer to use during the next paint.
+
+The update method is evoked with two parameters: data (discussed below), and seriesOptions. seriesOptions is a reference to the currently applied options for the series
+
+The PaneRendererCustomData interface provides the data that can be used within the renderer for drawing the series data. It includes the following properties:
+
+bars: List of all the series' items and their x coordinates. See CustomBarItemData for more details
+barSpacing: Spacing between consecutive bars.
+visibleRange: The current visible range of items on the chart.
+Price Value Builder
+ICustomSeriesPaneView property: priceValueBuilder
+A function for interpreting the custom series data and returning an array of numbers representing the prices values for the item, specifically the equivalent highest, lowest, and current price values for the data item.
+
+These price values are used by the chart to determine the auto-scaling (to ensure the items are in view) and the crosshair and price line positions. The largest and smallest values in the array will be used to specify the visible range of the painted item, and the last value will be used for the crosshair and price line position.
+
+Whitespace
+ICustomSeriesPaneView property: isWhitespace
+A function used by the library to determine which data points provided by the user should be considered Whitespace. The method should return true when the data point is Whitespace. Data points which are whitespace data won't be provided to the renderer, or the priceValueBuilder.
+
+Default Options
+ICustomSeriesPaneView property: defaultOptions
+The default options to be used for the series. The user can override these values using the options argument in addCustomSeries, or via the applyOptions method on the ISeriesAPI.
+
+Destroy
+ICustomSeriesPaneView property: destroy
+This method will be evoked when the series has been removed from the chart. This method should be used to clean up any objects, references, and other items that could potentially cause memory leaks.
+
+This method should contain all the necessary code to clean up the object before it is removed from memory. This includes removing any event listeners or timers that are attached to the object, removing any references to other objects, and resetting any values or properties that were modified during the lifetime of the object.
+
+Canvas Rendering Target
+The renderer functions used within the plugins (both Custom Series, and Drawing Primitives) are provided with a CanvasRenderingTarget2D interface on which the drawing logic (using the Browser's 2D Canvas API) should be executed. CanvasRenderingTarget2D is provided by the Fancy Canvas library.
+
+info
+The typescript definitions can be viewed here:
+
+fancy-canvas on npmjs.com
+and specifically the definition for CanvasRenderingTarget2D can be viewed here:
+
+canvas-rendering-target.d.ts
+Using CanvasRenderingTarget2D
+CanvasRenderingTarget2D provides two rendering scope which you can use:
+
+useMediaCoordinateSpace
+useBitmapCoordinateSpace
+Difference between Bitmap and Media
+Bitmap sizing represents the actual physical pixels on the device's screen, while the media size represents the size of a pixel according to the operating system (and browser) which is generally an integer representing the ratio of actual physical pixels are used to render a media pixel. This integer ratio is referred to as the device pixel ratio.
+
+Using the bitmap sizing allows for more control over the drawn image to ensure that the graphics are crisp and pixel perfect, however this generally means that the code will contain a lot multiplication of coordinates by the pixel ratio. In cases where you don't need to draw using the bitmap sizing then it is easier to use media sizing as you don't need to worry about the devices pixel ratio.
+
+Bitmap Coordinate Space
+useBitmapCoordinateSpace can be used to if you would like draw using the actual devices pixels as the coordinate sizing. The provided scope (of type BitmapCoordinatesRenderingScope) contains readonly values for the following:
+
+context (CanvasRenderingContext2D). Context which can be used for rendering.
+horizontalPixelRatio (number)
+verticalPixelRatio (number)
+bitmapSize (Size). Height and width of the canvas in bitmap dimensions.
+mediaSize (Size). Height and width of the canvas in media dimensions.
+Bitmap Coordinate Space Usage
+javascript
+// target is an instance of CanvasRenderingTarget2D
+target.useBitmapCoordinateSpace(scope => {
+    // scope is an instance of BitmapCoordinatesRenderingScope
+
+    // example of drawing a filled rectangle which fills the canvas
+    scope.context.beginPath();
+    scope.context.rect(0, 0, scope.bitmapSize.width, scope.bitmapSize.height);
+    scope.context.fillStyle = 'rgba(100, 200, 50, 0.5)';
+    scope.context.fill();
+});
+
+Media Coordinate Space
+useMediaCoordinateSpace can be used to if you would like draw using the media dimensions as the coordinate sizing. The provided scope (of type MediaCoordinatesRenderingScope) contains readonly values for the following:
+
+context (CanvasRenderingContext2D). Context which can be used for rendering.
+mediaSize (Size). Height and width of the canvas in media dimensions.
+Media Coordinate Space Usage
+javascript
+// target is an instance of CanvasRenderingTarget2D
+target.useMediaCoordinateSpace(scope => {
+    // scope is an instance of BitmapCoordinatesRenderingScope
+
+    // example of drawing a filled rectangle which fills the canvas
+    scope.context.beginPath();
+    scope.context.rect(0, 0, scope.mediaSize.width, scope.mediaSize.height);
+    scope.context.fillStyle = 'rgba(100, 200, 50, 0.5)';
+    scope.context.fill();
+});
+
+General Tips
+It is recommended that rendering functions should save and restore the canvas context before and after all the rendering logic to ensure that the canvas state is the same as when the renderer function was evoked. To handle the case when an error in the code might prevent the restore function from being evoked, you should use the try - finally code block to ensure that the context is correctly restored in all cases.
+
+Note that useBitmapCoordinateSpace and useMediaCoordinateSpace will automatically save and restore the canvas context for the logic defined within them. This tip for your additional rendering functions within the use*CoordinateSpace.
+
+javascript
+function myRenderingFunction(scope) {
+    const ctx = scope.context;
+
+    // save the current state of the context to the stack
+    ctx.save();
+
+    try {
+        // example code
+        scope.context.beginPath();
+        scope.context.rect(0, 0, scope.mediaSize.width, scope.mediaSize.height);
+        scope.context.fillStyle = 'rgba(100, 200, 50, 0.5)';
+        scope.context.fill();
+    } finally {
+        // restore the saved context from the stack
+        ctx.restore();
+    }
+}
+
+target.useMediaCoordinateSpace(scope => {
+    myRenderingFunction(scope);
+    myOtherRenderingFunction(scope);
+    /* ... */
+});
+
+Best Practices for Pixel Perfect Rendering in Canvas Drawings
+To achieve crisp pixel perfect rendering for your plugins, it is recommended that the canvas drawings are created using bitmap coordinates. The difference between media and bitmap coordinate spaces is discussed on the Canvas Rendering Target page. Essentially, all drawing actions should use integer positions and dimensions when on the bitmap coordinate space.
+
+To ensure consistency between your plugins and the library's built-in logic for rendering points on the chart, use of the following calculation functions.
+
+info
+Variable names containing media refer to positions / dimensions specified using the media coordinate space (such as the x and y coordinates provided by the library to the renderers), and names containing bitmap refer to positions / dimensions on the bitmap coordinate space (actual device screen pixels).
+
+Centered Shapes
+If you need to draw a shape which is centred on a position (for example a price or x coordinate) and has a desired width then you could use the positionsLine function presented below. This can be used for drawing a horizontal line at a specific price, or a vertical line aligned with the centre of series point.
+
+interface BitmapPositionLength {
+    /** coordinate for use with a bitmap rendering scope */
+    position: number;
+    /** length for use with a bitmap rendering scope */
+    length: number;
+}
+
+function centreOffset(lineBitmapWidth: number): number {
+    return Math.floor(lineBitmapWidth * 0.5);
+}
+
+/**
+ * Calculates the bitmap position for an item with a desired length (height or width), and centred according to
+ * a position coordinate defined in media sizing.
+ * @param positionMedia - position coordinate for the bar (in media coordinates)
+ * @param pixelRatio - pixel ratio. Either horizontal for x positions, or vertical for y positions
+ * @param desiredWidthMedia - desired width (in media coordinates)
+ * @returns Position of the start point and length dimension.
+ */
+export function positionsLine(
+    positionMedia: number,
+    pixelRatio: number,
+    desiredWidthMedia: number = 1,
+    widthIsBitmap?: boolean
+): BitmapPositionLength {
+    const scaledPosition = Math.round(pixelRatio * positionMedia);
+    const lineBitmapWidth = widthIsBitmap
+        ? desiredWidthMedia
+        : Math.round(desiredWidthMedia * pixelRatio);
+    const offset = centreOffset(lineBitmapWidth);
+    const position = scaledPosition - offset;
+    return { position, length: lineBitmapWidth };
+}
+
+
+Dual Point Shapes
+If you need to draw a shape between two coordinates (for example, y coordinates for a high and low price) then you can use the positionsBox function as presented below.
+
+/**
+ * Determines the bitmap position and length for a dimension of a shape to be drawn.
+ * @param position1Media - media coordinate for the first point
+ * @param position2Media - media coordinate for the second point
+ * @param pixelRatio - pixel ratio for the corresponding axis (vertical or horizontal)
+ * @returns Position of the start point and length dimension.
+ */
+export function positionsBox(
+    position1Media: number,
+    position2Media: number,
+    pixelRatio: number
+): BitmapPositionLength {
+    const scaledPosition1 = Math.round(pixelRatio * position1Media);
+    const scaledPosition2 = Math.round(pixelRatio * position2Media);
+    return {
+        position: Math.min(scaledPosition1, scaledPosition2),
+        length: Math.abs(scaledPosition2 - scaledPosition1) + 1,
+    };
+}
+
+Default Widths
+Please refer to the following pages for functions defining the default widths of shapes drawn by the library:
+
+Crosshair and Grid Lines
+Candlesticks
+Columns (Histogram)
+Full Bar Width
+
+Candlestick Width Calculations
+tip
+It is recommend that you first read the Pixel Perfect Rendering page.
+
+The following functions can be used to get the calculated width that the library would use for a candlestick at a specific bar spacing and device pixel ratio.
+
+Below a bar spacing of 4, the library will attempt to use as large a width as possible without the possibility of overlapping, whilst above 4 then the width will start to trend towards an 80% width of the available space.
+
+warning
+It is expected that candles can overlap slightly at smaller bar spacings (more pronounced on lower resolution devices). This produces a more readable chart. If you need to ensure that bars can never overlap then rather use the widths for Columns or the full bar width calculation.
+
+function optimalCandlestickWidth(
+    barSpacing: number,
+    pixelRatio: number
+): number {
+    const barSpacingSpecialCaseFrom = 2.5;
+    const barSpacingSpecialCaseTo = 4;
+    const barSpacingSpecialCaseCoeff = 3;
+    if (barSpacing >= barSpacingSpecialCaseFrom && barSpacing <= barSpacingSpecialCaseTo) {
+        return Math.floor(barSpacingSpecialCaseCoeff * pixelRatio);
+    }
+    // coeff should be 1 on small barspacing and go to 0.8 while bar spacing grows
+    const barSpacingReducingCoeff = 0.2;
+    const coeff =
+        1 -
+        (barSpacingReducingCoeff *
+            Math.atan(
+                Math.max(barSpacingSpecialCaseTo, barSpacing) - barSpacingSpecialCaseTo
+            )) /
+            (Math.PI * 0.5);
+    const res = Math.floor(barSpacing * coeff * pixelRatio);
+    const scaledBarSpacing = Math.floor(barSpacing * pixelRatio);
+    const optimal = Math.min(res, scaledBarSpacing);
+    return Math.max(Math.floor(pixelRatio), optimal);
+}
+
+/**
+ * Calculates the candlestick width that the library would use for the current
+ * bar spacing.
+ * @param barSpacing - bar spacing in media coordinates
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns The width (in bitmap coordinates) that the chart would use to draw a candle body
+ */
+export function candlestickWidth(
+    barSpacing: number,
+    horizontalPixelRatio: number
+): number {
+    let width = optimalCandlestickWidth(barSpacing, horizontalPixelRatio);
+    if (width >= 2) {
+        const wickWidth = Math.floor(horizontalPixelRatio);
+        if (wickWidth % 2 !== width % 2) {
+            width--;
+        }
+    }
+    return width;
+}
+
+Histogram Column Width Calculations
+tip
+It is recommend that you first read the Pixel Perfect Rendering page.
+
+The following functions can be used to get the calculated width that the library would use for a histogram column at a specific bar spacing and device pixel ratio.
+
+You can use the calculateColumnPositionsInPlace function instead of the calculateColumnPositions function to perform the calculation on an existing array of items without needing to create additional arrays (which is more efficient). It is recommended that you memoize the majority of the calculations below to improve the rendering performance.
+
+const alignToMinimalWidthLimit = 4;
+const showSpacingMinimalBarWidth = 1;
+
+/**
+ * Spacing gap between columns.
+ * @param barSpacingMedia - spacing between bars (media coordinate)
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns Spacing gap between columns (in Bitmap coordinates)
+ */
+function columnSpacing(barSpacingMedia: number, horizontalPixelRatio: number) {
+    return Math.ceil(barSpacingMedia * horizontalPixelRatio) <=
+        showSpacingMinimalBarWidth
+        ? 0
+        : Math.max(1, Math.floor(horizontalPixelRatio));
+}
+
+/**
+ * Desired width for columns. This may not be the final width because
+ * it may be adjusted later to ensure all columns on screen have a
+ * consistent width and gap.
+ * @param barSpacingMedia - spacing between bars (media coordinate)
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @param spacing - Spacing gap between columns (in Bitmap coordinates). (optional, provide if you have already calculated it)
+ * @returns Desired width for column bars (in Bitmap coordinates)
+ */
+function desiredColumnWidth(
+    barSpacingMedia: number,
+    horizontalPixelRatio: number,
+    spacing?: number
+) {
+    return (
+        Math.round(barSpacingMedia * horizontalPixelRatio) -
+        (spacing ?? columnSpacing(barSpacingMedia, horizontalPixelRatio))
+    );
+}
+
+interface ColumnCommon {
+    /** Spacing gap between columns */
+    spacing: number;
+    /** Shift columns left by one pixel */
+    shiftLeft: boolean;
+    /** Half width of a column */
+    columnHalfWidthBitmap: number;
+    /** horizontal pixel ratio */
+    horizontalPixelRatio: number;
+}
+
+/**
+ * Calculated values which are common to all the columns on the screen, and
+ * are required to calculate the individual positions.
+ * @param barSpacingMedia - spacing between bars (media coordinate)
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns calculated values for subsequent column calculations
+ */
+function columnCommon(
+    barSpacingMedia: number,
+    horizontalPixelRatio: number
+): ColumnCommon {
+    const spacing = columnSpacing(barSpacingMedia, horizontalPixelRatio);
+    const columnWidthBitmap = desiredColumnWidth(
+        barSpacingMedia,
+        horizontalPixelRatio,
+        spacing
+    );
+    const shiftLeft = columnWidthBitmap % 2 === 0;
+    const columnHalfWidthBitmap = (columnWidthBitmap - (shiftLeft ? 0 : 1)) / 2;
+    return {
+        spacing,
+        shiftLeft,
+        columnHalfWidthBitmap,
+        horizontalPixelRatio,
+    };
+}
+
+interface ColumnPosition {
+    left: number;
+    right: number;
+    shiftLeft: boolean;
+}
+
+/**
+ * Calculate the position for a column. These values can be later adjusted
+ * by a second pass which corrects widths, and shifts columns.
+ * @param xMedia - column x position (center) in media coordinates
+ * @param columnData - precalculated common values (returned by `columnCommon`)
+ * @param previousPosition - result from this function for the previous bar.
+ * @returns initial column position
+ */
+function calculateColumnPosition(
+    xMedia: number,
+    columnData: ColumnCommon,
+    previousPosition: ColumnPosition | undefined
+): ColumnPosition {
+    const xBitmapUnRounded = xMedia * columnData.horizontalPixelRatio;
+    const xBitmap = Math.round(xBitmapUnRounded);
+    const xPositions: ColumnPosition = {
+        left: xBitmap - columnData.columnHalfWidthBitmap,
+        right:
+            xBitmap +
+            columnData.columnHalfWidthBitmap -
+            (columnData.shiftLeft ? 1 : 0),
+        shiftLeft: xBitmap > xBitmapUnRounded,
+    };
+    const expectedAlignmentShift = columnData.spacing + 1;
+    if (previousPosition) {
+        if (xPositions.left - previousPosition.right !== expectedAlignmentShift) {
+            // need to adjust alignment
+            if (previousPosition.shiftLeft) {
+                previousPosition.right = xPositions.left - expectedAlignmentShift;
+            } else {
+                xPositions.left = previousPosition.right + expectedAlignmentShift;
+            }
+        }
+    }
+    return xPositions;
+}
+
+function fixPositionsAndReturnSmallestWidth(
+    positions: ColumnPosition[],
+    initialMinWidth: number
+): number {
+    return positions.reduce((smallest: number, position: ColumnPosition) => {
+        if (position.right < position.left) {
+            position.right = position.left;
+        }
+        const width = position.right - position.left + 1;
+        return Math.min(smallest, width);
+    }, initialMinWidth);
+}
+
+function fixAlignmentForNarrowColumns(
+    positions: ColumnPosition[],
+    minColumnWidth: number
+) {
+    return positions.map((position: ColumnPosition) => {
+        const width = position.right - position.left + 1;
+        if (width <= minColumnWidth) return position;
+        if (position.shiftLeft) {
+            position.right -= 1;
+        } else {
+            position.left += 1;
+        }
+        return position;
+    });
+}
+
+/**
+ * Calculates the column positions and widths for the x positions.
+ * This function creates a new array. You may get faster performance using the
+ * `calculateColumnPositionsInPlace` function instead
+ * @param xMediaPositions - x positions for the bars in media coordinates
+ * @param barSpacingMedia - spacing between bars in media coordinates
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns Positions for the columns
+ */
+export function calculateColumnPositions(
+    xMediaPositions: number[],
+    barSpacingMedia: number,
+    horizontalPixelRatio: number
+): ColumnPosition[] {
+    const common = columnCommon(barSpacingMedia, horizontalPixelRatio);
+    const positions = new Array<ColumnPosition>(xMediaPositions.length);
+    let previous: ColumnPosition | undefined = undefined;
+    for (let i = 0; i < xMediaPositions.length; i++) {
+        positions[i] = calculateColumnPosition(
+            xMediaPositions[i],
+            common,
+            previous
+        );
+        previous = positions[i];
+    }
+    const initialMinWidth = Math.ceil(barSpacingMedia * horizontalPixelRatio);
+    const minColumnWidth = fixPositionsAndReturnSmallestWidth(
+        positions,
+        initialMinWidth
+    );
+    if (common.spacing > 0 && minColumnWidth < alignToMinimalWidthLimit) {
+        return fixAlignmentForNarrowColumns(positions, minColumnWidth);
+    }
+    return positions;
+}
+
+export interface ColumnPositionItem {
+    x: number;
+    column?: ColumnPosition;
+}
+
+/**
+ * Calculates the column positions and widths for bars using the existing
+ * array of items.
+ * @param items - bar items which include an `x` property, and will be mutated to contain a column property
+ * @param barSpacingMedia - bar spacing in media coordinates
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @param startIndex - start index for visible bars within the items array
+ * @param endIndex - end index for visible bars within the items array
+ */
+export function calculateColumnPositionsInPlace(
+    items: ColumnPositionItem[],
+    barSpacingMedia: number,
+    horizontalPixelRatio: number,
+    startIndex: number,
+    endIndex: number
+): void {
+    const common = columnCommon(barSpacingMedia, horizontalPixelRatio);
+    let previous: ColumnPosition | undefined = undefined;
+    for (let i = startIndex; i < Math.min(endIndex, items.length); i++) {
+        items[i].column = calculateColumnPosition(items[i].x, common, previous);
+        previous = items[i].column;
+    }
+    const minColumnWidth = (items as ColumnPositionItem[]).reduce(
+        (smallest: number, item: ColumnPositionItem, index: number) => {
+            if (!item.column || index < startIndex || index > endIndex)
+                return smallest;
+            if (item.column.right < item.column.left) {
+                item.column.right = item.column.left;
+            }
+            const width = item.column.right - item.column.left + 1;
+            return Math.min(smallest, width);
+        },
+        Math.ceil(barSpacingMedia * horizontalPixelRatio)
+    );
+    if (common.spacing > 0 && minColumnWidth < alignToMinimalWidthLimit) {
+        (items as ColumnPositionItem[]).forEach(
+            (item: ColumnPositionItem, index: number) => {
+                if (!item.column || index < startIndex || index > endIndex) return;
+                const width = item.column.right - item.column.left + 1;
+                if (width <= minColumnWidth) return item;
+                if (item.column.shiftLeft) {
+                    item.column.right -= 1;
+                } else {
+                    item.column.left += 1;
+                }
+                return item.column;
+            }
+        );
+    }
+}
+
+
+Crosshair and Grid Line Width Calculations
+tip
+It is recommend that you first read the Pixel Perfect Rendering page.
+
+The following functions can be used to get the calculated width that the library would use for a crosshair or grid line at a specific device pixel ratio.
+
+/**
+ * Default grid / crosshair line width in Bitmap sizing
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns default grid / crosshair line width in Bitmap sizing
+ */
+export function gridAndCrosshairBitmapWidth(
+    horizontalPixelRatio: number
+): number {
+    return Math.max(1, Math.floor(horizontalPixelRatio));
+}
+
+/**
+ * Default grid / crosshair line width in Media sizing
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns default grid / crosshair line width in Media sizing
+ */
+export function gridAndCrosshairMediaWidth(
+    horizontalPixelRatio: number
+): number {
+    return (
+        gridAndCrosshairBitmapWidth(horizontalPixelRatio) / horizontalPixelRatio
+    );
+}
+
+Full Bar Width Calculations
+tip
+It is recommend that you first read the Pixel Perfect Rendering page.
+
+The following functions can be used to get the calculated width that the library would use for the full width of a bar (data point) at a specific bar spacing and device pixel ratio. This can be used when you would like to use the full width available for each data point on the x axis, and don't want any gaps to be visible.
+
+interface BitmapPositionLength {
+    /** coordinate for use with a bitmap rendering scope */
+    position: number;
+    /** length for use with a bitmap rendering scope */
+    length: number;
+}
+
+/**
+ * Calculates the position and width which will completely full the space for the bar.
+ * Useful if you want to draw something that will not have any gaps between surrounding bars.
+ * @param xMedia - x coordinate of the bar defined in media sizing
+ * @param halfBarSpacingMedia - half the width of the current barSpacing (un-rounded)
+ * @param horizontalPixelRatio - horizontal pixel ratio
+ * @returns position and width which will completely full the space for the bar
+ */
+export function fullBarWidth(
+    xMedia: number,
+    halfBarSpacingMedia: number,
+    horizontalPixelRatio: number
+): BitmapPositionLength {
+    const fullWidthLeftMedia = xMedia - halfBarSpacingMedia;
+    const fullWidthRightMedia = xMedia + halfBarSpacingMedia;
+    const fullWidthLeftBitmap = Math.round(
+        fullWidthLeftMedia * horizontalPixelRatio
+    );
+    const fullWidthRightBitmap = Math.round(
+        fullWidthRightMedia * horizontalPixelRatio
+    );
+    const fullWidthBitmap = fullWidthRightBitmap - fullWidthLeftBitmap;
+    return {
+        position: fullWidthLeftBitmap,
+        length: fullWidthBitmap,
+    };
+}
+
+API Reference:
+
+lightweight-charts
+Enumerations
+MarkerSign
+ColorType
+CrosshairMode
+LastPriceAnimationMode
+LineStyle
+LineType
+MismatchDirection
+PriceLineSource
+PriceScaleMode
+TickMarkType
+TrackingModeExitMode
+Interfaces
+AreaData
+AreaStyleOptions
+AutoScaleMargins
+AutoscaleInfo
+AxisDoubleClickOptions
+AxisPressedMouseMoveOptions
+BarData
+BarStyleOptions
+BarsInfo
+BaseValuePrice
+BaselineData
+BaselineStyleOptions
+BusinessDay
+CandlestickData
+CandlestickStyleOptions
+ChartOptionsBase
+ChartOptionsImpl
+CrosshairLineOptions
+CrosshairOptions
+CustomBarItemData
+CustomConflationContext
+CustomData
+CustomSeriesWhitespaceData
+CustomStyleOptions
+DrawingUtils
+GridLineOptions
+GridOptions
+HandleScaleOptions
+HandleScrollOptions
+HistogramData
+HistogramStyleOptions
+HorzScaleOptions
+IChartApi
+IChartApiBase
+ICustomSeriesPaneRenderer
+ICustomSeriesPaneView
+IHorzScaleBehavior
+IPaneApi
+IPanePrimitiveBase
+IPanePrimitivePaneView
+IPanePrimitiveWrapper
+IPriceFormatter
+IPriceLine
+IPriceScaleApi
+IPrimitivePaneRenderer
+IPrimitivePaneView
+IRange
+ISeriesApi
+ISeriesMarkersPluginApi
+ISeriesPrimitiveAxisView
+ISeriesPrimitiveBase
+ISeriesPrimitiveWrapper
+ISeriesUpDownMarkerPluginApi
+ITimeScaleApi
+IYieldCurveChartApi
+ImageWatermarkOptions
+KineticScrollOptions
+LastValueDataResultWithData
+LastValueDataResultWithoutData
+LayoutOptions
+LayoutPanesOptions
+LineData
+LineStyleOptions
+LocalizationOptions
+LocalizationOptionsBase
+MouseEventParams
+OhlcData
+PaneAttachedParameter
+PaneRendererCustomData
+PaneSize
+Point
+PriceChartLocalizationOptions
+PriceChartOptions
+PriceFormatBuiltIn
+PriceFormatCustom
+PriceLineOptions
+PriceRange
+PriceScaleMargins
+PriceScaleOptions
+PrimitiveHoveredItem
+SeriesAttachedParameter
+SeriesDataItemTypeMap
+SeriesDefinition
+SeriesMarkerBar
+SeriesMarkerBase
+SeriesMarkerPrice
+SeriesMarkersOptions
+SeriesOptionsCommon
+SeriesOptionsMap
+SeriesPartialOptionsMap
+SeriesStyleOptionsMap
+SeriesUpDownMarker
+SingleValueData
+SolidColor
+TextWatermarkLineOptions
+TextWatermarkOptions
+TickMark
+TimeChartOptions
+TimeMark
+TimeScaleOptions
+TimeScalePoint
+TouchMouseEventData
+TrackingModeOptions
+UpDownMarkersPluginOptions
+VerticalGradientColor
+WhitespaceData
+YieldCurveChartOptions
+YieldCurveOptions
+Type Aliases
+AlphaComponent
+AreaSeriesOptions
+AreaSeriesPartialOptions
+AutoscaleInfoProvider
+Background
+BarPrice
+BarSeriesOptions
+BarSeriesPartialOptions
+BaseValueType
+BaselineSeriesOptions
+BaselineSeriesPartialOptions
+BlueComponent
+CandlestickSeriesOptions
+CandlestickSeriesPartialOptions
+ChartOptions
+ColorSpace
+Coordinate
+CreatePriceLineOptions
+CustomColorParser
+CustomSeriesOptions
+CustomSeriesPartialOptions
+CustomSeriesPricePlotValues
+DataChangedHandler
+DataChangedScope
+DataItem
+DeepPartial
+GreenComponent
+HistogramSeriesOptions
+HistogramSeriesPartialOptions
+HorzAlign
+HorzScaleItemConverterToInternalObj
+HorzScalePriceItem
+IImageWatermarkPluginApi
+IPanePrimitive
+ISeriesPrimitive
+ITextWatermarkPluginApi
+InternalHorzScaleItem
+InternalHorzScaleItemKey
+LastValueDataResult
+LineSeriesOptions
+LineSeriesPartialOptions
+LineWidth
+Logical
+LogicalRange
+LogicalRangeChangeEventHandler
+MouseEventHandler
+Mutable
+Nominal
+OverlayPriceScaleOptions
+PercentageFormatterFn
+PriceFormat
+PriceFormatterFn
+PriceToCoordinateConverter
+PrimitiveHasApplyOptions
+PrimitivePaneViewZOrder
+RedComponent
+Rgba
+SeriesMarker
+SeriesMarkerBarPosition
+SeriesMarkerPosition
+SeriesMarkerPricePosition
+SeriesMarkerShape
+SeriesMarkerZOrder
+SeriesOptions
+SeriesPartialOptions
+SeriesType
+SizeChangeEventHandler
+TickMarkFormatter
+TickMarkWeightValue
+TickmarksPercentageFormatterFn
+TickmarksPriceFormatterFn
+Time
+TimeFormatterFn
+TimePointIndex
+TimeRangeChangeEventHandler
+UTCTimestamp
+UpDownMarkersSupportedSeriesTypes
+VertAlign
+VisiblePriceScaleOptions
+YieldCurveSeriesType
+Variables
+AreaSeries
+BarSeries
+BaselineSeries
+CandlestickSeries
+HistogramSeries
+LineSeries
+customSeriesDefaultOptions
+Functions
+createChart
+createChartEx
+createImageWatermark
+createOptionsChart
+createSeriesMarkers
+createTextWatermark
+createUpDownMarkers
+createYieldCurveChart
+defaultHorzScaleBehavior
+isBusinessDay
+isUTCTimestamp
+version
