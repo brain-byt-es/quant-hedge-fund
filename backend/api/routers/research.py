@@ -280,6 +280,50 @@ def get_company_profile(symbol: str):
         logger.error(f"Error in get_company_profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/aggregate_taxonomy")
+def trigger_taxonomy_aggregation():
+    """Trigger the aggregation of sector and industry stats."""
+    try:
+        from automation.prefect_flows import task_aggregate_market_taxonomy
+        from datetime import datetime, timedelta
+        
+        # 1. Run Core SQL Aggregation (Counts & Local Mcap)
+        task_aggregate_market_taxonomy.fn()
+        
+        # 2. Seed Real-Time Performance from FMP (Optional/Best Effort)
+        try:
+            client = get_qs_client()
+            fmp = client._fmp_client
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            df_sec = fmp.get_sector_performance(yesterday)
+            df_ind = fmp.get_industry_performance(yesterday)
+            
+            con = client._db_manager.connect()
+            try:
+                if not df_sec.empty:
+                    for _, row in df_sec.iterrows():
+                        name = row.get('sector')
+                        perf = row.get('changesPercentage', 0.0)
+                        if name:
+                            con.execute(f"UPDATE sector_industry_stats SET perf_1d = {perf} WHERE group_type = 'sector' AND (name ILIKE '%{name}%' OR '{name}' ILIKE '%' || name || '%')")
+                
+                if not df_ind.empty:
+                    for _, row in df_ind.iterrows():
+                        name = row.get('industry')
+                        perf = row.get('changesPercentage', 0.0)
+                        if name:
+                            con.execute(f"UPDATE sector_industry_stats SET perf_1d = {perf} WHERE group_type = 'industry' AND (name ILIKE '%{name}%' OR '{name}' ILIKE '%' || name || '%')")
+            finally:
+                con.close()
+        except Exception as fmp_err:
+            logger.warning(f"FMP Performance seeding skipped: {fmp_err}")
+                
+        return {"status": "success", "message": "Market taxonomy aggregated successfully."}
+    except Exception as e:
+        logger.error(f"Taxonomy aggregation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/monte-carlo/{run_id}")
 def get_monte_carlo(run_id: str, simulations: int = 1000):
     """

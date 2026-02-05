@@ -8,8 +8,7 @@ import { cn } from "@/lib/utils"
 import { 
     IconBuildingBank, 
     IconRefresh,
-    IconSearch,
-    IconMapPin
+    IconSearch
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -33,7 +32,6 @@ interface HedgeFund {
 
 export default function HedgeFundsPage() {
     const router = useRouter()
-    const [funds, setFunds] = useState<HedgeFund[]>([])
     const [filteredFunds, setFilteredFunds] = useState<HedgeFund[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [search, setSearch] = useState("")
@@ -42,11 +40,10 @@ export default function HedgeFundsPage() {
         setIsLoading(true)
         try {
             const data = await api.getHedgeFunds(query)
-            setFunds(data || [])
             setFilteredFunds(data || [])
-        } catch (err) {
+        } catch (_err) {
             toast.error("Failed to fetch institutional holders")
-            console.error(err)
+            console.error(_err)
         } finally {
             setIsLoading(false)
         }

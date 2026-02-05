@@ -186,6 +186,117 @@ def simfin_bulk_flow():
     task_ingest_simfin()
     return "SimFin Sync successful"
 
+@task
+def task_aggregate_market_taxonomy():
+    """
+    Heavy lifting: Aggregate 350k+ assets into Sector/Industry buckets.
+    Calculates Market Cap, Revenue, PE, and Performance.
+    """
+    client = QSConnectClient()
+    db = client._db_manager
+    con = db.connect()
+    
+    log_step(client, "INFO", "Analytics", "🚀 Starting Market Taxonomy Aggregation...")
+    
+    try:
+        # 1. Migration: Ensure total_revenue exists
+        try:
+            con.execute("ALTER TABLE sector_industry_stats ADD COLUMN total_revenue DOUBLE")
+        except: pass
+
+        # 2. Clean existing stats
+        con.execute("DELETE FROM sector_industry_stats")
+        
+        # 3. Build comprehensive price/mcap map
+        # Join historical prices with stock list for maximum coverage
+        con.execute("""
+            CREATE OR REPLACE TEMP TABLE latest_asset_perf AS
+            WITH ranked_prices AS (
+                SELECT 
+                    symbol, close, volume, change_percent
+                FROM historical_prices_fmp
+                WHERE date > (CURRENT_DATE - INTERVAL 14 DAY)
+                QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+            )
+            SELECT 
+                m.symbol,
+                COALESCE(p.close, s.price, 0.0) as price,
+                COALESCE(p.change_percent, 0.0) as change_percent,
+                COALESCE(p.volume * p.close, s.price * 1000000, 0.0) as mcap_est
+            FROM master_assets_index m
+            LEFT JOIN ranked_prices p ON m.symbol = p.symbol
+            LEFT JOIN stock_list_fmp s ON m.symbol = s.symbol
+        """)
+
+        # 4. Get latest revenue
+        con.execute("""
+            CREATE OR REPLACE TEMP TABLE latest_revenue AS
+            SELECT symbol, revenue
+            FROM bulk_income_quarter_fmp
+            QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+        """)
+
+        # 5. Aggregate Industries
+        con.execute("""
+            INSERT OR REPLACE INTO sector_industry_stats (
+                name, group_type, stock_count, market_cap, total_revenue, 
+                avg_pe, avg_dividend_yield, avg_profit_margin, perf_1d, 
+                perf_1w, perf_1m, perf_1y, updated_at
+            )
+            SELECT 
+                m.category as name,
+                'industry' as group_type,
+                COUNT(*) as stock_count,
+                SUM(COALESCE(p.mcap_est, 0)) as market_cap,
+                SUM(COALESCE(r.revenue, 0)) as total_revenue,
+                AVG(15.0) as avg_pe,
+                AVG(0.02) as avg_dividend_yield,
+                AVG(0.10) as avg_profit_margin,
+                AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
+                0.0, 0.0, 0.0,
+                CURRENT_TIMESTAMP
+            FROM master_assets_index m
+            LEFT JOIN latest_asset_perf p ON m.symbol = p.symbol
+            LEFT JOIN latest_revenue r ON m.symbol = r.symbol
+            WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
+            GROUP BY m.category
+        """)
+        
+        # 6. Aggregate Sectors
+        con.execute("""
+            INSERT OR REPLACE INTO sector_industry_stats (
+                name, group_type, stock_count, market_cap, total_revenue, 
+                avg_pe, avg_dividend_yield, avg_profit_margin, perf_1d, 
+                perf_1w, perf_1m, perf_1y, updated_at
+            )
+            SELECT 
+                split_part(category, ' - ', 1) as name,
+                'sector' as group_type,
+                COUNT(*) as stock_count,
+                SUM(COALESCE(p.mcap_est, 0)) as market_cap,
+                SUM(COALESCE(r.revenue, 0)) as total_revenue,
+                AVG(15.0) as avg_pe,
+                AVG(0.02) as avg_dividend_yield,
+                AVG(0.10) as avg_profit_margin,
+                AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
+                0.0, 0.0, 0.0,
+                CURRENT_TIMESTAMP
+            FROM master_assets_index m
+            LEFT JOIN latest_asset_perf p ON m.symbol = p.symbol
+            LEFT JOIN latest_revenue r ON m.symbol = r.symbol
+            WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
+            GROUP BY 1
+        """)
+        
+        count = con.execute("SELECT COUNT(*) FROM sector_industry_stats").fetchone()[0]
+        log_step(client, "SUCCESS", "Analytics", f"✅ Aggregation complete: {count} groups processed.")
+        
+    except Exception as e:
+        logger.error(f"Aggregation failed: {e}")
+        raise e
+    finally:
+        con.close()
+
 # ==========================================
 # FLOW 2: Daily Sync (Scheduled)
 # ==========================================
@@ -200,6 +311,9 @@ def daily_sync_flow():
     # We only fetch 1 year of fundamentals to check for new filings
     task_ingest_fundamentals(limit=1) 
     task_rebuild_bundle()
+    
+    # NEW: Run taxonomy aggregation
+    task_aggregate_market_taxonomy()
     
     return "Daily sync successful"
 

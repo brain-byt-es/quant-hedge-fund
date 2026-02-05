@@ -1,28 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { 
     IconGridPattern, 
     IconRefresh,
-    IconLayoutGrid,
-    IconExternalLink
+    IconLayoutGrid
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-
-interface HeatmapItem {
-    id: string
-    name: string
-    value: number
-    colorValue: number
-    parent?: string
-    fullName?: string
-    performance?: string
-}
 
 export default function MarketHeatmapPage() {
     const [isLoading, setIsLoading] = useState(true)

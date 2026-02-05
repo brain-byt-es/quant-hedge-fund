@@ -1,9 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { api } from "@/lib/api"
+import { useState, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
 import { 
     IconWorld, 
@@ -14,8 +12,7 @@ import {
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { toast } from "sonner"
-import Link from "next/link"
+import Image from "next/image"
 
 interface NewsArticle {
   title: string
@@ -28,50 +25,34 @@ interface NewsArticle {
 }
 
 export default function MarketNewsPage() {
-    const [news, setNews] = useState<NewsArticle[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-
-    const fetchNews = async () => {
-        setIsLoading(true)
-        try {
-            // Fetch global market news from backend (FMP fallback)
-            const data = await api.getLatestPrices(50) // Placeholder logic or add getMarketNews to api
-            // Since I don't have a dedicated 'Market News' endpoint yet, I'll simulate or add one.
-            // Let's add getMarketNews to backend.
-            setNews([]) // For now
-        } catch (err) {
-            toast.error("Failed to fetch market news")
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
     // Add dummy news for high-fidelity UI
-    const dummyNews: NewsArticle[] = [
-        {
-            title: "Fed Signals Potential Rate Cut as Inflation Softens",
-            text: "Federal Reserve officials indicated that a series of rate cuts could be on the horizon if inflation continues its downward trajectory toward the 2% target.",
-            publishedDate: new Date().toISOString(),
-            symbol: "SPY",
-            site: "Bloomberg",
-            url: "#",
-            image: "https://images.unsplash.com/photo-1611974717482-48217760e8f1?q=80&w=2070&auto=format&fit=crop"
-        },
-        {
-            title: "Semiconductor Rally Continues Amid AI Infrastructure Surge",
-            text: "Major chipmakers saw significant gains today as enterprise demand for high-performance computing hardware shows no signs of slowing down.",
-            publishedDate: new Date(Date.now() - 7200000).toISOString(),
-            symbol: "NVDA",
-            site: "Reuters",
-            url: "#",
-            image: "https://images.unsplash.com/photo-1591444072345-f79a732df093?q=80&w=2070&auto=format&fit=crop"
-        }
-    ]
-
-    useEffect(() => {
-        setNews(dummyNews)
-        setIsLoading(false)
+    const dummyNews = useMemo<NewsArticle[]>(() => {
+        const now = new Date()
+        const twoHoursAgo = new Date(now.getTime() - 7200000)
+        
+        return [
+            {
+                title: "Fed Signals Potential Rate Cut as Inflation Softens",
+                text: "Federal Reserve officials indicated that a series of rate cuts could be on the horizon if inflation continues its downward trajectory toward the 2% target.",
+                publishedDate: now.toISOString(),
+                symbol: "SPY",
+                site: "Bloomberg",
+                url: "#",
+                image: "https://images.unsplash.com/photo-1611974717482-48217760e8f1?q=80&w=2070&auto=format&fit=crop"
+            },
+            {
+                title: "Semiconductor Rally Continues Amid AI Infrastructure Surge",
+                text: "Major chipmakers saw significant gains today as enterprise demand for high-performance computing hardware shows no signs of slowing down.",
+                publishedDate: twoHoursAgo.toISOString(),
+                symbol: "NVDA",
+                site: "Reuters",
+                url: "#",
+                image: "https://images.unsplash.com/photo-1591444072345-f79a732df093?q=80&w=2070&auto=format&fit=crop"
+            }
+        ]
     }, [])
+
+    const [news] = useState<NewsArticle[]>(dummyNews)
 
     return (
         <div className="flex flex-col space-y-6">
@@ -88,7 +69,7 @@ export default function MarketNewsPage() {
 
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="h-8 rounded-full px-4 text-[10px] font-black uppercase tracking-widest border-border/50">
-                        <IconRefresh className={cn("size-3 mr-2", isLoading && "animate-spin")} /> Update
+                        <IconRefresh className="size-3 mr-2" /> Update
                     </Button>
                 </div>
             </div>
@@ -98,7 +79,13 @@ export default function MarketNewsPage() {
                     {news.map((item, i) => (
                         <div key={i} className="flex flex-col md:flex-row gap-6 group cursor-pointer">
                             <div className="w-full md:w-64 h-40 shrink-0 rounded-2xl overflow-hidden border border-border/50 relative">
-                                <img src={item.image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                <Image 
+                                    src={item.image} 
+                                    alt={item.title} 
+                                    fill 
+                                    className="object-cover group-hover:scale-105 transition-transform duration-500" 
+                                    unoptimized
+                                />
                                 <div className="absolute top-2 left-2">
                                     <Badge className="bg-background/80 backdrop-blur-md text-[9px] font-black border-none">{item.symbol}</Badge>
                                 </div>

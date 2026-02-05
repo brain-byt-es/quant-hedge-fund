@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { useParams, useRouter, usePathname } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { api } from "@/lib/api"
 import { PaginatedTable } from "@/components/market-hub/paginated-table"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +18,8 @@ import {
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { useStock360 } from "@/components/providers/stock-360-provider"
+import { useSettings } from "@/components/providers/settings-provider"
+import { CountryMultiSelect } from "@/components/ui/country-multi-select"
 import {
   Popover,
   PopoverContent,
@@ -41,13 +43,14 @@ interface Asset {
     country: string
     price?: number
     change_percent?: number
+    market_cap?: number
 }
 
 // Generic Page Component for Market Lists
 export default function MarketListPage() {
-    const router = useRouter()
     const pathname = usePathname()
     const { openStock360 } = useStock360()
+    const { settings, updateSettings } = useSettings()
     
     // Parse URL params more robustly
     const pathParts = pathname.split('/')
@@ -58,7 +61,7 @@ export default function MarketListPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [options, setOptions] = useState<string[]>([])
-    const [selectedOption, setSelectedOption] = useState<string | null>(null)
+    const [selectedOption, setSelectedOption] = useState<string | string[] | null>(null)
     const [openFilter, setOpenFilter] = useState(false)
 
     // Map URL section to DB types
@@ -81,7 +84,7 @@ export default function MarketListPage() {
     // Load Filters
     useEffect(() => {
         const loadOptions = async () => {
-            if (filterMode === 'all' || filterMode === 'gainers') return
+            if (filterMode === 'all' || filterMode === 'gainers' || filterMode === 'countries') return
             try {
                 const col = getFilterColumn()
                 const opts = await api.getAssetFilterOptions(col, getAssetType())
@@ -98,18 +101,26 @@ export default function MarketListPage() {
         const loadData = async () => {
             setIsLoading(true)
             try {
-                const filters: Record<string, string> = {}
+                const filters: Record<string, string | string[]> = {}
+                
                 if (selectedOption) {
-                    filters[getFilterColumn()] = selectedOption
+                    const col = getFilterColumn()
+                    filters[col] = selectedOption
+                }
+                
+                // Global Settings Filter (Only if not manually filtering by country)
+                if (filterMode !== 'countries') {
+                    const markets = settings.showOnlyPreferred ? settings.preferredMarkets : undefined
+                    if (markets) {
+                        filters["countries"] = markets
+                    }
                 }
                 
                 let data: Asset[] = []
                 if (search.length > 2) {
-                    // Global search for active lookup
-                    data = await api.globalSearch(search, 500, getAssetType())
+                    const markets = settings.showOnlyPreferred ? settings.preferredMarkets : undefined
+                    data = await api.globalSearch(search, 500, getAssetType(), markets)
                 } else {
-                    // List view with higher limit to support "All" pagination
-                    // Ideally we should use server-side pagination, but client-side "All" was requested.
                     data = await api.getAssetList(getAssetType(), filters, 10000, 0)
                 }
                 
@@ -123,7 +134,7 @@ export default function MarketListPage() {
         
         const timer = setTimeout(loadData, 300)
         return () => clearTimeout(timer)
-    }, [getAssetType, getFilterColumn, selectedOption, search])
+    }, [getAssetType, getFilterColumn, selectedOption, search, settings.showOnlyPreferred, settings.preferredMarkets, filterMode])
 
     const columns = [
         {
@@ -207,8 +218,42 @@ export default function MarketListPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/* Quick Market Toggle */}
+                    <div className="flex items-center gap-2 mr-4 bg-background/50 p-1.5 rounded-full border border-border/50 shadow-inner">
+                        <Button 
+                            variant={settings.showOnlyPreferred ? "default" : "ghost"} 
+                            size="sm" 
+                            className={cn(
+                                "h-7 text-[9px] font-black uppercase tracking-widest rounded-full px-3 transition-all",
+                                settings.showOnlyPreferred ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground"
+                            )}
+                            onClick={() => updateSettings({ showOnlyPreferred: true })}
+                        >
+                            Preferred
+                        </Button>
+                        <Button 
+                            variant={!settings.showOnlyPreferred ? "default" : "ghost"} 
+                            size="sm" 
+                            className={cn(
+                                "h-7 text-[9px] font-black uppercase tracking-widest rounded-full px-3 transition-all",
+                                !settings.showOnlyPreferred ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground"
+                            )}
+                            onClick={() => updateSettings({ showOnlyPreferred: false })}
+                        >
+                            Global
+                        </Button>
+                    </div>
+
                     {/* Professional Filter */}
-                    {options.length > 0 && (
+                    {filterMode === 'countries' ? (
+                        <div className="w-[300px]">
+                            <CountryMultiSelect 
+                                defaultValue={Array.isArray(selectedOption) ? selectedOption : []}
+                                onChange={(values) => setSelectedOption(values.length > 0 ? values : null)}
+                                placeholder="Filter by Country..."
+                            />
+                        </div>
+                    ) : options.length > 0 && (
                         <Popover open={openFilter} onOpenChange={setOpenFilter}>
                             <PopoverTrigger asChild>
                                 <Button
@@ -219,7 +264,7 @@ export default function MarketListPage() {
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <IconFilter className="size-3 shrink-0 text-primary" />
-                                        <span className="truncate">{selectedOption || `Filter ${filterMode}`}</span>
+                                        <span className="truncate">{typeof selectedOption === 'string' ? selectedOption : `Filter ${filterMode}`}</span>
                                     </div>
                                     <IconChevronDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                                 </Button>
@@ -288,15 +333,6 @@ export default function MarketListPage() {
                         openStock360(item.symbol)
                     }}
                 />
-                
-                {/* Scroll Indicator / Footer */}
-                {!isLoading && assets.length === 500 && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background to-transparent p-4 flex justify-center">
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/50">
-                            Showing first 500 results • Use search for more
-                        </span>
-                    </div>
-                )}
             </div>
         </div>
     )

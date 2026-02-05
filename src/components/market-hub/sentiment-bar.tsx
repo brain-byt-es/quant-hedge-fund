@@ -1,7 +1,5 @@
 "use client"
 
-import { cn } from "@/lib/utils"
-
 interface SentimentBarProps {
   bullish: number // 0-100
   bearish: number // 0-100

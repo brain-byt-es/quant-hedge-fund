@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { PaginatedTable } from "@/components/market-hub/paginated-table"
-import { api } from "@/lib/api"
-import { Badge } from "@/components/ui/badge"
 import { 
     IconBox, 
     IconRefresh,
@@ -15,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
 
 interface ETFItem {
   symbol: string
@@ -44,7 +41,7 @@ export default function ETFScreenerPage() {
                 { symbol: "VOO", name: "Vanguard S&P 500 ETF", assetClass: "Equity: U.S. - Large Cap", aum: 410000000000, expenseRatio: 0.03, change_percent: 0.43 },
             ]
             setEtfs(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch ETF list")
         } finally {
             setIsLoading(false)

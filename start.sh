@@ -22,6 +22,12 @@ pre_cleanup() {
         kill -9 $LOCK_PID 2>/dev/null
     fi
     
+    # NEW: Remove lingering WAL files that cause recovery failures
+    if [ -f "data/quant.duckdb.wal" ]; then
+        echo "🧹 Removing lingering WAL file..."
+        rm data/quant.duckdb.wal
+    fi
+    
     # Wait a moment for OS to release file locks
     sleep 2
     echo "✅ Environment clean."

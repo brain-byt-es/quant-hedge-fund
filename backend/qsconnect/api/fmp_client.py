@@ -577,6 +577,24 @@ class FMPClient(BaseAPIClient):
         data = self._make_request(url)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
+    def get_sector_performance(self, date_str: Optional[str] = None) -> pd.DataFrame:
+        """Get snapshot of sector performance."""
+        url = "https://financialmodelingprep.com/stable/sector-performance-snapshot"
+        params = {}
+        if date_str:
+            params["date"] = date_str
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_industry_performance(self, date_str: Optional[str] = None) -> pd.DataFrame:
+        """Get snapshot of industry performance."""
+        url = "https://financialmodelingprep.com/stable/industry-performance-snapshot"
+        params = {}
+        if date_str:
+            params["date"] = date_str
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
     def get_economic_calendar(self) -> pd.DataFrame:
         """Get upcoming economic events."""
         url = "https://financialmodelingprep.com/stable/economic-calendar"

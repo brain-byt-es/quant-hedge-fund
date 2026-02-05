@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
     IconBuildingBank, 
     IconRefresh,
-    IconSearch,
-    IconArrowRight
+    IconSearch
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,7 +39,7 @@ export default function ETFProvidersPage() {
                 { issuer: "Charles Schwab", fundCount: 31, totalAUM: 320000000000, marketShare: 3.9 },
             ]
             setIssuers(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch ETF providers")
         } finally {
             setIsLoading(false)

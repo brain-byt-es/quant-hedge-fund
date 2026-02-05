@@ -126,10 +126,31 @@ class AlpacaBroker(BaseBroker):
                 "action": o.side.upper(),
                 "quantity": float(o.qty),
                 "order_type": o.type.upper(),
-                "status": o.status
+                "status": o.status,
+                "created_at": o.created_at.isoformat()
             } for o in orders]
         except Exception as e:
             logger.error(f"Alpaca open orders error: {e}")
+            return []
+
+    def get_recent_orders(self, limit: int = 50) -> List[Dict[str, Any]]:
+        if not self._connected: return []
+        try:
+            orders = self._api.list_orders(status='all', limit=limit)
+            return [{
+                "id": o.id,
+                "symbol": o.symbol,
+                "action": o.side.upper(),
+                "quantity": float(o.qty),
+                "filled_qty": float(o.filled_qty),
+                "avg_fill_price": float(o.filled_avg_price) if o.filled_avg_price else 0.0,
+                "order_type": o.type.upper(),
+                "status": o.status,
+                "created_at": o.created_at.isoformat(),
+                "updated_at": o.updated_at.isoformat() if o.updated_at else None
+            } for o in orders]
+        except Exception as e:
+            logger.error(f"Alpaca recent orders error: {e}")
             return []
 
     def cancel_all_orders(self) -> int:

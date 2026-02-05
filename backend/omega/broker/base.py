@@ -39,5 +39,10 @@ class BaseBroker(ABC):
         pass
         
     @abstractmethod
+    def get_recent_orders(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Returns normalized list of recent order executions."""
+        pass
+        
+    @abstractmethod
     def cancel_all_orders(self) -> int:
         pass

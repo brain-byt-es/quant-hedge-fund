@@ -6,8 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { 
     IconStar, 
     IconRefresh,
-    IconTarget,
-    IconCurrencyDollar,
     IconTrendingUp
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -42,7 +40,7 @@ export default function TopAnalystStocksPage() {
                 { symbol: "META", name: "Meta Platforms", analystCount: 31, avgPriceTarget: 520.00, upside: 9.1, rating: "Strong Buy", marketCap: 1200000000000, change_percent: 3.2 },
             ]
             setStocks(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch top analyst stocks")
         } finally {
             setIsLoading(false)

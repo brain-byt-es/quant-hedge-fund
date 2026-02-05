@@ -9,8 +9,7 @@ import {
     IconSearch, 
     IconFilter, 
     IconDownload, 
-    IconSettings2,
-    IconRefresh
+    IconSettings2
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { 

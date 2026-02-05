@@ -206,9 +206,12 @@ export const api = {
   },
 
   // Global Search & Master Index
-  globalSearch: async (query: string, limit = 20, asset_type?: string) => {
+  globalSearch: async (query: string, limit = 20, asset_type?: string, countries?: string[]) => {
       let url = `${API_BASE_URL}/search/global?query=${encodeURIComponent(query)}&limit=${limit}`;
       if (asset_type) url += `&asset_type=${asset_type}`;
+      if (countries && countries.length > 0) {
+          countries.forEach(c => url += `&countries=${encodeURIComponent(c)}`);
+      }
       const res = await fetch(url);
       return handleResponse(res);
   },
@@ -220,11 +223,17 @@ export const api = {
       return handleResponse(res);
   },
 
-  getAssetList: async (asset_type: string, filters?: Record<string, string>, limit = 50, offset = 0) => {
+  getAssetList: async (asset_type: string, filters?: Record<string, string | string[]>, limit = 50, offset = 0) => {
       let url = `${API_BASE_URL}/search/list?asset_type=${asset_type}&limit=${limit}&offset=${offset}`;
       if (filters) {
           Object.entries(filters).forEach(([k, v]) => {
-              if (v) url += `&${k}=${encodeURIComponent(v)}`;
+              if (v) {
+                  if (Array.isArray(v)) {
+                      v.forEach(val => url += `&${k}=${encodeURIComponent(val)}`);
+                  } else {
+                      url += `&${k}=${encodeURIComponent(v)}`;
+                  }
+              }
           });
       }
       const res = await fetch(url);
@@ -233,6 +242,18 @@ export const api = {
 
   getSectors: async (limit = 200, group_by: 'sector' | 'industry' = 'industry') => {
       const res = await fetch(`${API_BASE_URL}/search/sectors?limit=${limit}&group_by=${group_by}`);
+      return handleResponse(res);
+  },
+
+  getIndustryDetails: async (category: string, countries?: string[]) => {
+      let url = `${API_BASE_URL}/search/industry/${encodeURIComponent(category)}`;
+      if (countries && countries.length > 0) {
+          countries.forEach(c => {
+              const prefix = url.includes('?') ? '&' : '?';
+              url += `${prefix}countries=${encodeURIComponent(c)}`;
+          });
+      }
+      const res = await fetch(url);
       return handleResponse(res);
   },
 
@@ -333,6 +354,11 @@ export const api = {
 
   getPortfolio: async () => {
     const res = await fetch(`${API_BASE_URL}/live/positions`);
+    return handleResponse(res);
+  },
+
+  getRecentOrders: async (limit = 50) => {
+    const res = await fetch(`${API_BASE_URL}/live/orders?limit=${limit}`);
     return handleResponse(res);
   },
   

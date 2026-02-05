@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { CompactGrid } from "@/components/market-hub/compact-grid"
 import { Button } from "@/components/ui/button"
 import {

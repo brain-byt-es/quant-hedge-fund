@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { CompactGrid } from "@/components/market-hub/compact-grid"
-import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { 
     IconUserSearch, 
@@ -43,7 +42,7 @@ export default function TopAnalystsPage() {
                 { rank: 5, name: "Ross Seymore", analystScore: 4.5, successRate: 62.9, avgReturn: 21.8, totalRatings: 390, lastRating: "2026-02-01" },
             ]
             setAnalysts(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch analyst rankings")
         } finally {
             setIsLoading(false)

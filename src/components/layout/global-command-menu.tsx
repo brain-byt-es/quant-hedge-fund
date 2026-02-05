@@ -27,6 +27,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command"
 import { useStock360 } from "@/components/providers/stock-360-provider"
+import { useSettings } from "@/components/providers/settings-provider"
 import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 
@@ -43,6 +44,7 @@ export function GlobalCommandMenu() {
   const [query, setQuery] = React.useState("")
   const [results, setResults] = React.useState<SearchResult[]>([])
   const { openStock360 } = useStock360()
+  const { settings } = useSettings()
   const router = useRouter()
 
   React.useEffect(() => {
@@ -69,7 +71,8 @@ export function GlobalCommandMenu() {
       const timer = setTimeout(async () => {
           if (query.length > 1) {
               try {
-                  const data = await api.globalSearch(query)
+                  const markets = settings.showOnlyPreferred ? settings.preferredMarkets : undefined
+                  const data = await api.globalSearch(query, 20, undefined, markets)
                   setResults(data)
               } catch (e) {
                   console.error(e)
@@ -79,7 +82,7 @@ export function GlobalCommandMenu() {
           }
       }, 300)
       return () => clearTimeout(timer)
-  }, [query])
+  }, [query, settings.showOnlyPreferred, settings.preferredMarkets])
 
   const runCommand = React.useCallback((command: () => void) => {
     setOpen(false)
@@ -213,7 +216,7 @@ export function GlobalCommandMenu() {
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                 </CommandItem>
-                <CommandItem onSelect={() => runCommand(() => router.push("#"))}>
+                <CommandItem onSelect={() => runCommand(() => router.push("/dashboard/settings"))}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                 </CommandItem>

@@ -6,13 +6,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { 
-    IconPlus, 
     IconTrash, 
     IconRefresh,
     IconChartLine,
     IconSearch,
     IconTrendingUp,
-    IconExternalLink,
     IconChartBar
 } from "@tabler/icons-react"
 import { api } from "@/lib/api"
@@ -77,7 +75,7 @@ export default function ComparisonToolPage() {
             const data = await api.getComparisonData(tickerList, { name: "Total Return [%]", value: "totalReturn" })
             setTableData(data.table)
             setRawGraphData(data.graph)
-        } catch (err) {
+        } catch {
             toast.error("Failed to sync comparison data")
         } finally {
             setIsLoading(false)

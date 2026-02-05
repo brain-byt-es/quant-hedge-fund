@@ -34,7 +34,7 @@ export default function DividendsCalendarPage() {
         try {
             const data = await api.getDividendsCalendar()
             setEvents(data || [])
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch dividends calendar")
         } finally {
             setIsLoading(false)

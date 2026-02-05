@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { createChart, ColorType, IChartApi, AreaSeries, Time } from "lightweight-charts"
+import { createChart, ColorType, AreaSeries, Time } from "lightweight-charts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, TrendingUp } from "lucide-react"
 

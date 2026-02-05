@@ -6,11 +6,9 @@ import { Badge } from "@/components/ui/badge"
 import { 
     IconList, 
     IconTrendingUp, 
-    IconTrendingDown, 
     IconCurrencyDollar,
     IconFlame,
     IconUsers,
-    IconBuildingSkyscraper,
     IconRocket,
     IconBolt
 } from "@tabler/icons-react"

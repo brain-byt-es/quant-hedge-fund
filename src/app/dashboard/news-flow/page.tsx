@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
@@ -10,7 +9,6 @@ import {
     IconRefresh,
     IconExternalLink,
     IconTornado,
-    IconChartBar,
     IconLock
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -57,7 +55,7 @@ export default function NewsFlowPage() {
                 },
             ]
             setNews(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch news flow")
         } finally {
             setIsLoading(false)

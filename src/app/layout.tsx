@@ -14,6 +14,7 @@ import { Stock360Provider } from "@/components/providers/stock-360-provider"
 import { WatchlistProvider } from "@/components/providers/watchlist-provider"
 import { TradingProvider } from "@/components/providers/trading-provider"
 import { HeaderContextBadge } from "@/components/layout/header-context-badge"
+import { SettingsProvider } from "@/components/providers/settings-provider"
 
 
 const robotoFlex = Roboto_Flex({
@@ -40,43 +41,45 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${robotoFlex.variable} ${jetbrainsMono.variable} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <Stock360Provider>
-            <TradingProvider>
-              <WatchlistProvider>
-                <SidebarProvider
-                  style={
-                    {
-                      "--sidebar-width": "280px",
-                      "--header-height": "64px",
-                    } as React.CSSProperties
-                  }
-                >
-                  <AppSidebar />
-                  <SidebarInset>
-                    <header className="flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) border-b border-border/50 bg-background/50 backdrop-blur-md sticky top-0 z-10 px-4">
-                        <SidebarTrigger className="-ml-1" />
-                        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-                        <div className="flex items-center gap-2 text-sm font-bold tracking-tight uppercase italic opacity-50">
-                           <span className="text-muted-foreground">Quant Science</span>
-                           <span className="text-muted-foreground">/</span>
-                           <span className="text-foreground">Terminal</span>
-                        </div>
-                        <div className="ml-auto flex items-center gap-4">
-                          <HeaderContextBadge />
-                          <OnboardingTour />
-                          <ThemeToggle />
-                        </div>
-                    </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-                      {children}
-                    </div>
-                  </SidebarInset>
-                </SidebarProvider>
-                <GlobalCommandMenu />
-                <ConsoleDrawer />
-              </WatchlistProvider>
-            </TradingProvider>
-          </Stock360Provider>
+          <SettingsProvider>
+            <Stock360Provider>
+              <TradingProvider>
+                <WatchlistProvider>
+                  <SidebarProvider
+                    style={
+                      {
+                        "--sidebar-width": "280px",
+                        "--header-height": "64px",
+                      } as React.CSSProperties
+                    }
+                  >
+                    <AppSidebar />
+                    <SidebarInset>
+                      <header className="flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) border-b border-border/50 bg-background/50 backdrop-blur-md sticky top-0 z-10 px-4">
+                          <SidebarTrigger className="-ml-1" />
+                          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                          <div className="flex items-center gap-2 text-sm font-bold tracking-tight uppercase italic opacity-50">
+                             <span className="text-muted-foreground">Quant Science</span>
+                             <span className="text-muted-foreground">/</span>
+                             <span className="text-foreground">Terminal</span>
+                          </div>
+                          <div className="ml-auto flex items-center gap-4">
+                            <HeaderContextBadge />
+                            <OnboardingTour />
+                            <ThemeToggle />
+                          </div>
+                      </header>
+                      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                        {children}
+                      </div>
+                    </SidebarInset>
+                  </SidebarProvider>
+                  <GlobalCommandMenu />
+                  <ConsoleDrawer />
+                </WatchlistProvider>
+              </TradingProvider>
+            </Stock360Provider>
+          </SettingsProvider>
           <Toaster />
         </ThemeProvider>
       </body>

@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { PaginatedTable } from "@/components/market-hub/paginated-table"
-import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { 
@@ -30,7 +29,7 @@ export default function MarketMoverPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [activeType, setActiveType] = useState("gainers")
 
-    const fetchMovers = async () => {
+    const fetchMovers = useCallback(async () => {
         setIsLoading(true)
         try {
             // Simulated dummy data based on reference structure
@@ -44,16 +43,16 @@ export default function MarketMoverPage() {
                 { symbol: "MSFT", name: "Microsoft Corp", price: 410.12, change: -2.5, changesPercentage: -0.6 },
             ]
             setMovers(activeType === "gainers" ? dummyGainers : dummyLosers)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch market movers")
         } finally {
             setIsLoading(false)
         }
-    }
+    }, [activeType])
 
     useEffect(() => {
         fetchMovers()
-    }, [activeType])
+    }, [fetchMovers])
 
     const columns = [
         {

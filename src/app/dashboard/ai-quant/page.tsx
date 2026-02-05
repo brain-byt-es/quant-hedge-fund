@@ -64,7 +64,6 @@ export default function AIQuantPage() {
   const [loadingChat, setLoadingChat] = useState(false)
   const [agentStatus, setAgentStatus] = useState<string | null>(null)
   
-  const [editorCode, setEditorCode] = useState<string>("# Waiting for Alpha Factor code injection...")
   const [customFactorDeployed, setCustomFactorDeployed] = useState(false)
   
   // Manual Algorithm Editor State
@@ -88,7 +87,7 @@ export default function AIQuantPage() {
       try {
           const res = await api.getAlgorithmsCode()
           setManualCode(res.code)
-      } catch (err) {
+      } catch {
           toast.error("Failed to load algorithms.py")
       }
   }
@@ -99,7 +98,7 @@ export default function AIQuantPage() {
           await api.updateAlgorithmsCode(manualCode)
           toast.success("Algorithms Updated", { description: "backend/qsresearch/strategies/factor/algorithms.py has been updated." })
           setIsEditorOpen(false)
-      } catch (err) {
+      } catch {
           toast.error("Failed to save code")
       } finally {
           setIsSavingCode(false)
@@ -156,8 +155,6 @@ export default function AIQuantPage() {
               setAgentStatus("Generating Factor Engine code...")
               const res = await api.generateFactorCode(input)
               
-              setEditorCode(res.code || "# Error")
-              
               setChatHistory(prev => [...prev, { 
                   role: 'ai', 
                   content: `I've generated a custom factor based on your request. Review the logic below.`, 
@@ -187,8 +184,7 @@ export default function AIQuantPage() {
               const res = await api.chat(input)
               setChatHistory(prev => [...prev, { role: 'ai', content: res.response, type: 'text' }])
           }
-      } catch (err) {
-          console.error("Agent error", err)
+      } catch {
           setChatHistory(prev => [...prev, { role: 'ai', content: "Bridge connection unstable.", type: 'text' }])
       } finally {
           setLoadingChat(false)
@@ -202,11 +198,10 @@ export default function AIQuantPage() {
       try {
           const res = await api.deployFactorCode(code)
           setCustomFactorDeployed(true)
-          setEditorCode(code)
           toast.success("AI Factor Injected", { description: res.message })
           return true
-      } catch (err) {
-          toast.error("Injection Failed", { description: String(err) })
+      } catch {
+          toast.error("Injection Failed")
           return false
       }
   }

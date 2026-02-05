@@ -6,6 +6,8 @@ import { CompactGrid } from "@/components/market-hub/compact-grid"
 import { IconChartPie, IconArrowRight } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { useSettings } from "@/components/providers/settings-provider"
 
 interface IndustryData {
     name: string
@@ -21,6 +23,7 @@ interface IndustryData {
 
 export default function IndustryOverview() {
     const router = useRouter()
+    const { settings } = useSettings()
     const [overviewSectors, setOverviewSectors] = useState<Record<string, IndustryData[]>>({})
     const [isLoading, setIsLoading] = useState(true)
 
@@ -28,7 +31,12 @@ export default function IndustryOverview() {
         const loadData = async () => {
             setIsLoading(true)
             try {
-                // Client-side grouping for Overview
+                // Determine markets based on settings
+                const markets = settings.showOnlyPreferred ? settings.preferredMarkets : undefined
+                
+                // Fetch Aggregated Industries
+                // Note: getSectors doesn't support live filtering yet, but the aggregation task handles it.
+                // For now, we show the global map structure but grouped.
                 const res = await api.getSectors(1000, 'industry')
                 const grouped: Record<string, IndustryData[]> = {}
                 
@@ -44,7 +52,7 @@ export default function IndustryOverview() {
             } finally { setIsLoading(false) }
         }
         loadData()
-    }, [])
+    }, [settings.showOnlyPreferred, settings.preferredMarkets])
 
     const overviewColumns = [
         {
@@ -52,6 +60,35 @@ export default function IndustryOverview() {
             accessorKey: "name",
             cell: (item: IndustryData) => <span className="font-bold text-xs text-primary group-hover:underline cursor-pointer">{item.name}</span>,
             className: "w-[300px]"
+        },
+        {
+            header: "1D Perf",
+            accessorKey: "perf_1d",
+            cell: (item: IndustryData) => {
+                const val = item.perf_1d || 0
+                return (
+                    <span className={cn(
+                        "font-mono text-xs font-black",
+                        val > 0 ? "text-emerald-500" : val < 0 ? "text-red-500" : "text-muted-foreground"
+                    )}>
+                        {val > 0 ? "+" : ""}{val.toFixed(2)}%
+                    </span>
+                )
+            },
+            className: "text-right"
+        },
+        {
+            header: "Market Cap",
+            accessorKey: "market_cap",
+            cell: (item: IndustryData) => {
+                const val = item.market_cap || 0
+                return (
+                    <span className="font-mono text-[10px] font-bold text-muted-foreground">
+                        {val > 0 ? `$${(val / 1e9).toFixed(1)}B` : "-"}
+                    </span>
+                )
+            },
+            className: "text-right"
         },
         {
             header: "# Stocks",
@@ -71,7 +108,7 @@ export default function IndustryOverview() {
                 <div>
                     <h3 className="font-bold text-lg">Market Structure</h3>
                     <p className="text-sm text-muted-foreground">
-                        Quant Science categorizes the global equity market into <strong className="text-primary">{Object.keys(overviewSectors).length} Sectors</strong> and <strong className="text-primary">160+ Industries</strong>.
+                        Quant Science categorizes the {settings.showOnlyPreferred ? "your preferred" : "global"} equity market into <strong className="text-primary">{Object.keys(overviewSectors).length} Sectors</strong> and <strong className="text-primary">160+ Industries</strong>.
                     </p>
                 </div>
             </div>
@@ -89,8 +126,6 @@ export default function IndustryOverview() {
                                 <span className="text-xs text-muted-foreground font-normal normal-case tracking-normal">({industries.length} Industries)</span>
                             </h2>
                             <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => {
-                                // Navigate to Industry Detail Page for the Sector (which lists all sub-industries/stocks)
-                                // Or navigate to filtered list
                                 router.push(`/dashboard/market/industry/${encodeURIComponent(sectorName)}`)
                             }}>
                                 View Sector <IconArrowRight className="size-3 ml-1" />
@@ -102,7 +137,7 @@ export default function IndustryOverview() {
                                 columns={overviewColumns} 
                                 isLoading={false}
                                 onRowClick={(item) => {
-                                    const fullCategory = `${sectorName} - ${item.name}`
+                                    const fullCategory = sectorName === 'Other' ? item.name : `${sectorName} - ${item.name}`
                                     router.push(`/dashboard/market/industry/${encodeURIComponent(fullCategory)}`)
                                 }}
                             />

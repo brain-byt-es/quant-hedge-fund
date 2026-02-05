@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { 
-    IconChartCandle, 
-    IconRefresh,
-    IconSearch,
+    IconSearch, 
     IconArrowRight,
     IconBuildingSkyscraper,
     IconCategory
@@ -14,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
 
 const SECTORS = [
     { name: "Technology", companies: 412, performance: "+2.4%", status: "Bullish" },

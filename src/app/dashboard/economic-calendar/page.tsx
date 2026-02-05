@@ -36,7 +36,7 @@ export default function EconomicCalendarPage() {
         try {
             const data = await api.getEconomicCalendar()
             setEvents(data || [])
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch economic calendar")
         } finally {
             setIsLoading(false)

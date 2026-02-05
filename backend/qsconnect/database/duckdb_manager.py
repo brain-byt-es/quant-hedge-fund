@@ -375,6 +375,32 @@ class DuckDBManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_symbol ON master_assets_index(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_name ON master_assets_index(name)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_type ON master_assets_index(type)")
+
+            # 28. Sector & Industry Aggregated Stats
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sector_industry_stats (
+                    name VARCHAR PRIMARY KEY, -- Sector or Industry Name
+                    group_type VARCHAR, -- 'sector' or 'industry'
+                    stock_count INTEGER,
+                    market_cap DOUBLE,
+                    avg_pe DOUBLE,
+                    avg_dividend_yield DOUBLE,
+                    avg_profit_margin DOUBLE,
+                    perf_1d DOUBLE,
+                    perf_1w DOUBLE,
+                    perf_1m DOUBLE,
+                    perf_1y DOUBLE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Safe migration: Add total_revenue if missing
+            try:
+                cols = conn.execute("PRAGMA table_info('sector_industry_stats')").fetchall()
+                col_names = [c[1] for c in cols]
+                if 'total_revenue' not in col_names:
+                    conn.execute("ALTER TABLE sector_industry_stats ADD COLUMN total_revenue DOUBLE")
+            except: pass
             
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_sym ON historical_prices_fmp(symbol)")

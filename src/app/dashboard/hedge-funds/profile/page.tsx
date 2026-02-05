@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, Suspense, useCallback } from "react"
+import { useEffect, useState, Suspense, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { CompactGrid } from "@/components/market-hub/compact-grid"
 import { api } from "@/lib/api"
@@ -10,12 +10,9 @@ import { format } from "date-fns"
 import { 
     IconBuildingBank, 
     IconRefresh,
-    IconTrendingUp,
     IconWallet,
     IconHistory,
-    IconExternalLink,
-    IconLayoutGrid,
-    IconArrowsLeftRight
+    IconLayoutGrid
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -54,9 +51,9 @@ function HedgeFundProfileContent() {
             const data = await api.getHedgeFundHoldings(cik)
             setStats(data.stats)
             setHoldings(data.holdings)
-        } catch (err) {
+        } catch (_err) {
             toast.error("Failed to fetch fund holdings")
-            console.error(err)
+            console.error(_err)
         } finally {
             setIsLoading(false)
         }

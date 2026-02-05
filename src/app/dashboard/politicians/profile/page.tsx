@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { CompactGrid } from "@/components/market-hub/compact-grid"
 import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -69,9 +68,8 @@ function PoliticianProfileContent() {
             const data = await api.getPoliticianHistory(name)
             setStats(data.stats)
             setTrades(data.trades)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch politician profile")
-            console.error(err)
         } finally {
             setIsLoading(false)
         }

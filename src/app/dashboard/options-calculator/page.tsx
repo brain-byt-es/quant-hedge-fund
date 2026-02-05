@@ -16,22 +16,17 @@ import {
 } from "@tabler/icons-react"
 import { 
     OptionLeg, 
-    calculatePayoff, 
-    calculateImpliedVolatility,
-    blackScholesCall,
-    blackScholesPut
+    calculatePayoff
 } from "@/lib/options/math"
-import { cn } from "@/lib/utils"
 import { 
     createChart, 
     ColorType, 
     AreaSeries, 
     LineSeries,
-    SeriesMarker,
     Time
 } from "lightweight-charts"
 import { useRef } from "react"
-import { IChartApi, ISeriesApi } from "lightweight-charts"
+import { IChartApi } from "lightweight-charts"
 
 const DEFAULT_STRATEGY: OptionLeg[] = [
     { action: 'Buy', optionType: 'Call', strike: 150, optionPrice: 5.50, quantity: 1, date: '2026-06-19' }

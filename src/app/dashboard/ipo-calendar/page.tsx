@@ -9,8 +9,7 @@ import { format } from "date-fns"
 import { 
     IconRocket, 
     IconCalendar,
-    IconRefresh,
-    IconCurrencyDollar
+    IconRefresh
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -43,9 +42,9 @@ export default function IPOCalendarPage() {
                 exchange: (item.exchange as string) || "---"
             }))
             setIpos(mapped)
-        } catch (err) {
+        } catch (_err) {
             toast.error("Failed to fetch IPO calendar")
-            console.error(err)
+            console.error(_err)
         } finally {
             setIsLoading(false)
         }

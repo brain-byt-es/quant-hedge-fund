@@ -41,6 +41,11 @@ def get_positions():
     app = get_omega_app()
     return app.get_positions()
 
+@router.get("/orders")
+def get_recent_orders(limit: int = 50):
+    app = get_omega_app()
+    return app.get_recent_orders(limit=limit)
+
 @router.websocket("/ws/ticks")
 async def websocket_tick_stream(websocket: WebSocket):
     """

@@ -9,8 +9,6 @@ import {
     IconSearch,
     IconFilter,
     IconDownload,
-    IconTrendingUp,
-    IconTrendingDown,
     IconBuildingBank
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -49,7 +47,7 @@ export default function UnusualOrderFlowPage() {
                 { time: "14:38:55", ticker: "AMD", symbol: "AMD", price: 162.30, size: 150000, premium: 24345000, exchange: "Dark Pool", transactionType: "DP", sentiment: "Bullish", change_percent: 4.1 },
             ]
             setTrades(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch dark pool flow")
         } finally {
             setIsLoading(false)

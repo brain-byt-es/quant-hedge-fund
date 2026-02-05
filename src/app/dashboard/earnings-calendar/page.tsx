@@ -8,9 +8,7 @@ import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { 
     IconCalendarEvent, 
-    IconRefresh,
-    IconTrendingUp,
-    IconMessageCircle
+    IconRefresh
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -36,7 +34,7 @@ export default function EarningsCalendarPage() {
         try {
             const data = await api.getEarningsCalendar()
             setEvents(data || [])
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch earnings calendar")
         } finally {
             setIsLoading(false)

@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { PaginatedTable } from "@/components/market-hub/paginated-table"
-import { Badge } from "@/components/ui/badge"
 import { 
     IconFilter, 
     IconRefresh,
     IconSearch,
     IconTornado,
-    IconTrendingUp,
     IconSettings2,
     IconDownload
 } from "@tabler/icons-react"
@@ -49,7 +47,7 @@ export default function OptionsScreenerPage() {
                 { symbol: "MSFT", name: "Microsoft Corp", strike: 420, optionType: "Put", iv: 0.28, ivRank: 0.12, volume: 3400, oi: 15000, premium: 42000, expiry: "2026-02-20", change_percent: -0.3 },
             ]
             setContracts(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch options contracts")
         } finally {
             setIsLoading(false)

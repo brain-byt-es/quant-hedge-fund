@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { CompactGrid } from "@/components/market-hub/compact-grid"
-import { api } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { 
     IconActivity, 
     IconStar, 
     IconRefresh,
-    IconTrendingUp,
-    IconTrendingDown,
     IconTarget
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -47,7 +44,7 @@ export default function AnalystFlowPage() {
                 { analystName: "Timothy Arcuri", analystScore: 4.6, symbol: "TSMC", name: "Taiwan Semi", action: "Reiterates", rating_current: "Buy", adjusted_pt_current: 160, upside: 12.4, date: "2026-02-01" },
             ]
             setRatings(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch analyst flow")
         } finally {
             setIsLoading(false)

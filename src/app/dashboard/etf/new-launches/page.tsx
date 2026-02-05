@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { 
     IconRocket, 
     IconRefresh,
-    IconCalendar,
     IconCalendarEvent
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -39,7 +38,7 @@ export default function ETFNewLaunchesPage() {
                 { symbol: "MOON", name: "Lunar Logistics & Mining ETF", launchDate: "2025-12-20", assetClass: "Equity: Global - Space", issuer: "Ark Invest", change_percent: 8.4 },
             ]
             setLaunches(dummyData)
-        } catch (err) {
+        } catch {
             toast.error("Failed to fetch new launches")
         } finally {
             setIsLoading(false)

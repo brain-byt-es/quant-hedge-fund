@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,9 +10,7 @@ import {
     IconBrandX, 
     IconActivity,
     IconTrendingUp,
-    IconTrendingDown,
     IconExternalLink,
-    IconRefresh,
     IconScale
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -37,12 +35,6 @@ const MOCK_POSTS = [
 export default function POTUSTrackerPage() {
     const [activeTab, setActiveIdx] = useState(0)
     const [selectedSector, setSelectedSector] = useState("Technology")
-    const [isLoading, setIsLoading] = useState(true)
-
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 500)
-        return () => clearTimeout(timer)
-    }, [])
 
     const tabs = ["Schedule", "Executive Actions", "Social Feed"]
 

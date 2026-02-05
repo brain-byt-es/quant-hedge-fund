@@ -1,27 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { 
     IconTornado, 
-    IconRefresh,
     IconActivity,
     IconChartBar,
-    IconTrendingUp,
-    IconTrendingDown,
     IconFlame
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 
 export default function MarketFlowPage() {
-    const [isLoading, setIsLoading] = useState(true)
-    const [fearGreed, setFearGreed] = useState(64) // Greed
-
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 600)
-        return () => clearTimeout(timer)
-    }, [])
+    const [fearGreed] = useState(64) // Greed
 
     return (
         <div className="flex flex-col space-y-6 max-w-7xl mx-auto w-full">

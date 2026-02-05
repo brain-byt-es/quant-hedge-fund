@@ -462,6 +462,11 @@ class TradingApp:
             return []
         return self.broker.get_open_orders()
     
+    def get_recent_orders(self, limit: int = 50) -> List[Dict[str, Any]]:
+        if not self.is_connected():
+            return []
+        return self.broker.get_recent_orders(limit=limit)
+    
     def cancel_all_orders(self) -> int:
         if not self.is_connected():
             return 0

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { TopHoldings } from "@/components/dashboard/top-holdings"
+import { OrderBlotter, OrderExecution } from "@/components/dashboard/order-blotter"
 import { api } from "@/lib/api"
 import { 
   Rocket,
@@ -26,7 +27,6 @@ import {
 import { 
     IconChartBar
 } from "@tabler/icons-react"
-import { useStock360 } from "@/components/providers/stock-360-provider"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -58,25 +58,29 @@ interface ScannerSignal {
 
 export default function DashboardPage() {
   const [positions, setPositions] = useState<DashboardPosition[]>([])
-  const [liveStatus, setLiveStatus] = useState<LiveStatusData>({ 
-    ib_connected: false, 
-    engine_halted: false, 
-    net_liquidation: 0, 
+  const [orders, setOrders] = useState<OrderExecution[]>([])
+  const [liveStatus, setLiveStatus] = useState<LiveStatusData>({
+    ib_connected: false,
+    engine_halted: false,
+    net_liquidation: 0,
     daily_pnl_usd: 0,
     trades_count: 0,
     sharpe_ratio: 0
   })
   const [activeSignals, setActiveSignals] = useState<ScannerSignal[]>([])
   const [mounted, setMounted] = useState(false)
-  const { openStock360 } = useStock360()
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true)
 
-  const fetchData = useCallback(async () => {
-    try {
+  const fetchData = useCallback(async () => {    try {
       const lStatus = await api.getLiveStatus()
       setLiveStatus(lStatus)
       
       const pos = await api.getPortfolio()
       setPositions(pos as DashboardPosition[])
+
+      const recentOrders = await api.getRecentOrders(10)
+      setOrders(recentOrders)
+      setIsLoadingOrders(false)
 
       const signals = await api.getTacticalScanner()
       setActiveSignals(signals || [])
@@ -207,8 +211,9 @@ export default function DashboardPage() {
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Active Positions & Orders (8 Cols) */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 space-y-6">
             <TopHoldings positions={positions} />
+            <OrderBlotter orders={orders} isLoading={isLoadingOrders} />
         </div>
 
         {/* Global Control & Metrics (4 Cols) */}

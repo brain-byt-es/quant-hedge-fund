@@ -168,9 +168,30 @@ class IBBroker(BaseBroker):
                 "symbol": t.contract.symbol,
                 "action": t.order.action,
                 "quantity": t.order.totalQuantity,
-                "status": t.orderStatus.status
+                "status": t.orderStatus.status,
+                "created_at": None # IBKR doesn't give simple timestamp on order
             })
         return orders
+
+    def get_recent_orders(self, limit: int = 50) -> List[Dict[str, Any]]:
+        if not self.is_connected(): return []
+        # ib.trades() returns recent trades from the current session
+        trades = self._ib.trades()
+        # Sort by fill time or orderId if possible
+        normalized = []
+        for t in trades[-limit:]:
+            normalized.append({
+                "id": str(t.order.orderId),
+                "symbol": t.contract.symbol,
+                "action": t.order.action,
+                "quantity": float(t.order.totalQuantity),
+                "filled_qty": float(t.orderStatus.filled),
+                "avg_fill_price": float(t.orderStatus.avgFillPrice),
+                "order_type": t.order.orderType,
+                "status": t.orderStatus.status,
+                "created_at": None # Requires more complex logging for history
+            })
+        return normalized
 
     def cancel_all_orders(self) -> int:
         if not self.is_connected(): return 0
