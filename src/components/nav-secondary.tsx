@@ -13,16 +13,18 @@ import {
 
 import Link from "next/link"
 
+interface NavSecondaryItem {
+  title: string
+  url: string
+  icon: Icon
+  onClick?: () => void
+}
+
 export function NavSecondary({
   items,
   ...props
 }: {
-  items: {
-    title: string
-    url: string
-    icon: Icon
-    onClick?: () => void
-  }[]
+  items: NavSecondaryItem[]
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
     <SidebarGroup {...props}>

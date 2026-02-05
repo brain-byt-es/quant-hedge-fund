@@ -67,6 +67,7 @@ export default function DashboardPage() {
     sharpe_ratio: 0
   })
   const [activeSignals, setActiveSignals] = useState<ScannerSignal[]>([])
+  const [mounted, setMounted] = useState(false)
   const { openStock360 } = useStock360()
 
   const fetchData = useCallback(async () => {
@@ -85,6 +86,8 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
+    // Standard hydration fix: defer to ensure it happens after initial paint
+    requestAnimationFrame(() => setMounted(true))
     const timer = setTimeout(() => fetchData(), 0)
     const interval = setInterval(fetchData, 10000)
     return () => {
@@ -114,6 +117,14 @@ export default function DashboardPage() {
       })()
     : "Quiet"
 
+  const formattedLiquidation = mounted 
+    ? (liveStatus.net_liquidation || 100000).toLocaleString() 
+    : "100,000"
+
+  const formattedDailyPnL = mounted
+    ? (liveStatus.daily_pnl_usd || 0).toLocaleString()
+    : "0"
+
   return (
     <div className="flex flex-col gap-8 py-6">
       
@@ -142,7 +153,7 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                     <span className="text-[9px] font-bold text-muted-foreground uppercase">Equity State</span>
                     <div className="text-xl font-mono font-bold text-foreground">
-                        ${(liveStatus.net_liquidation || 100000).toLocaleString()}
+                        ${formattedLiquidation}
                     </div>
                 </div>
             </CardContent>
@@ -218,7 +229,7 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-center text-xs font-mono">
                         <span className="text-muted-foreground uppercase tracking-tighter">Daily Alpha</span>
                         <span className={cn("font-bold text-sm", (liveStatus.daily_pnl_usd || 0) >= 0 ? "text-primary" : "text-destructive")}>
-                            {(liveStatus.daily_pnl_usd || 0) >= 0 ? "+" : ""}${(liveStatus.daily_pnl_usd || 0).toLocaleString()}
+                            {(liveStatus.daily_pnl_usd || 0) >= 0 ? "+" : ""}${formattedDailyPnL}
                         </span>
                     </div>
                     <Button variant={liveStatus.engine_halted ? "default" : "destructive"} size="sm" className="w-full h-8 text-[10px] font-black uppercase tracking-widest mt-2" onClick={handleHalt}>

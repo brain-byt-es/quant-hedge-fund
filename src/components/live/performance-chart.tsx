@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { createChart, ColorType, AreaSeries, HistogramSeries, Time } from "lightweight-charts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Activity } from "lucide-react"
 
 // Initial State (Day 0)
 const initialData = Array.from({ length: 30 }, (_, i) => {
@@ -106,7 +107,7 @@ export function LivePerformanceChart() {
     <Card className="h-full border-border/50 bg-card/20 backdrop-blur-sm flex flex-col overflow-hidden shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between py-3 border-b border-border/50 bg-muted/10">
             <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <ActivityIcon className="h-3 w-3 text-primary" /> Equity Curve & Risk
+                <Activity className="h-3 w-3 text-primary" /> Equity Curve & Risk
             </CardTitle>
             <div className="flex gap-1 bg-background/50 p-0.5 rounded-md border border-border/50">
                 {['1D', '1W', '1M', 'YTD', 'ALL'].map((r) => (
@@ -127,23 +128,4 @@ export function LivePerformanceChart() {
         </CardContent>
     </Card>
   )
-}
-
-function ActivityIcon(props: React.SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-        </svg>
-    )
 }

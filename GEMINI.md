@@ -20,11 +20,19 @@ Located in `/backend`, providing core logic via a modular **FastAPI** monorepo:
     - **Risk Engine:** Real-time **VaR (95%)** and **Expected Shortfall** calculations.
     - **Headless Control:** API-driven Emergency HALT/RESUME and Broker Switching.
 - **AI Insights:** Market regime detection and strategy generation powered by **OpenAI (GPT-4o)** with **Groq (Llama 3)** fallback.
+- **Global Search Index:** Unified Master Asset Index powered by **JerBouma's FinanceDatabase**.
+    - **Coverage:** 350k+ symbols across Equities, ETFs, Crypto, Indices, Currencies, and Funds.
+    - **Fast Lookup:** Sub-millisecond async search via `/api/search/global`.
+    - **Price Enrichment:** Automatic real-time quote merging for all visible asset lists.
 
 ### 2. Executive Dashboard (Next.js 14+ / TypeScript)
 Exposed on `localhost:3000`. The central "Mission Control":
 - **Dashboard:** High-density KPI scoreboard (Total Equity, Daily P&L Live Flash, Risk Metrics).
 - **Live Ops:** Professional "Mission Control" with Equity/Drawdown charts, Active Weights table with **Trend Sparklines**, and real-time order blotter.
+- **Market Hub:** Comprehensive "Stocknear-style" taxonomy.
+    - **Sectors & Industries:** Grouped hierarchical view (Overview | Sectors | Industries).
+    - **Deep Linking:** Drill down from Sector/Industry aggregations to detailed filtered stock lists.
+    - **Global Filter:** Pro-grade Combobox filtering by Country, Exchange, and Category.
 - **AI Quant Team:** 4-Quadrant module (Architect Chat, Hypothesis Forge, Code Injector, Config Core) for LLM-powered alpha discovery.
 - **Research Lab:** Integrated Backtest history (MLflow REST API) and **Strategy Governance** (Human-in-the-loop approvals and audit trails).
 - **Data Hub:** Real-time data health monitor (Gaps/Stale detection) and manual ingestion orchestration.
@@ -45,6 +53,7 @@ Exposed on `localhost:4200`. The "System Janitor":
 - **Database:** DuckDB (Primary OLAP) + Parquet (Caching).
 - **Execution:** `ib-insync`, `alpaca-trade-api` (Adapter Pattern).
 - **AI:** OpenAI (GPT-4o), Groq (Llama 3.3-70b).
+- **Data Sources:** SimFin (Bulk Fundamentals), FMP (Real-time & Global Search), FinanceDatabase (Global Taxonomy).
 - **Orchestration:** Prefect 3.0, MLflow 3.8.
 
 ## Infrastructure & Workflows
@@ -56,10 +65,11 @@ Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
 - Launches FastAPI, MLflow, Prefect, and Next.js in parallel.
 
 ### 2. Data Flow
-1. **Ingest:** Dashboard -> FastAPI -> QS Connect -> FMP Stable API -> DuckDB (Incremental).
-2. **Backtest:** Research Lab -> FastAPI -> Zipline -> MLflow (Experiment Tracking).
-3. **Approve:** Governance Tab -> Human Rationale -> Immutable Audit Trail (DuckDB).
-4. **Trade:** Omega Singleton -> Risk Engine -> Broker Adapter -> Live Market.
+1. **Ingest Assets:** FinanceDatabase Sync -> master_assets_index (DuckDB).
+2. **Enrich:** API Requests -> master_assets_index + JIT FMP Quotes.
+3. **Backtest:** Research Lab -> FastAPI -> Zipline -> MLflow (Experiment Tracking).
+4. **Approve:** Governance Tab -> Human Rationale -> Immutable Audit Trail (DuckDB).
+5. **Trade:** Omega Singleton -> Risk Engine -> Broker Adapter -> Live Market.
 
 ## Design Principles
 - **Aesthetic:** "Precision Industrial" (Deep Black `#09090b`, Glassmorphism, High-Density).
@@ -70,9 +80,11 @@ Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
 ## Development Guidelines for AI Agents
 - **DB Concurrency:** NEVER open a direct connection to `quant.duckdb` from new scripts; always go through `api.routers.data.get_qs_client()` to use the shared manager.
 - **Type Safety:** All numeric financial data must be cast to `Float64` before DB insertion to prevent C-level overflow errors.
+- **Market Filters:** Use `ILIKE 'Category%'` when filtering by Sector to catch all sub-industries.
 - **AI Provider:** Update `backend/omega/ai_service.py` if switching primary LLM providers.
 
 ### **Developer Experience (DX) / Troubleshooting**
+- **Search 404 Fix:** If Global Search fails, ensure `api/routers/main_router.py` includes the `search` router and the backend has been restarted.
 - **Python Imports:** If VS Code shows red lines for `polars` or `loguru`, ensured `.vscode/settings.json` points to `backend/venv/bin/python3`.
 - **Invalid Interpreter Fix:** If VS Code says the interpreter is invalid:
     1. Open Command Palette (`Cmd+Shift+P`).
@@ -80,3 +92,4 @@ Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
     3. Choose `Enter interpreter path...`.
     4. Paste: `${workspaceFolder}/backend/venv/bin/python3`.
     5. Restart VS Code.
+

@@ -132,18 +132,16 @@ class FMPClient(BaseAPIClient):
         return pl.DataFrame()
     
     def get_etf_list(self) -> pd.DataFrame:
-        """Get list of available ETFs."""
-        data = self._make_request("etf/list")
-        if data:
-            return pd.DataFrame(data)
-        return pd.DataFrame()
+        """Get list of available ETFs using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/etf-list"
+        data = self._make_request(url)
+        return pd.DataFrame(data) if data else pd.DataFrame()
     
     def get_tradeable_symbols(self) -> pd.DataFrame:
-        """Get list of all tradeable symbols."""
-        data = self._make_request("available-traded/list")
-        if data:
-            return pd.DataFrame(data)
-        return pd.DataFrame()
+        """Get list of all tradeable symbols using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/available-traded/list"
+        data = self._make_request(url)
+        return pd.DataFrame(data) if data else pd.DataFrame()
     
     # =====================
     # Company Profiles
@@ -159,9 +157,11 @@ class FMPClient(BaseAPIClient):
         return {}
     
     def get_company_profiles_batch(self, symbols: List[str]) -> pd.DataFrame:
-        """Get company profiles for multiple symbols (batch of up to 50)."""
+        """Get company profiles for multiple symbols using stable endpoint."""
         symbols_str = ",".join(symbols[:50])
-        data = self._make_request(f"profile/{symbols_str}")
+        url = "https://financialmodelingprep.com/stable/profile"
+        params = {"symbol": symbols_str}
+        data = self._make_request(url, params=params)
         if data:
             return pd.DataFrame(data)
         return pd.DataFrame()
@@ -443,10 +443,59 @@ class FMPClient(BaseAPIClient):
             
         return df
 
+    def get_all_insider_trades(self, limit: int = 100) -> pd.DataFrame:
+        """
+        Get recent insider trades for the entire market using the stable endpoint.
+        """
+        url = "https://financialmodelingprep.com/stable/insider-trading/latest"
+        params = {"limit": limit}
+        data = self._make_request(url, params=params)
+        
+        if not data:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(data)
+        return df
+
     def get_senate_trades(self, symbol: str) -> pd.DataFrame:
-        """Get recent senate/house trading for a symbol using the stable endpoint."""
-        url = "https://financialmodelingprep.com/stable/senate-trading"
+        """Get recent senate trading for a symbol using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/senate-trades"
         params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_house_trades(self, symbol: str) -> pd.DataFrame:
+        """Get recent house trading for a symbol using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/house-trades"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_all_senate_trades(self, limit: int = 100) -> pd.DataFrame:
+        """Get the latest senate financial disclosures."""
+        url = "https://financialmodelingprep.com/stable/senate-latest"
+        params = {"limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_all_house_trades(self, limit: int = 100) -> pd.DataFrame:
+        """Get the latest house financial disclosures."""
+        url = "https://financialmodelingprep.com/stable/house-latest"
+        params = {"limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_senate_trades_by_name(self, name: str) -> pd.DataFrame:
+        """Search for senate trades by politician name."""
+        url = "https://financialmodelingprep.com/stable/senate-trades-by-name"
+        params = {"name": name}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_house_trades_by_name(self, name: str) -> pd.DataFrame:
+        """Search for house trades by politician name."""
+        url = "https://financialmodelingprep.com/stable/house-trades-by-name"
+        params = {"name": name}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
@@ -463,7 +512,7 @@ class FMPClient(BaseAPIClient):
 
     def get_economic_indicator(self, name: str = "GDP") -> pd.DataFrame:
         """Get economic indicators (GDP, CPI, Unemployment, etc.)."""
-        url = f"https://financialmodelingprep.com/stable/economic"
+        url = "https://financialmodelingprep.com/stable/economic-indicators"
         params = {"name": name}
         data = self._make_request(url, params=params)
         return pd.DataFrame(data) if data else pd.DataFrame()
@@ -473,6 +522,65 @@ class FMPClient(BaseAPIClient):
         url = f"https://financialmodelingprep.com/stable/discounted-cash-flow"
         params = {"symbol": symbol}
         data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_social_sentiment(self, symbol: str, limit: int = 100) -> pd.DataFrame:
+        """Get social sentiment for a symbol."""
+        url = "https://financialmodelingprep.com/api/v4/social-sentiment"
+        params = {"symbol": symbol, "limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_trending_social(self, type: str = "reddit", source: str = "wallstreetbets") -> pd.DataFrame:
+        """Get trending stocks on social media."""
+        url = "https://financialmodelingprep.com/api/v4/social-sentiment/trending"
+        params = {"type": type, "source": source}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_institutional_holders(self, limit: int = 100) -> pd.DataFrame:
+        """Get list of institutional holders (13F filers) using stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/institutional-ownership/latest"
+        params = {"limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_symbol_ownership(self, symbol: str) -> pd.DataFrame:
+        """Get institutional ownership percentages for a symbol."""
+        url = "https://financialmodelingprep.com/api/v4/institutional-ownership/symbol-ownership-percent"
+        params = {"symbol": symbol}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_ipo_calendar(self) -> pd.DataFrame:
+        """Get upcoming and recent IPOs using the stable endpoint."""
+        url = "https://financialmodelingprep.com/stable/ipos-calendar"
+        data = self._make_request(url)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_congress_rss(self, limit: int = 100) -> pd.DataFrame:
+        """Get the latest congress trading (Senate latest as proxy for RSS)."""
+        url = "https://financialmodelingprep.com/stable/senate-latest"
+        params = {"limit": limit}
+        data = self._make_request(url, params=params)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_earnings_calendar(self) -> pd.DataFrame:
+        """Get upcoming earnings calendar."""
+        url = "https://financialmodelingprep.com/stable/earnings-calendar"
+        data = self._make_request(url)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_dividends_calendar(self) -> pd.DataFrame:
+        """Get upcoming dividends calendar."""
+        url = "https://financialmodelingprep.com/stable/dividends-calendar"
+        data = self._make_request(url)
+        return pd.DataFrame(data) if data else pd.DataFrame()
+
+    def get_economic_calendar(self) -> pd.DataFrame:
+        """Get upcoming economic events."""
+        url = "https://financialmodelingprep.com/stable/economic-calendar"
+        data = self._make_request(url)
         return pd.DataFrame(data) if data else pd.DataFrame()
 
     def get_quote(self, symbol: str) -> Dict[str, Any]:

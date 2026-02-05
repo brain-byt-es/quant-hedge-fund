@@ -134,7 +134,8 @@ export function RankScatter({ data, focusSymbol }: { data: ScatterData[], focusS
 
     const customSeries = chart.addCustomSeries(new ScatterSeries(), {})
 
-    const scatterPoints: ScatterPoint[] = data
+    // Process data to ensure strictly increasing time (momentum) values
+    const rawPoints = data
         .filter(d => typeof d.momentum === 'number' && typeof d.f_score === 'number')
         .map(d => ({
             time: d.momentum as number,
@@ -142,6 +143,23 @@ export function RankScatter({ data, focusSymbol }: { data: ScatterData[], focusS
             isFocus: d.symbol === focusSymbol
         }))
         .sort((a, b) => a.time - b.time)
+
+    // Uniqueness fix: Add tiny epsilon to duplicates to satisfy lightweight-charts requirements
+    const scatterPoints: ScatterPoint[] = []
+    let lastTime = -Infinity
+    const epsilon = 0.00001
+
+    rawPoints.forEach(p => {
+        let adjustedTime = p.time
+        if (adjustedTime <= lastTime) {
+            adjustedTime = lastTime + epsilon
+        }
+        scatterPoints.push({
+            ...p,
+            time: adjustedTime
+        })
+        lastTime = adjustedTime
+    })
 
     customSeries.setData(scatterPoints)
     chart.timeScale().fitContent()

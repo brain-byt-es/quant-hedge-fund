@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils"
 import { useWatchlist } from "@/components/providers/watchlist-provider"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useStock360 } from "@/components/providers/stock-360-provider"
+import { useTrading } from "@/components/providers/trading-provider"
 
 interface ScannerSignal {
   symbol: string
@@ -58,6 +59,7 @@ export default function TacticalTerminalPage() {
   
   const { watchlist, addToWatchlist, removeFromWatchlist } = useWatchlist()
   const { openStock360 } = useStock360()
+  const { openOrder } = useTrading()
 
   const fetchSignals = useCallback(async () => {
     setIsLoading(true)
@@ -352,11 +354,20 @@ export default function TacticalTerminalPage() {
                         <div className="flex-1 grid grid-cols-2 gap-6">
                             <div className="space-y-3">
                                 <div className="grid grid-cols-2 gap-2">
-                                    <Button className="h-12 bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest flex flex-col shadow-[0_0_20px_rgba(22,163,74,0.2)] border-b-4 border-green-800 active:border-b-0 active:translate-y-1 transition-all">
+                                    <Button 
+                                        className="h-12 bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest flex flex-col shadow-[0_0_20px_rgba(22,163,74,0.2)] border-b-4 border-green-800 active:border-b-0 active:translate-y-1 transition-all"
+                                        onClick={() => selectedSymbol && openOrder(selectedSymbol, 'BUY')}
+                                        disabled={!selectedSymbol}
+                                    >
                                         <span>BUY MKT</span>
                                         <span className="text-[8px] opacity-70">CONFIRM OMEGA</span>
                                     </Button>
-                                    <Button variant="destructive" className="h-12 font-black uppercase tracking-widest flex flex-col border-b-4 border-red-900 active:border-b-0 active:translate-y-1 transition-all">
+                                    <Button 
+                                        variant="destructive" 
+                                        className="h-12 font-black uppercase tracking-widest flex flex-col border-b-4 border-red-900 active:border-b-0 active:translate-y-1 transition-all"
+                                        onClick={() => selectedSymbol && openOrder(selectedSymbol, 'SELL')}
+                                        disabled={!selectedSymbol}
+                                    >
                                         <span>SELL MKT</span>
                                         <span className="text-[8px] opacity-70">FLATTEN</span>
                                     </Button>

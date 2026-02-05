@@ -130,6 +130,72 @@ export const api = {
     return handleResponse(res);
   },
 
+  getInsiderTrades: async (limit = 100) => {
+    const res = await fetch(`${API_BASE_URL}/research/insider-trades?limit=${limit}`);
+    return handleResponse(res);
+  },
+
+  getPoliticianTrades: async (limit = 100) => {
+    const res = await fetch(`${API_BASE_URL}/research/politician-trades?limit=${limit}`);
+    return handleResponse(res);
+  },
+
+  getPoliticianHistory: async (name: string, limit = 100) => {
+    const res = await fetch(`${API_BASE_URL}/research/politician-history/${encodeURIComponent(name)}?limit=${limit}`);
+    return handleResponse(res);
+  },
+
+  getRedditSentiment: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/reddit-sentiment`);
+    return handleResponse(res);
+  },
+
+  getHedgeFunds: async (search?: string) => {
+    let url = `${API_BASE_URL}/research/hedge-funds`;
+    if (search) url += `?search=${encodeURIComponent(search)}`;
+    const res = await fetch(url);
+    return handleResponse(res);
+  },
+
+  getHedgeFundHoldings: async (cik: string, limit = 100) => {
+    const res = await fetch(`${API_BASE_URL}/research/hedge-funds/holdings/${cik}?limit=${limit}`);
+    return handleResponse(res);
+  },
+
+  getIPOCalendar: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/ipo-calendar`);
+    return handleResponse(res);
+  },
+
+  getEarningsCalendar: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/earnings-calendar`);
+    return handleResponse(res);
+  },
+
+  getDividendsCalendar: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/dividends-calendar`);
+    return handleResponse(res);
+  },
+
+  getEconomicCalendar: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/economic-calendar`);
+    return handleResponse(res);
+  },
+
+  getCongressFlow: async (limit = 100) => {
+    const res = await fetch(`${API_BASE_URL}/research/congress-flow?limit=${limit}`);
+    return handleResponse(res);
+  },
+
+  getComparisonData: async (tickerList: string[], category: Record<string, unknown>) => {
+    const res = await fetch(`${API_BASE_URL}/research/compare-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickerList, category }),
+    });
+    return handleResponse(res);
+  },
+
   getTacticalScanner: async (min_price = 2.0, max_price = 20.0, min_gain = 10.0, date?: string, type = "low_float_rocket") => {
     let url = `${API_BASE_URL}/tactical/momentum-scanner?min_price=${min_price}&max_price=${max_price}&min_gain=${min_gain}&type=${type}`;
     if (date) {
@@ -137,6 +203,37 @@ export const api = {
     }
     const res = await fetch(url);
     return handleResponse(res);
+  },
+
+  // Global Search & Master Index
+  globalSearch: async (query: string, limit = 20, asset_type?: string) => {
+      let url = `${API_BASE_URL}/search/global?query=${encodeURIComponent(query)}&limit=${limit}`;
+      if (asset_type) url += `&asset_type=${asset_type}`;
+      const res = await fetch(url);
+      return handleResponse(res);
+  },
+
+  getAssetFilterOptions: async (column: string, asset_type?: string) => {
+      let url = `${API_BASE_URL}/search/options?column=${column}`;
+      if (asset_type) url += `&asset_type=${asset_type}`;
+      const res = await fetch(url);
+      return handleResponse(res);
+  },
+
+  getAssetList: async (asset_type: string, filters?: Record<string, string>, limit = 50, offset = 0) => {
+      let url = `${API_BASE_URL}/search/list?asset_type=${asset_type}&limit=${limit}&offset=${offset}`;
+      if (filters) {
+          Object.entries(filters).forEach(([k, v]) => {
+              if (v) url += `&${k}=${encodeURIComponent(v)}`;
+          });
+      }
+      const res = await fetch(url);
+      return handleResponse(res);
+  },
+
+  getSectors: async (limit = 200, group_by: 'sector' | 'industry' = 'industry') => {
+      const res = await fetch(`${API_BASE_URL}/search/sectors?limit=${limit}&group_by=${group_by}`);
+      return handleResponse(res);
   },
 
   // Research Layer

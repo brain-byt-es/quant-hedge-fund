@@ -321,6 +321,61 @@ class DuckDBManager:
                 )
             """)
             
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS institutional_filers (
+                    cik VARCHAR PRIMARY KEY,
+                    name VARCHAR,
+                    manager VARCHAR,
+                    portfolio_value DOUBLE,
+                    top_holdings VARCHAR, -- Comma separated tickers
+                    strategy VARCHAR,
+                    success_rate DOUBLE,
+                    rank INTEGER,
+                    last_report_date DATE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 26. Institutional Portfolio Holdings (Detailed positions for top funds)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS institutional_portfolio_holdings (
+                    accession_number VARCHAR,
+                    cik VARCHAR,
+                    symbol VARCHAR,
+                    name VARCHAR,
+                    shares DOUBLE,
+                    value DOUBLE,
+                    type VARCHAR, -- Long, Put, Call
+                    weight DOUBLE,
+                    date DATE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (accession_number, symbol, type)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_iph_symbol ON institutional_portfolio_holdings(symbol)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_iph_cik ON institutional_portfolio_holdings(cik)")
+
+            # 27. Master Assets Index (Global Search via FinanceDatabase)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS master_assets_index (
+                    symbol VARCHAR,
+                    name VARCHAR,
+                    type VARCHAR, -- Equity, ETF, Crypto, Index, Currency, Fund
+                    category VARCHAR, -- Sector/Industry or ETF Category
+                    exchange VARCHAR,
+                    country VARCHAR,
+                    currency VARCHAR,
+                    market_cap VARCHAR, -- Can be 'Large Cap', 'Mid Cap' etc. as provided by FinanceDB
+                    isin VARCHAR,
+                    cusip VARCHAR,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (symbol, type)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_symbol ON master_assets_index(symbol)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_name ON master_assets_index(name)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mai_type ON master_assets_index(type)")
+            
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_sym ON historical_prices_fmp(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_date ON historical_prices_fmp(date)")
