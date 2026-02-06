@@ -11,8 +11,11 @@ Located in `/backend`, providing core logic via a modular **FastAPI** monorepo:
     - **Institutional Scalability:** `volume` and price columns use `DOUBLE` precision to handle 40k+ symbols and massive crypto/aggregate data volumes.
     - **Reliability:** Implements **Smart Resume** and **Incremental Saving** (every 200 symbols) to prevent data loss during interruptions.
     - **Stability:** Centralized DB access via shared client to prevent write-lock conflicts.
-    - **FMP API Migration:** For all accounts created after August 2025, use the `/stable/` endpoints (e.g., `stable/income-statement?symbol=AAPL`) instead of the legacy `/api/v3/{symbol}` path to avoid 403 Forbidden errors.
+    - **FMP API Migration:** For all accounts created after August 2025, use the `/stable/` endpoints (e.g., `stable/income-statement?symbol=AAPL`) instead of the legacy `/api/v3/{symbol}` path.
 - **Research Layer (QS Research):** Strategy development and backtesting.
+    - **Zipline Reloaded:** Fully integrated backtesting engine.
+    - **Project-Local Data:** Data is stored in `app/data/zipline` (controlled via `ZIPLINE_ROOT`) for absolute portability and VPS readiness.
+    - **Factor Engine V2:** Powered by **FinanceToolkit**; provides 130+ professional ratios (Piotroski, Altman Z, etc.) with robust SimFin/FMP mapping.
     - **MLflow Integration:** Automated experiment tracking for every run (Sharpe, Alpha, Beta, Max Drawdown).
     - **Monte Carlo:** Statistical validation of strategy significance (P-Value check).
 - **Execution Layer (Omega):** Multi-Broker Adapter Pattern.
@@ -23,73 +26,51 @@ Located in `/backend`, providing core logic via a modular **FastAPI** monorepo:
 - **Global Search Index:** Unified Master Asset Index powered by **JerBouma's FinanceDatabase**.
     - **Coverage:** 350k+ symbols across Equities, ETFs, Crypto, Indices, Currencies, and Funds.
     - **Fast Lookup:** Sub-millisecond async search via `/api/search/global`.
-    - **Price Enrichment:** Automatic real-time quote merging for all visible asset lists.
 
 ### 2. Executive Dashboard (Next.js 14+ / TypeScript)
 Exposed on `localhost:3000`. The central "Mission Control":
 - **Dashboard:** High-density KPI scoreboard (Total Equity, Daily P&L Live Flash, Risk Metrics).
-- **Live Ops:** Professional "Mission Control" with Equity/Drawdown charts, Active Weights table with **Trend Sparklines**, and real-time order blotter.
+- **AI Quant Team:** 4-Quadrant module (Architect Chat, Hypothesis Forge, Code Injector, Config Core) for LLM-powered alpha discovery.
+    - **Mission Control:** Features a **Data Bundle Selector** to switch between `momentum_test_bundle` (Fast) and `historical_prices_fmp` (Global).
 - **Market Hub:** Comprehensive "Stocknear-style" taxonomy.
     - **Sectors & Industries:** Grouped hierarchical view (Overview | Sectors | Industries).
-    - **Deep Linking:** Drill down from Sector/Industry aggregations to detailed filtered stock lists.
     - **Global Filter:** Pro-grade Combobox filtering by Country, Exchange, and Category.
-- **AI Quant Team:** 4-Quadrant module (Architect Chat, Hypothesis Forge, Code Injector, Config Core) for LLM-powered alpha discovery.
-- **Research Lab:** Integrated Backtest history (MLflow REST API) and **Strategy Governance** (Human-in-the-loop approvals and audit trails).
-- **Data Hub:** Real-time data health monitor (Gaps/Stale detection) and manual ingestion orchestration.
+- **Research Lab:** Integrated Backtest history (MLflow REST API) and **Strategy Governance**.
+- **Data Hub:** Real-time data health monitor and manual ingestion orchestration.
 
 ### 3. Strategy Lab (MLflow)
-Exposed on `localhost:5000`. Serves as the "Hedge Fund Archive":
-- Tracks every strategy iteration, parameter set, and performance metric.
-- Stores artifacts (plots, pkl files) for long-term auditability.
+Exposed on `localhost:5000`. Tracks every strategy iteration and performance metric.
 
 ### 4. Automation Layer (Prefect)
-Exposed on `localhost:4200`. The "System Janitor":
-- Orchestrates nightly data flows and automated backtests.
-- Manages retry logic and error reporting for long-running batch jobs.
-
-## Core Tech Stack
-- **Frontend:** Next.js (App Router), Recharts, Shadcn/UI, Tailwind CSS.
-- **Backend API:** FastAPI (Modular Routers), Uvicorn (Single-worker for DB safety).
-- **Database:** DuckDB (Primary OLAP) + Parquet (Caching).
-- **Execution:** `ib-insync`, `alpaca-trade-api` (Adapter Pattern).
-- **AI:** OpenAI (GPT-4o), Groq (Llama 3.3-70b).
-- **Data Sources:** SimFin (Bulk Fundamentals), FMP (Real-time & Global Search), FinanceDatabase (Global Taxonomy).
-- **Orchestration:** Prefect 3.0, MLflow 3.8.
+Exposed on `localhost:4200`. Orchestrates nightly data flows and automated backtests.
 
 ## Infrastructure & Workflows
 
 ### 1. Service Orchestration
 Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
 - Force-kills processes on ports 8000, 3000, 5000, 4200.
-- Releases lingering DuckDB file locks via `lsof` before startup.
+- Releases lingering DuckDB file locks via `lsof` and clears lingering WAL files.
 - Launches FastAPI, MLflow, Prefect, and Next.js in parallel.
 
 ### 2. Data Flow
 1. **Ingest Assets:** FinanceDatabase Sync -> master_assets_index (DuckDB).
 2. **Enrich:** API Requests -> master_assets_index + JIT FMP Quotes.
-3. **Backtest:** Research Lab -> FastAPI -> Zipline -> MLflow (Experiment Tracking).
+3. **Backtest:** AI Quant Team -> FastAPI -> `run_backtest.py` -> Zipline -> MLflow.
 4. **Approve:** Governance Tab -> Human Rationale -> Immutable Audit Trail (DuckDB).
 5. **Trade:** Omega Singleton -> Risk Engine -> Broker Adapter -> Live Market.
 
 ## Design Principles
 - **Aesthetic:** "Precision Industrial" (Deep Black `#09090b`, Glassmorphism, High-Density).
 - **Typography:** `Inter` for UI, `JetBrains Mono` for all financial data and code.
-- **Safety:** Explicit Human-in-the-loop for AI-generated code; Backend-enforced risk circuit breakers.
 - **Headless:** The frontend is a pure observer; all logic and script execution is controlled via the API bridge.
 
 ## Development Guidelines for AI Agents
 - **DB Concurrency:** NEVER open a direct connection to `quant.duckdb` from new scripts; always go through `api.routers.data.get_qs_client()` to use the shared manager.
-- **Type Safety:** All numeric financial data must be cast to `Float64` before DB insertion to prevent C-level overflow errors.
-- **Market Filters:** Use `ILIKE 'Category%'` when filtering by Sector to catch all sub-industries.
-- **AI Provider:** Update `backend/omega/ai_service.py` if switching primary LLM providers.
+- **Zipline Root:** ALWAYS use `ZIPLINE_ROOT` pointing to `data/zipline` in the project root. Never use `~/.zipline`.
+- **Environment Patch:** The project uses a patched version of `FinanceToolkit` (in `venv`) to fix Pandas 2.3 `DatetimeIndex.asfreq` compatibility.
+- **Type Safety:** All numeric financial data must be cast to `Float64` before DB insertion.
 
 ### **Developer Experience (DX) / Troubleshooting**
-- **Search 404 Fix:** If Global Search fails, ensure `api/routers/main_router.py` includes the `search` router and the backend has been restarted.
-- **Python Imports:** If VS Code shows red lines for `polars` or `loguru`, ensured `.vscode/settings.json` points to `backend/venv/bin/python3`.
-- **Invalid Interpreter Fix:** If VS Code says the interpreter is invalid:
-    1. Open Command Palette (`Cmd+Shift+P`).
-    2. Run `Python: Select Interpreter`.
-    3. Choose `Enter interpreter path...`.
-    4. Paste: `${workspaceFolder}/backend/venv/bin/python3`.
-    5. Restart VS Code.
-
+- **Zipline 404 Fix:** If a bundle is not found, ensure the `ZIPLINE_ROOT` environment variable is set to the absolute path of `app/data/zipline`.
+- **Ratio Calculation Failure:** `FinanceToolkit` requires transposed financial statements (Metrics as Rows, Dates as Columns). Ensure `FactorEngine.get_detailed_metrics` maintains this flow.
+- **DuckDB Lock Fix:** If `IO Error: Could not set lock`, find and kill the lingering Python process via `lsof data/quant.duckdb`.
