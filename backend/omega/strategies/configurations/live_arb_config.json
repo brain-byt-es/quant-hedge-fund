@@ -1,0 +1,16 @@
+{
+  "strategy_type": "triangular_arbitrage",
+  "execution_engine": "omega_event_loop",
+  "pairs": [
+    {"base": "USD", "leg1": "EUR", "leg2": "GBP"}
+  ],
+  "risk_parameters": {
+    "min_profit_bps": 2,
+    "max_position_size": 200,
+    "currency_unit": "USD"
+  },
+  "latency_controls": {
+    "poll_frequency": "streaming",
+    "timeout_ms": 500
+  }
+}

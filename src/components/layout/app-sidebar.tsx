@@ -18,6 +18,7 @@ import {
   IconCalendar,
   IconBuildingMonument,
   IconCurrencyBitcoin,
+  IconBrain,
   type Icon,
 } from "@tabler/icons-react"
 
@@ -54,6 +55,11 @@ const data = {
     avatar: "/avatars/user.jpg",
   },
   navQuantScience: [
+    {
+      title: "AI Quant Team",
+      url: "/dashboard/ai-quant",
+      icon: IconBrain,
+    },
     {
       title: "Factor Lab",
       url: "/dashboard/research",

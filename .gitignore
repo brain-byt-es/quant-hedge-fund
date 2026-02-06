@@ -101,3 +101,6 @@ backend/data/
 # Session Logs
 docs/session_logs/
 
+# Local Reference Data
+references/
+

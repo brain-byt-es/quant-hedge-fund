@@ -22,6 +22,7 @@ MLFLOW_EXPERIMENT_NAME = "QuantHedgeFund_Strategy_Lab"
 
 class BacktestParams(BaseModel):
     strategy_name: str = "Momentum_Standard"
+    bundle_name: str = "historical_prices_fmp"
     start_date: str = "2020-01-01"
     end_date: str = "2024-12-31"
     capital_base: float = 100000.0
@@ -99,6 +100,7 @@ async def execute_backtest(params: BacktestParams, background_tasks: BackgroundT
     config = {
         "experiment_name": MLFLOW_EXPERIMENT_NAME,
         "strategy_name": params.strategy_name,
+        "bundle_name": params.bundle_name,
         "run_name": f"{params.strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         "start_date": params.start_date,
         "end_date": params.end_date,

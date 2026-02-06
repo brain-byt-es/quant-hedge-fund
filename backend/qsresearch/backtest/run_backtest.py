@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 from datetime import datetime
 import pickle
+import os
 
 import pandas as pd
 from loguru import logger
@@ -55,6 +56,14 @@ def run_backtest(
     """
     settings = get_settings()
     
+    # Set ZIPLINE_ROOT for Zipline engine (Project-local)
+    cwd = Path.cwd()
+    if cwd.name == "backend":
+        zipline_root = cwd.parent / "data" / "zipline"
+    else:
+        zipline_root = cwd / "data" / "zipline"
+    os.environ["ZIPLINE_ROOT"] = str(zipline_root.absolute())
+    
     if output_dir is None:
         output_dir = settings.dashboard_data_dir / "backtests"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +77,25 @@ def run_backtest(
     end_date = config.get("end_date", datetime.now().strftime("%Y-%m-%d"))
     capital_base = config.get("capital_base", 1_000_000)
     
+    # --- ZIPLINE STRATEGY DETECTION ---
+    strategy_name = config.get("strategy_name", "unnamed")
+    zipline_file = Path(f"qsresearch/strategies/{strategy_name.lower().replace(' ', '_')}.py")
+    if not zipline_file.exists() and strategy_name == "Momentum_Standard":
+        zipline_file = Path("qsresearch/strategies/momentum.py")
+
+    if zipline_file.exists():
+        logger.info(f"Zipline strategy detected: {zipline_file}")
+        return _run_zipline_backtest(
+            zipline_file, 
+            bundle_name, 
+            start_date, 
+            end_date, 
+            capital_base, 
+            config, 
+            output_dir, 
+            log_to_mlflow
+        )
+
     # MLflow setup
     if log_to_mlflow and MLFLOW_AVAILABLE:
         # Force local file store for robustness (avoids HTTP connection refused)
@@ -166,6 +194,84 @@ def run_backtest(
             mlflow.end_run()
 
 
+def _run_zipline_backtest(
+    strategy_file: Path,
+    bundle_name: str,
+    start_date: str,
+    end_date: str,
+    capital_base: float,
+    config: Dict[str, Any],
+    output_dir: Path,
+    log_to_mlflow: bool
+) -> Dict[str, Any]:
+    """Internal helper to execute Zipline Reloaded via its Python API."""
+    import pandas as pd
+    from zipline import run_algorithm
+    
+    logger.info(f"Executing Zipline algorithm: {strategy_file.name}")
+    
+    # Read strategy code
+    with open(strategy_file, "r") as f:
+        code = f.read()
+        
+    try:
+        # 1. Run Algorithm
+        # Note: we use UTC for Zipline dates
+        performance = run_algorithm(
+            start=pd.Timestamp(start_date, tz='UTC'),
+            end=pd.Timestamp(end_date, tz='UTC'),
+            initialize=None, # Already in code
+            capital_base=capital_base,
+            bundle=bundle_name,
+            handle_data=None,
+            before_trading_start=None,
+            script=code,
+            data_frequency='daily'
+        )
+        
+        # 2. Process Performance
+        # Calculate standard metrics
+        metrics = calculate_all_metrics(performance)
+        mc_metrics = run_monte_carlo_check(performance["returns"])
+        metrics.update(mc_metrics)
+        
+        # 3. Save & Log
+        results = {
+            "performance": performance,
+            "metrics": metrics,
+            "config": config,
+            "run_date": datetime.now().isoformat(),
+        }
+        
+        # Pickle for local storage
+        output_path = output_dir / f"zipline_perf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        with open(output_path, "wb") as f:
+            pickle.dump(results, f)
+            
+        # MLflow logging
+        if log_to_mlflow and MLFLOW_AVAILABLE:
+            experiment_name = config.get("experiment_name", "QuantHedgeFund_Strategy_Lab")
+            mlflow.set_experiment(experiment_name)
+            
+            # Force local tracking URI
+            mlruns_path = Path.cwd() / "mlruns"
+            mlflow.set_tracking_uri(f"file://{mlruns_path.absolute()}")
+            
+            with mlflow.start_run(run_name=config.get("run_name", f"zipline_{strategy_file.stem}")):
+                _log_params_to_mlflow(config)
+                for name, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        mlflow.log_metric(name, value)
+                mlflow.log_artifact(str(output_path))
+                
+        logger.info(f"Zipline Backtest Complete. Total Return: {metrics.get('portfolio_total_return', 0):.2%}")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Zipline Engine Failure: {e}")
+        raise
+
+
 def _load_price_data(
     bundle_name: str,
     start_date: str,
@@ -198,7 +304,7 @@ def _apply_preprocessing(
     }
     
     for step in preprocessing_config:
-        func_name = step.get("name")  # Fixed: was "func", now "name" to match config
+        func_name = step.get("name")
         params = step.get("params", {})
         
         if func_name in PREPROCESSING_FUNCS:
@@ -215,19 +321,11 @@ def _apply_factors(
 ) -> pd.DataFrame:
     """Apply factor calculations from config."""
     # NOTE: The new FactorEngine V2 operates directly on DuckDB (factor_ranks_snapshot).
-    # Legacy on-the-fly calculation is deprecated for performance reasons.
     # Strategies should fetch pre-calculated ranks from DB.
-    
-    # from qsresearch.features import FactorEngine
-    # engine = FactorEngine()
-    
     for factor_spec in factors_config:
         name = factor_spec.get("name")
-        params = factor_spec.get("params", {})
-        
         if name:
             logger.info(f"Skipping legacy factor calc: {name} (using DB snapshot instead)")
-            # df = engine.calculate_factor(df, name, **params)
     
     return df
 
@@ -241,8 +339,6 @@ def _run_algorithm(
 ) -> pd.DataFrame:
     """
     Run the trading algorithm.
-    
-    This is a simplified version. For production, integrate with Zipline Reloaded.
     """
     from qsresearch.strategies.factor import algorithms as algo_module
     
@@ -290,28 +386,18 @@ def _simulate_portfolio(
         returns_matrix = price_matrix.pct_change(fill_method=None).fillna(0)
         
         # Align signals to returns (fill missing dates/symbols with 0)
-        # Assuming signals are 1 for hold, 0 for cash
         aligned_signals = signals.reindex(index=returns_matrix.index, columns=returns_matrix.columns).fillna(0)
         
-        # Shift signals by 1 day (trade at Close of signal day affects Next Day return)
-        # OR assume trade at Open of next day. Simple approach: Signal T -> Return T+1
+        # Shift signals by 1 day
         aligned_signals = aligned_signals.shift(1).fillna(0)
         
         # Calculate Strategy Returns
-        # Element-wise multiplication
         strategy_assets_returns = returns_matrix * aligned_signals
-        
-        # Portfolio Return = Mean of active assets (Equal Weight)
-        # Sum of returns / Count of active positions
         position_counts = aligned_signals.sum(axis=1)
-        
-        # Avoid division by zero
         portfolio_returns = strategy_assets_returns.sum(axis=1) / position_counts.replace(0, 1)
         
-        # --- Transaction Costs (Only apply if positions are active) ---
+        # Transaction Costs
         commission_bps = 0.0005 
-        
-        # Create a cost mask: 0 if in cash, commission if holding
         cost_mask = (position_counts > 0).astype(float) * commission_bps
         adjusted_returns = portfolio_returns - cost_mask
         
@@ -344,8 +430,6 @@ def run_monte_carlo_check(
 ) -> Dict[str, float]:
     """
     Monte-Carlo Stability Check.
-    Shuffles returns multiple times and calculates the probability 
-    that a random sequence achieves a better Sharpe than the strategy.
     """
     import numpy as np
     
@@ -366,33 +450,23 @@ def run_monte_carlo_check(
     return {
         "mc_p_value": p_value,
         "mc_avg_shuffled_sharpe": float(np.mean(shuffled_sharpes)),
-        "mc_stability_score": 1.0 - p_value # Higher is more stable/less random
+        "mc_stability_score": 1.0 - p_value 
     }
 
 
 def _fallback_simulation(capital_base: float, start_date: str, end_date: str) -> pd.DataFrame:
     """Fallback simulation when real data is unavailable."""
     import numpy as np
-    
     dates = pd.date_range(start=start_date, end=end_date, freq="B")
-    
-    # Generate realistic random returns (mean ~10% annual, ~15% volatility)
-    np.random.seed(42)  # Reproducible for testing
-    daily_mean = 0.10 / 252  # 10% annual return
-    daily_std = 0.15 / np.sqrt(252)  # 15% annual volatility
-    
-    returns = np.random.normal(daily_mean, daily_std, len(dates))
-    returns[0] = 0  # First day has no return
-    
+    returns = np.random.normal(0.10 / 252, 0.15 / np.sqrt(252), len(dates))
+    returns[0] = 0 
     portfolio_values = capital_base * np.cumprod(1 + returns)
     
-    performance = pd.DataFrame({
+    return pd.DataFrame({
         "date": dates,
         "portfolio_value": portfolio_values,
         "returns": returns,
     })
-    
-    return performance
 
 
 def _log_params_to_mlflow(config: Dict[str, Any]) -> None:
@@ -404,13 +478,11 @@ def _log_params_to_mlflow(config: Dict[str, Any]) -> None:
             if isinstance(v, dict):
                 items.extend(flatten_dict(v, new_key).items())
             else:
-                items.append((new_key, str(v)[:250]))  # MLflow param limit
+                items.append((new_key, str(v)[:250]))  
         return dict(items)
     
     flat_config = flatten_dict(config)
-    
     for key, value in flat_config.items():
         try:
             mlflow.log_param(key, value)
-        except Exception as e:
-            logger.warning(f"Failed to log param {key}: {e}")
+        except: pass

@@ -130,6 +130,27 @@ export const api = {
     return handleResponse(res);
   },
 
+  getStockRatios: async (symbol: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/stock-ratios/${symbol}`);
+    return handleResponse(res);
+  },
+
+  getFinancials: async (symbol: string) => {
+    const res = await fetch(`${API_BASE_URL}/research/financials/${symbol}`);
+    return handleResponse(res);
+  },
+
+  getIndustryDetails: async (category: string, countries?: string[]) => {
+    let url = `${API_BASE_URL}/search/industry/${encodeURIComponent(category)}`;
+    if (countries && countries.length > 0) {
+      const params = new URLSearchParams();
+      countries.forEach(c => params.append('countries', c));
+      url += `?${params.toString()}`;
+    }
+    const res = await fetch(url);
+    return handleResponse(res);
+  },
+
   getInsiderTrades: async (limit = 100) => {
     const res = await fetch(`${API_BASE_URL}/research/insider-trades?limit=${limit}`);
     return handleResponse(res);
@@ -242,18 +263,6 @@ export const api = {
 
   getSectors: async (limit = 200, group_by: 'sector' | 'industry' = 'industry') => {
       const res = await fetch(`${API_BASE_URL}/search/sectors?limit=${limit}&group_by=${group_by}`);
-      return handleResponse(res);
-  },
-
-  getIndustryDetails: async (category: string, countries?: string[]) => {
-      let url = `${API_BASE_URL}/search/industry/${encodeURIComponent(category)}`;
-      if (countries && countries.length > 0) {
-          countries.forEach(c => {
-              const prefix = url.includes('?') ? '&' : '?';
-              url += `${prefix}countries=${encodeURIComponent(c)}`;
-          });
-      }
-      const res = await fetch(url);
       return handleResponse(res);
   },
 

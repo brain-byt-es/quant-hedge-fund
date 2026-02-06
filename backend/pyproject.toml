@@ -49,6 +49,12 @@ dependencies = [
     
     # AI Integration
     "openai>=1.3.0",
+    "financedatabase>=2.3.0",
+
+    # Institutional Math & Data (Engine Swap)
+    "financetoolkit>=2.0.0",
+    "openbb>=4.0.0",
+    "riskfolio-lib>=6.0.0"
 ]
 
 [project.optional-dependencies]

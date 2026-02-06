@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // --- TYPES ---
 
@@ -57,6 +58,7 @@ export default function AIQuantPage() {
       prefect: { active: false, url: "http://127.0.0.1:4200" }
   })
 
+  const [globalBundle, setGlobalBundle] = useState("momentum_test_bundle")
   const [chatInput, setChatInput] = useState("")
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
       {role: 'ai', content: "Systems online. Architect ready. Neural bridge established. Specify objective.", type: 'text'}
@@ -224,6 +226,7 @@ export default function AIQuantPage() {
 
           const executionConfig = {
               strategy_name: h.strategy_name || "AI_Strategy",
+              bundle_name: globalBundle, // Use the state from sidebar
               start_date: "2021-01-01",
               end_date: "2024-12-31",
               capital_base: 100000,
@@ -249,7 +252,7 @@ export default function AIQuantPage() {
               role: 'ai',
               tool: 'Architect',
               type: 'confirmation',
-              content: `Configuration ready for '${h.strategy_name}'.`,
+              content: `Configuration ready for '${h.strategy_name}'. Verify the bundle selection before execution.`,
               data: { config: executionConfig, configStr: configStr }
           }])
 
@@ -310,6 +313,18 @@ export default function AIQuantPage() {
         <div>
           <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-4 tracking-widest">Data Settings</h3>
           <div className="space-y-4">
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Zipline Bundle</label>
+              <Select value={globalBundle} onValueChange={setGlobalBundle}>
+                <SelectTrigger className="h-8 bg-background border-border text-[10px] font-mono uppercase font-bold">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="momentum_test_bundle">Test (Fast)</SelectItem>
+                    <SelectItem value="historical_prices_fmp">Global (Slow)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Dataset directory</label>
               <Input className="h-8 bg-background border-border text-xs font-mono" defaultValue="temp_files/dashboard_demo" />

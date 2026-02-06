@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "strategy_name": "Core_Vol_Targeting",
+    "target_volatility_annual": 0.10
+  },
+  "universe": {
+    "assets": ["SPY", "TLT", "GLD"],
+    "benchmark": "SPY"
+  },
+  "risk_model": {
+    "estimator": "historical_volatility",
+    "lookback_window": 30,
+    "vol_cap": 0.20
+  },
+  "allocation_logic": {
+    "method": "inverse_volatility",
+    "leverage_cap": 1.5,
+    "rebalance_threshold": 0.05
+  }
+}

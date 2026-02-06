@@ -15,6 +15,7 @@ export function StrategyEditor() {
   const [loading, setLoading] = useState(false)
   const [stratName, setStratName] = useState("Momentum_Standard")
   const [universe, setUniverse] = useState("sp500")
+  const [bundle, setBundle] = useState("momentum_test_bundle")
   const [algoCode, setAlgoCode] = useState(`# Example: Simple Moving Average Crossover
 def compute_signals(context, data):
     hist = data.history(context.assets, 'price', 50, '1d')
@@ -32,6 +33,7 @@ def compute_signals(context, data):
       try {
           await api.runBacktest({
               strategy_name: stratName,
+              bundle_name: bundle,
               start_date: "2020-01-01",
               end_date: "2024-12-31",
               capital_base: 100000,
@@ -109,6 +111,18 @@ def compute_signals(context, data):
                                 <SelectItem value="sp500">S&P 500 Constituents</SelectItem>
                                 <SelectItem value="nasdaq100">NASDAQ 100</SelectItem>
                                 <SelectItem value="custom">Custom List</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Data Bundle</Label>
+                        <Select value={bundle} onValueChange={setBundle}>
+                            <SelectTrigger className="font-mono text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="momentum_test_bundle">Momentum Test (Fast)</SelectItem>
+                                <SelectItem value="historical_prices_fmp">FMP Global (Slow/67k)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

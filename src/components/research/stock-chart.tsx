@@ -58,10 +58,13 @@ export function StockChart({ symbol, interval = "Daily", showIndicators = true }
     const fetchData = async () => {
         setLoading(true)
         try {
-            // Note: Currently getPriceHistory returns daily data. 
-            // If tactical, we should ideally call an intraday endpoint.
             const data = await api.getPriceHistory(symbol)
             const typedData = data as PricePoint[]
+
+            if (!typedData || typedData.length === 0) {
+                console.warn(`No price history for ${symbol}`)
+                return
+            }
 
             // 1. Candlestick Series
             const candleSeries = chart.addSeries(CandlestickSeries, {

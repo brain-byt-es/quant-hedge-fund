@@ -391,14 +391,12 @@ def get_price_history(symbol: str, lookback: int = 252):
                     pl.col("close")
                 ).to_dicts()
             else:
-                logger.warning(f"No price history found for {symbol}")
-                raise HTTPException(status_code=404, detail=f"No price history found for symbol: {symbol}")
+                logger.debug(f"No price history found for {symbol}")
+                return []
                 
-        except HTTPException as http_ex:
-            raise http_ex
         except Exception as db_err:
             logger.error(f"Price history query failed for {symbol}: {db_err}")
-            raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_err)}")
+            return []
         
     except HTTPException as http_ex:
         raise http_ex
@@ -459,6 +457,38 @@ def update_algorithms_code(request: UpdateCodeRequest):
         return {"status": "success", "message": "Algorithms updated successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update algorithms: {e}")
+
+@router.get("/financials/{symbol}")
+def get_financial_statements(symbol: str):
+    """Fetch raw historical financial statements for the UI tables."""
+    try:
+        client = get_qs_client()
+        income = client.query(f"SELECT * FROM bulk_income_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
+        balance = client.query(f"SELECT * FROM bulk_balance_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
+        cash = client.query(f"SELECT * FROM bulk_cashflow_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date ASC LIMIT 20").to_dicts() # ASC for internal logic, but UI will flip
+        
+        return {
+            "income": income,
+            "balance": balance,
+            "cash": cash
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch financials for {symbol}: {e}")
+        return {"income": [], "balance": [], "cash": []}
+
+@router.get("/stock-ratios/{symbol}")
+def get_stock_ratios(symbol: str):
+    """
+    Get 130+ analyst-grade ratios and models via FinanceToolkit.
+    Powering the Deep Analysis tabs in Stock 360.
+    """
+    try:
+        client = get_qs_client()
+        engine = FactorEngine(db_mgr=client._db_manager)
+        return engine.get_detailed_metrics(symbol)
+    except Exception as e:
+        logger.error(f"FinanceToolkit ratios failed for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/stock-360/{symbol}")
 def get_stock_360(symbol: str):

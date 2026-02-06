@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import date
 import os
+import sys
 
 import polars as pl
 import pandas as pd
@@ -19,49 +20,58 @@ from qsconnect.database.duckdb_manager import DuckDBManager
 class ZiplineBundler:
     """
     Builds Zipline-compatible data bundles.
-    
-    Zipline Reloaded requires data in a specific format for its
-    event-based backtesting engine. This class handles the conversion
-    from DuckDB to Zipline bundles.
     """
     
     def __init__(self, db_manager: DuckDBManager):
         """
-        Initialize Zipline bundler.
-        
-        Args:
-            db_manager: DuckDB manager instance
+        Initialize Zipline bundler with project-local paths.
         """
         self._db_manager = db_manager
-        self._bundle_dir = Path.home() / ".zipline" / "custom_bundles"
+        
+        # Determine project root
+        cwd = Path.cwd()
+        if cwd.name == "backend":
+            project_root = cwd.parent
+        else:
+            project_root = cwd
+            
+        self._zipline_root = project_root / "data" / "zipline"
+        self._bundle_dir = self._zipline_root / "custom_bundles"
+        
+        self._zipline_root.mkdir(parents=True, exist_ok=True)
         self._bundle_dir.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"Zipline bundler initialized. Bundle dir: {self._bundle_dir}")
-    
+        # Set ZIPLINE_ROOT for current process
+        os.environ["ZIPLINE_ROOT"] = str(self._zipline_root.absolute())
+        
+        logger.info(f"Zipline bundler initialized. Root: {self._zipline_root}")
+
     def build_bundle(
         self,
         bundle_name: str = "historical_prices_fmp",
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
+        symbols: Optional[list] = None,
     ) -> Path:
         """
         Build a Zipline bundle from database data.
-        
-        Args:
-            bundle_name: Name for the bundle
-            start_date: Start date for data inclusion
-            end_date: End date for data inclusion
-            
-        Returns:
-            Path to the created bundle directory
         """
         logger.info(f"Building Zipline bundle: {bundle_name}")
         
         # Get price data from database
-        prices = self._db_manager.get_prices(
-            start_date=start_date.isoformat() if start_date else None,
-            end_date=end_date.isoformat() if end_date else None,
-        )
+        if symbols:
+            # Construct symbol filter SQL
+            sym_list = "', '".join(symbols)
+            sql = f"SELECT symbol, date, open, high, low, close, volume FROM historical_prices_fmp WHERE symbol IN ('{sym_list}')"
+            if start_date: sql += f" AND date >= '{start_date.isoformat()}'"
+            if end_date: sql += f" AND date <= '{end_date.isoformat()}'"
+            sql += " ORDER BY symbol, date"
+            prices = self._db_manager.query(sql)
+        else:
+            prices = self._db_manager.get_prices(
+                start_date=start_date.isoformat() if start_date else None,
+                end_date=end_date.isoformat() if end_date else None,
+            )
         
         if prices.is_empty():
             logger.warning("No price data available for bundle")
@@ -74,58 +84,32 @@ class ZiplineBundler:
         # Write price data in Zipline format
         self._write_daily_bundle(prices, bundle_path)
         
-        # Write asset metadata
-        self._write_asset_metadata(prices, bundle_path)
-        
-        logger.info(f"Bundle created: {bundle_path}")
+        logger.info(f"Bundle CSVs created at: {bundle_path}")
         return bundle_path
     
     def _write_daily_bundle(self, prices: pl.DataFrame, bundle_path: Path) -> None:
         """Write daily price data in Zipline CSVDIR format."""
-        # Convert to pandas for Zipline compatibility
         df = prices.to_pandas()
-        
-        # Ensure required columns
         required_cols = ["symbol", "date", "open", "high", "low", "close", "volume"]
         df = df[required_cols].copy()
-        
-        # Convert date to datetime
         df["date"] = pd.to_datetime(df["date"])
         
-        # Zipline expects: date,open,high,low,close,volume,dividend,split
-        # We add dummy dividend/split if missing
-        if "dividend" not in df.columns:
-            df["dividend"] = 0.0
-        if "split" not in df.columns:
-            df["split"] = 1.0
-            
         daily_path = bundle_path / "daily"
         daily_path.mkdir(parents=True, exist_ok=True)
         
-        # Write individual CSVs
         count = 0
         for symbol, group in df.groupby("symbol"):
             filename = f"{symbol}.csv"
-            # Zipline expects date as index? No, just a column named 'date'
             group.to_csv(daily_path / filename, index=False)
             count += 1
         
         logger.info(f"Wrote {count} symbol CSVs to {daily_path}")
-    
-    def _write_asset_metadata(self, prices: pl.DataFrame, bundle_path: Path) -> None:
-        # csvdir doesn't need explicit metadata file usually, it infers from CSVs.
-        # But we keep it if we write a custom ingestor later.
-        pass
 
     def register_bundle(self, bundle_name: str) -> None:
         """
-        Register a bundle with Zipline via ~/.zipline/extension.py
-        
-        Uses a custom ingest function to ensure robust date parsing.
+        Register a bundle with Zipline via local extension.py.
         """
-        extension_path = Path.home() / ".zipline" / "extension.py"
-        extension_path.parent.mkdir(parents=True, exist_ok=True)
-        
+        extension_path = self._zipline_root / "extension.py"
         bundle_path = self._bundle_dir / bundle_name / "daily"
         
         # Create custom ingest code
@@ -154,123 +138,112 @@ def custom_csv_ingest(environ,
     data = []
     metadata = []
     
-    # List files
     try:
         files = [f for f in os.listdir(path) if f.endswith(".csv")]
     except FileNotFoundError:
-        return # Nothing to ingest
+        return
         
     for file in files:
         symbol = file.split(".")[0]
-        
-        # KEY FIX: Explicitly parse dates
-        df = pd.read_csv(os.path.join(path, file), index_col='date', parse_dates=['date'])
-        df = df.sort_index()
-        
-        # Localize if naive to match Zipline calendar (UTC)
-        if df.index.tz is None:
-            df.index = df.index.tz_localize('UTC')
-        else:
-            df.index = df.index.tz_convert('UTC')
-        
-        if df.empty: continue
-        
-        # FIX: Reindex to calendar to prevent "Missing sessions" error
-        # Get start/end from data
-        start_dt = df.index[0]
-        end_dt = df.index[-1]
-        
-        # Pass NAIVE timestamps to sessions_in_range to avoid timezone attribution errors
-        # exchange_calendars assumes naive = UTC
-        start_naive = start_dt.tz_localize(None)
-        end_naive = end_dt.tz_localize(None)
-        
-        # Get relevant sessions from calendar (returns UTC index)
-        sessions = calendar.sessions_in_range(start_naive, end_naive)
-        
-        # Reindex (df.index is UTC, sessions is UTC -> Alignment works)
-        df = df.reindex(sessions)
-        
-        # Forward fill prices (if data missing for a day)
-        df['close'] = df['close'].ffill()
-        df['open'] = df['open'].fillna(df['close'])
-        df['high'] = df['high'].fillna(df['close'])
-        df['low'] = df['low'].fillna(df['close'])
-        
-        # Fill volume with 0
-        df['volume'] = df['volume'].fillna(0)
-        
-        # Drop any remaining NaNs (if start date was before data actually started due to calendar mismatch)
-        df = df.dropna()
-        
-        if df.empty: continue
-        
-        # Update start/end after cleaning
-        start_date = df.index[0]
-        end_date = df.index[-1]
-        
-        # Auto-assign SID
-        sid = len(metadata) 
-        
-        metadata.append((sid, symbol, start_date, end_date, start_date, end_date, 'NYSE', 'QSConnect'))
-        data.append((sid, df))
+        try:
+            df = pd.read_csv(os.path.join(path, file), index_col='date', parse_dates=['date'])
+            if df.empty: continue
+            
+            df = df.sort_index()
+            
+            if df.index.tz is None:
+                df.index = df.index.tz_localize('UTC')
+            else:
+                df.index = df.index.tz_convert('UTC')
+            
+            start_dt = df.index[0]
+            end_dt = df.index[-1]
+            
+            # Align sessions with UTC
+            try:
+                sessions = calendar.sessions_in_range(start_dt.tz_localize(None), end_dt.tz_localize(None))
+                sessions = sessions.tz_localize('UTC')
+            except: continue
+                
+            df = df.reindex(sessions)
+            df['close'] = df['close'].ffill()
+            df['open'] = df['open'].fillna(df['close'])
+            df['high'] = df['high'].fillna(df['close'])
+            df['low'] = df['low'].fillna(df['close'])
+            df['volume'] = df['volume'].fillna(0)
+            df = df.dropna()
+            
+            if df.empty: continue
+            
+            sid = len(metadata) 
+            metadata.append({{
+                'sid': sid,
+                'symbol': symbol,
+                'asset_name': symbol,
+                'start_date': df.index[0],
+                'end_date': df.index[-1],
+                'first_traded': df.index[0],
+                'auto_close_date': df.index[-1],
+                'exchange': 'NYSE'
+            }})
+            data.append((sid, df))
+        except: continue
     
-    # Write metadata
-    metadata_df = pd.DataFrame(metadata, columns=[
-        'sid', 'symbol', 'start_date', 'end_date', 'auto_close_date', 
-        'exchange', 'exchange_full', 'asset_name'
-    ])
-    asset_db_writer.write(metadata_df)
-    
-    # Write data
-    daily_bar_writer.write(data, show_progress=show_progress)
-    
-    # Write empty adjustments (required)
-    adjustment_writer.write(divs_splits['splits'], divs_splits['divs'])
+    if metadata:
+        equities_df = pd.DataFrame(metadata)
+        equities_df['sid'] = equities_df['sid'].astype(int)
+        equities_df = equities_df.set_index('sid')
+        
+        exchanges_df = pd.DataFrame([
+            {{'exchange': 'NYSE', 'canonical_name': 'NYSE', 'country_code': 'US'}}
+        ]).set_index('exchange')
+        
+        asset_db_writer.write(equities=equities_df, exchanges=exchanges_df)
+        daily_bar_writer.write(data, show_progress=show_progress)
+        adjustment_writer.write(divs_splits['splits'], divs_splits['divs'])
 
-# Register {bundle_name} bundle
 register(
     "{bundle_name}",
     custom_csv_ingest,
     calendar_name="NYSE", 
 )
 '''
-        # Ensure file exists
-        if not extension_path.exists():
-            extension_path.touch()
-            
-        content = extension_path.read_text()
-        if f'register(\n    "{bundle_name}"' in content:
-             pass # Already registered
-        else:
-             with open(extension_path, "a") as f:
-                f.write(extension_code)
-             logger.info(f"Registered bundle: {bundle_name}")
+        with open(extension_path, "w") as f:
+            f.write(extension_code)
+        logger.info(f"Registered bundle locally: {extension_path}")
 
     def ingest_bundle(self, bundle_name: str) -> None:
         """
-        Ingest a bundle into Zipline.
+        Ingest a bundle into Zipline using local project root.
         """
-        import subprocess
-        
-        # Ensure registration exists before ingestion
         self.register_bundle(bundle_name)
         
-        logger.info(f"Ingesting bundle: {bundle_name}")
+        logger.info(f"Ingesting bundle locally: {bundle_name}")
         
         try:
+            # Find zipline binary
+            venv_bin = Path(sys.executable).parent
+            zipline_bin = venv_bin / "zipline"
+            
+            # CRITICAL: Pass ZIPLINE_ROOT to the subprocess
+            env = os.environ.copy()
+            env["ZIPLINE_ROOT"] = str(self._zipline_root.absolute())
+            
+            import subprocess
             result = subprocess.run(
-                ["zipline", "ingest", "-b", bundle_name],
+                [str(zipline_bin), "ingest", "-b", bundle_name],
                 capture_output=True,
                 text=True,
                 check=True,
+                env=env
             )
-            logger.info(f"Bundle ingested successfully: {result.stdout}")
+            logger.info(f"Bundle ingested successfully to project folder.")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to ingest bundle: {e.stderr}")
             raise
-    
+
     def list_bundles(self) -> list:
-        """List available bundles."""
+        """List available bundles in the local project directory."""
+        if not self._bundle_dir.exists(): return []
         bundles = [d.name for d in self._bundle_dir.iterdir() if d.is_dir()]
         return bundles

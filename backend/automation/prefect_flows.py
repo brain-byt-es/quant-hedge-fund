@@ -297,6 +297,47 @@ def task_aggregate_market_taxonomy():
     finally:
         con.close()
 
+@task
+def task_sync_finance_database():
+    """Weekly: Refresh the global master index from FinanceDatabase (JerBouma)."""
+    from qsconnect.ingestion.finance_db_sync import FinanceDBSosync
+    syncer = FinanceDBSosync()
+    syncer.sync_all()
+    return "FinanceDatabase sync complete"
+
+@task
+def task_discover_ipos():
+    """Daily: Discover new IPOs via OpenBB/FMP and add to master index."""
+    client = QSConnectClient()
+    logger.info("🔍 Searching for new IPOs and listings...")
+    
+    try:
+        # Use FMP stable endpoint for latest IPOs
+        ipos_df = client._fmp_client.get_ipo_calendar()
+        if not ipos_df.empty:
+            con = client._db_manager.connect()
+            try:
+                # Basic mapping to master_assets_index
+                standard_df = pd.DataFrame()
+                standard_df['symbol'] = ipos_df['symbol']
+                standard_df['name'] = ipos_df.get('company', ipos_df.get('name', 'Unknown'))
+                standard_df['type'] = 'Equity'
+                standard_df['category'] = 'New IPO'
+                standard_df['exchange'] = ipos_df['exchange']
+                standard_df['country'] = 'United States' # Default for FMP calendar
+                standard_df['updated_at'] = datetime.now()
+                
+                con.register('temp_ipos', standard_df)
+                con.execute("""
+                    INSERT OR IGNORE INTO master_assets_index (symbol, name, type, category, exchange, country, updated_at)
+                    SELECT symbol, name, type, category, exchange, country, updated_at FROM temp_ipos
+                """)
+                logger.success(f"Added {len(standard_df)} potential new listings to index.")
+            finally:
+                con.close()
+    except Exception as e:
+        logger.warning(f"IPO discovery skipped: {e}")
+
 # ==========================================
 # FLOW 2: Daily Sync (Scheduled)
 # ==========================================
@@ -306,13 +347,16 @@ def daily_sync_flow():
     """Lightweight daily update (Yesterday's EOD)."""
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     
+    # Discovery phase
+    task_discover_ipos()
     task_update_stock_list()
+    
+    # Data phase
     task_ingest_prices(start_date=yesterday, desc="Daily EOD")
-    # We only fetch 1 year of fundamentals to check for new filings
     task_ingest_fundamentals(limit=1) 
     task_rebuild_bundle()
     
-    # NEW: Run taxonomy aggregation
+    # Analytics phase
     task_aggregate_market_taxonomy()
     
     return "Daily sync successful"

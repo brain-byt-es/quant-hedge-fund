@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "strategy_name": "Core_Momentum_Factor",
+    "version": "1.0",
+    "author": "QuantTeam"
+  },
+  "universe": {
+    "filter_type": "liquid_us_equities",
+    "min_price": 5.00,
+    "min_volume_avg_30d": 1000000,
+    "exclude_etfs": true
+  },
+  "alpha_model": {
+    "factor": "momentum_12m_1m",
+    "params": {
+      "window_length": 252, 
+      "gap_window": 21
+    },
+    "logic": "rank_descending"
+  },
+  "portfolio_construction": {
+    "weighting": "equal_weight",
+    "top_n_percentile": 1.0,
+    "rebalance_schedule": {
+      "frequency": "monthly",
+      "date_rule": "month_start",
+      "time_rule": "market_open",
+      "offset_minutes": 60
+    }
+  },
+  "execution": {
+    "order_type": "market_on_open"
+  }
+}

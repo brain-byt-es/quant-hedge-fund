@@ -31,9 +31,6 @@ export default function IndustryOverview() {
         const loadData = async () => {
             setIsLoading(true)
             try {
-                // Determine markets based on settings
-                const markets = settings.showOnlyPreferred ? settings.preferredMarkets : undefined
-                
                 // Fetch Aggregated Industries
                 // Note: getSectors doesn't support live filtering yet, but the aggregation task handles it.
                 // For now, we show the global map structure but grouped.
