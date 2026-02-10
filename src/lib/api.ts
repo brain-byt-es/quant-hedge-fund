@@ -261,6 +261,27 @@ export const api = {
       return handleResponse(res);
   },
 
+  scanMarket: async (filters: {
+      min_price?: number;
+      max_price?: number;
+      min_volume?: number;
+      min_relative_volume?: number;
+      min_gap_percent?: number;
+      max_gap_percent?: number;
+      min_market_cap?: number;
+      max_float?: number;
+      limit?: number;
+  }) => {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+              params.append(key, value.toString());
+          }
+      });
+      const res = await fetch(`${API_BASE_URL}/screener/scan?${params.toString()}`);
+      return handleResponse(res);
+  },
+
   getSectors: async (limit = 200, group_by: 'sector' | 'industry' = 'industry') => {
       const res = await fetch(`${API_BASE_URL}/search/sectors?limit=${limit}&group_by=${group_by}`);
       return handleResponse(res);

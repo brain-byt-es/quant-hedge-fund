@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button"
 import { CheckCircle2, Loader2, Database, Square, Timer, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface ProcessStep {
   name: string
@@ -137,17 +143,42 @@ export function ProcessMonitor() {
                         <Square className="mr-2 h-3 w-3 fill-current" /> Stop Ingestion
                     </Button>
                 ) : (
-                    <>
-                        <Button size="sm" variant="outline" className="h-8 text-[10px] uppercase font-bold border-border hover:bg-accent w-full justify-start" onClick={() => handleRunPipeline("daily")}>
-                            <Zap className="mr-2 h-3 w-3 fill-current text-chart-4" /> Daily Sync
-                        </Button>
-                        <Button size="sm" variant="default" className="h-8 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground w-full justify-start" onClick={() => handleRunPipeline("backfill")}>
-                            <Database className="mr-2 h-3 w-3 fill-current" /> Full Backfill
-                        </Button>
-                        <Button size="sm" variant="secondary" className="h-8 text-[10px] uppercase font-bold w-full justify-start" onClick={() => handleRunPipeline("simfin")}>
-                            <Database className="mr-2 h-3 w-3 fill-current" /> SimFin Bulk
-                        </Button>
-                    </>
+                    <TooltipProvider delayDuration={100}>
+                        <div className="flex flex-col gap-2">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button size="sm" variant="outline" className="h-8 text-[10px] uppercase font-bold border-border hover:bg-accent w-full justify-start" onClick={() => handleRunPipeline("daily")}>
+                                        <Zap className="mr-2 h-3 w-3 fill-current text-chart-4" /> Daily Sync
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[200px] text-[10px] font-mono">
+                                    <p>Fast daily update. Fetches yesterday&apos;s close and new filings for the active universe.</p>
+                                </TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button size="sm" variant="default" className="h-8 text-[10px] uppercase font-bold bg-primary hover:bg-primary/90 text-primary-foreground w-full justify-start" onClick={() => handleRunPipeline("backfill")}>
+                                        <Database className="mr-2 h-3 w-3 fill-current" /> Full Backfill
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[200px] text-[10px] font-mono">
+                                    <p>Deep sync. Fetches 2 years of price history to fill gaps in SimFin data.</p>
+                                </TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button size="sm" variant="secondary" className="h-8 text-[10px] uppercase font-bold w-full justify-start" onClick={() => handleRunPipeline("simfin")}>
+                                        <Database className="mr-2 h-3 w-3 fill-current" /> SimFin Bulk
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[200px] text-[10px] font-mono">
+                                    <p>Anchor your universe. Downloads the list of 5,000+ curated companies and multi-year history.</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                    </TooltipProvider>
                 )}
             </div>
         </div>

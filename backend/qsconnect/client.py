@@ -126,6 +126,46 @@ class Client:
     # Stock Universe
     # =====================
     
+    def get_active_universe(self) -> List[str]:
+        """
+        Determine the 'Active Universe' for deep ingestion (Prices/Fundamentals).
+        Strategy: Use SimFin companies as the anchor (Single Source of Truth).
+        """
+        try:
+            # 1. Try to get symbols that have SimFin Company data
+            # SimFin bulk ingest saves to stock_list_fmp (as per current schema) or similar.
+            # We filter for symbols that actually exist in our DB metadata.
+            sql = "SELECT DISTINCT symbol FROM stock_list_fmp"
+            df_db = self._db_manager.query(sql)
+            
+            if not df_db.is_empty():
+                symbols = df_db["symbol"].to_list()
+                # If we have too few, it might be a partial sync. 
+                # If we have > 500, we consider the anchor established.
+                if len(symbols) > 500:
+                    logger.info(f"⚓ SimFin Anchor established: Tracking {len(symbols)} active symbols.")
+                    return symbols
+
+            # 2. Bootstrap Fallback (If DB is empty)
+            # Fetch full list from FMP and filter for US Majors (NYSE/NASDAQ)
+            logger.info("Universe not anchored. Bootstrapping from FMP Stock List...")
+            full_list = self._fmp_client.get_stock_list()
+            
+            # Filter for tradeable US Equities only
+            active_list = full_list[
+                (full_list["type"] == "stock") & 
+                (full_list["exchangeShortName"].isin(["NYSE", "NASDAQ"])) &
+                (full_list["price"] > 1.0) # Avoid extreme penny stocks
+            ]
+            
+            symbols = active_list["symbol"].head(5500).tolist() # Limit to SimFin scale
+            logger.info(f"🚀 Bootstrap complete: tracking top {len(symbols)} liquid US symbols.")
+            return symbols
+
+        except Exception as e:
+            logger.error(f"Failed to resolve active universe: {e}")
+            return ["AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META"] # Minimal Safety Net
+
     def stock_list(
         self,
         asset_type: str = "stock",
@@ -198,32 +238,30 @@ class Client:
         
         # 2. Smart Resume & Negative Caching
         try:
-            # A. Smart Resume: Filter out symbols already in DB
-            existing_symbols = set(self._db_manager.get_symbols())
+            # A. Smart Resume: Filter out symbols that ALREADY HAVE FRESH DATA (last 3 days)
+            # This allows FMP to 'fill the gap' if the DB only has old SimFin data.
+            fresh_symbols_df = self._db_manager.query("""
+                SELECT symbol FROM historical_prices_fmp 
+                GROUP BY symbol 
+                HAVING MAX(date) >= (CURRENT_DATE - INTERVAL 3 DAY)
+            """)
+            existing_symbols = set(fresh_symbols_df["symbol"].to_list()) if not fresh_symbols_df.is_empty() else set()
             
             # B. Negative Caching: Filter out symbols known to fail
             failed_symbols = set(self._db_manager.get_failed_symbols("historical_price"))
             
             original_count = len(symbols)
             
-            # Filter
+            # Filter: Only download if NOT fresh and NOT failed
             symbols = [
                 s for s in symbols 
                 if s not in existing_symbols and s not in failed_symbols
             ]
             
-            skipped_existing = original_count - len([s for s in symbols if s not in existing_symbols]) # Approx logic for log, but let's be precise
-            skipped_failed = len(failed_symbols.intersection(set(symbols) if symbols else set())) 
-            # Note: intersection logic above is slightly off because we already filtered 'symbols'. 
-            # Correct stats:
-            # We want to know how many were removed due to existing vs failed.
-            # Simplified log:
-            
             skipped_count = original_count - len(symbols)
             if skipped_count > 0:
-                logger.info(f"⏭️ Optimization: Skipped {skipped_count} symbols (Existing in DB or marked as Failed).")
-                logger.info(f"   - Known Failed: {len(failed_symbols)}")
-                logger.info(f"📥 Pending workload: {len(symbols)} symbols.")
+                logger.info(f"⏭️ Optimization: Skipped {skipped_count} symbols that are already up-to-date or failed.")
+                logger.info(f"📥 Pending workload: {len(symbols)} symbols needing enrichment.")
         except Exception as e:
             logger.warning(f"⚠️ Smart Resume check failed: {e}")
 

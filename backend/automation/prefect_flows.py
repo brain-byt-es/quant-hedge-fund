@@ -30,38 +30,56 @@ def log_step(client: QSConnectClient, level: str, component: str, message: str):
 
 @task(retries=3, retry_delay_seconds=60)
 def task_update_stock_list():
-    """Update US stock list."""
+    """Update metadata for the Active Universe."""
     client = QSConnectClient()
-    log_step(client, "INFO", "Ingest", "Starting Stock List update...")
-    df = client._fmp_client.get_stock_list()
-    client._db_manager.upsert_stock_list(df)
-    log_step(client, "INFO", "Ingest", f"Stock List updated: {len(df)} symbols cached.")
-    return f"Updated symbols"
+    log_step(client, "INFO", "Ingest", "Refreshing Active Universe metadata...")
+    
+    # Get the SimFin anchor
+    active_symbols = set(client.get_active_universe())
+    
+    # Fetch latest full list (lightweight metadata)
+    df_full = client._fmp_client.get_stock_list()
+    
+    # Filter metadata ONLY for our active universe
+    df_active = df_full[df_full["symbol"].isin(active_symbols)]
+    
+    client._db_manager.upsert_stock_list(df_active)
+    log_step(client, "INFO", "Ingest", f"Active metadata refreshed for {len(df_active)} symbols.")
+    return f"Updated {len(df_active)} symbols"
 
 @task(retries=2)
 def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Prices"):
-    """Ingest prices for a specific range."""
+    """Ingest prices for the Active Universe (SimFin Anchor)."""
     client = QSConnectClient()
     start_dt = date.fromisoformat(start_date) if start_date else None
     end_dt = date.fromisoformat(end_date) if end_date else None
     
-    log_step(client, "INFO", "Ingest", f"Starting Price Ingestion: {desc} ({start_date} to {end_date})")
+    # DYNAMIC FILTER: Use SimFin universe as the anchor
+    active_symbols = client.get_active_universe()
+    log_step(client, "INFO", "Ingest", f"Starting Price Ingestion: {desc} for {len(active_symbols)} symbols.")
     
     def on_progress(current, total):
         update_ui_progress(step=f"Downloading Prices ({desc})", progress=(current/total)*100, details=f"{current}/{total}")
 
-    client.bulk_historical_prices(start_date=start_dt, end_date=end_dt, progress_callback=on_progress)
+    client.bulk_historical_prices(
+        start_date=start_dt, 
+        end_date=end_dt, 
+        symbols=active_symbols, # Focus FMP calls here
+        progress_callback=on_progress
+    )
     log_step(client, "INFO", "Ingest", f"Price Ingestion complete: {desc}")
     return f"{desc} sync complete"
 
 @task(retries=0)
 def task_ingest_fundamentals(limit: int = 5):
-    """Ingest annual financials with Smart Resume and Negative Caching support."""
+    """Ingest annual financials for the Active Universe."""
     try:
         client = QSConnectClient()
         fundamental_types = ["income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"]
-        us_symbols = client._fmp_client.get_stock_list()["symbol"].tolist()
-        total_universe = len(us_symbols)
+        
+        # DYNAMIC FILTER: Focus on SimFin anchor
+        active_symbols = client.get_active_universe()
+        total_universe = len(active_symbols)
         
         log_step(client, "INFO", "Ingest", f"Starting Fundamentals Sync (Universe: {total_universe} symbols)...")
         
@@ -69,21 +87,13 @@ def task_ingest_fundamentals(limit: int = 5):
             table_name = f"bulk_{stmt.replace('-', '_')}_annual_fmp"
             
             # 1. SMART RESUME + NEGATIVE CACHING
-            # Symbols we have data for
             existing_data = set(client._db_manager.get_symbols_with_data(table_name))
-            # Symbols we already tried and were empty
             failed_scans = set(client._db_manager.get_failed_symbols(stmt))
             
             completed_symbols = existing_data.union(failed_scans)
-            pending_symbols = [s for s in us_symbols if s not in completed_symbols]
+            pending_symbols = [s for s in active_symbols if s not in completed_symbols]
             
             total_pending = len(pending_symbols)
-            skipped_data = len(existing_data)
-            skipped_empty = len(failed_scans)
-            
-            if skipped_data > 0 or skipped_empty > 0:
-                log_step(client, "INFO", "Ingest", f"⏭️ {stmt}: Skipping {skipped_data} existing and {skipped_empty} previously empty symbols.")
-            
             if total_pending == 0:
                 log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already processed.")
                 continue
@@ -97,13 +107,10 @@ def task_ingest_fundamentals(limit: int = 5):
                     return "Stopped"
 
                 batch_symbols = pending_symbols[i : i + batch_size]
-                progress_pct = (i / total_pending) * 100
-                update_ui_progress(step=f"Ingesting {stmt}", progress=progress_pct, details=f"{i}/{total_pending}")
-                
-                if (i // batch_size) % 5 == 0:
-                    log_step(client, "INFO", "Ingest", f"  > {stmt}: {i}/{total_pending} pending symbols processed.")
+                update_ui_progress(step=f"Ingesting {stmt}", progress=(i / total_pending) * 100, details=f"{i}/{total_pending}")
                 
                 try:
+                    # Using FMP via Direct Client (Enriched by SimFin base)
                     data = client._fmp_client.get_starter_fundamentals(
                         symbols=batch_symbols,
                         statement_type=stmt,
@@ -116,17 +123,14 @@ def task_ingest_fundamentals(limit: int = 5):
                     
                     if not data.is_empty():
                         client._db_manager.upsert_fundamentals(stmt, "annual", data)
-                        # Identify which symbols in the batch successfully returned data
                         successful_symbols = set(data["symbol"].unique().to_list())
                     else:
                         successful_symbols = set()
 
-                    # Mark symbols that were in the batch but NOT in the result as 'Failed/Empty'
                     for s in batch_symbols:
                         if s not in successful_symbols:
                             client._db_manager.log_failed_scan(s, stmt, "No data available")
                     
-                    # Small cooling period after batch
                     import time
                     time.sleep(1.0)
                         
@@ -164,13 +168,13 @@ def task_ingest_simfin():
 # FLOW 1: Institutional Backfill (Manual)
 # ==========================================
 
-@flow(name="Hedge Fund Backfill (5-Year)")
+@flow(name="Hedge Fund Backfill (2-Year)")
 def historical_backfill_flow():
-    """Full historical synchronization (5 years)."""
-    five_years_ago = (datetime.now() - timedelta(days=5*365)).strftime("%Y-%m-%d")
+    """Historical synchronization (2 years) to fill SimFin gaps."""
+    two_years_ago = (datetime.now() - timedelta(days=2*365)).strftime("%Y-%m-%d")
     
     task_update_stock_list()
-    task_ingest_prices(start_date=five_years_ago, desc="5-Year History")
+    task_ingest_prices(start_date=two_years_ago, desc="2-Year History")
     task_ingest_fundamentals(limit=5)
     task_rebuild_bundle()
     

@@ -4,6 +4,7 @@ import { ProcessMonitor } from "@/components/data/process-monitor"
 import { DataStatusGrid } from "@/components/data/status-grid"
 import { DataQualityAlerts } from "@/components/data/quality-alerts"
 import { LogViewer } from "@/components/status/log-viewer"
+import { InfoTooltip } from "@/components/ui/info-tooltip"
 
 export default function DataHubPage() {
   return (
@@ -11,7 +12,9 @@ export default function DataHubPage() {
       
       {/* Header / Info Area */}
       <div className="flex flex-col gap-1 px-1 shrink-0">
-          <h1 className="text-xl font-bold tracking-tight">Data Hub</h1>
+          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            Data Hub <InfoTooltip content="Central command for data ingestion. Use 'SimFin Bulk' weekly and 'Daily Sync' every morning." />
+          </h1>
           <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">Storage // DuckDB // Telemetry</p>
       </div>
 

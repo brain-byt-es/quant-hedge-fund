@@ -56,23 +56,23 @@ const data = {
   },
   navQuantScience: [
     {
+      title: "Strategy Lab",
+      url: "/dashboard/quant-lab",
+      icon: IconFlask,
+    },
+    {
+      title: "Alpha Discovery",
+      url: "/dashboard/research",
+      icon: IconTarget,
+      id: "sidebar-research-lab",
+    },
+    {
       title: "AI Quant Team",
       url: "/dashboard/ai-quant",
       icon: IconBrain,
     },
     {
-      title: "Factor Lab",
-      url: "/dashboard/research",
-      icon: IconFlask,
-      id: "sidebar-research-lab",
-    },
-    {
-      title: "Backtest Arena",
-      url: "/dashboard/signals",
-      icon: IconTarget,
-    },
-    {
-      title: "Portfolio Auditor",
+      title: "Risk Governance",
       url: "/dashboard/governance",
       icon: IconShieldCheck,
     },
@@ -185,7 +185,7 @@ const data = {
     },
     {
       title: "Terminal Help",
-      url: "#",
+      url: "/dashboard/help",
       icon: IconHelp,
     },
     {
