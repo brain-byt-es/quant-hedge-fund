@@ -716,10 +716,17 @@ class DuckDBManager:
         tables = [
             "stock_list_fmp",
             "historical_prices_fmp",
+            # FMP Annual (New Ingestion Target)
+            "bulk_income_statement_annual_fmp",
+            "bulk_balance_sheet_statement_annual_fmp",
+            "bulk_cash_flow_statement_annual_fmp",
+            "bulk_ratios_annual_fmp",
+            "bulk_key_metrics_annual_fmp",
             # SimFin Core (Quarterly)
             "bulk_income_quarter_fmp",
             "bulk_balance_quarter_fmp",
             "bulk_cashflow_quarter_fmp",
+            "bulk_ratios_quarter_fmp",
             # SimFin Banks
             "bulk_income_banks_quarter_fmp",
             "bulk_balance_banks_quarter_fmp",
@@ -735,17 +742,24 @@ class DuckDBManager:
         ]
         
         stats = []
-        for table in tables:
-            try:
-                # Check if table exists first
-                exists = self.query(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table}'")[0,0] > 0
-                if exists:
-                    count = self.query(f"SELECT COUNT(*) FROM {table}")[0,0]
-                    stats.append({"name": table, "count": count, "status": "active"})
-                else:
-                    stats.append({"name": table, "count": 0, "status": "missing"})
-            except Exception:
-                stats.append({"name": table, "count": -1, "status": "error"})
+        conn = None
+        try:
+            # Explicit read_only connection to avoid waiting for write locks
+            conn = self.connect(read_only=True)
+            for table in tables:
+                try:
+                    exists = conn.execute(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table}'").fetchone()[0] > 0
+                    if exists:
+                        count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                        stats.append({"name": table, "count": count, "status": "active"})
+                    else:
+                        stats.append({"name": table, "count": 0, "status": "missing"})
+                except:
+                    stats.append({"name": table, "count": -1, "status": "locked"})
+        except Exception as e:
+            logger.debug(f"Global stats fetch failed: {e}")
+        finally:
+            if conn: conn.close()
         
         return stats
 
