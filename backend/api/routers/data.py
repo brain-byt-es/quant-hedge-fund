@@ -102,6 +102,29 @@ def get_ingestion_progress():
     """Get real-time progress of data pipeline."""
     return load_ingestion_state()
 
+class QueryRequest(BaseModel):
+    sql: str
+    limit: int = 1000
+
+@router.post("/query")
+async def run_custom_query(request: QueryRequest):
+    """Execute a custom SQL query against DuckDB (Read-Only)."""
+    try:
+        client = get_qs_client()
+        # Force a limit for safety if not present
+        sql = request.sql.strip()
+        if "limit" not in sql.lower() and sql.lower().startswith("select"):
+            sql += f" LIMIT {request.limit}"
+            
+        logger.info(f"Executing SQL Explorer query: {sql[:100]}...")
+        df = client._db_manager.query(sql)
+        
+        # Convert to list of dicts for JSON frontend
+        return df.to_dicts()
+    except Exception as e:
+        logger.error(f"SQL Explorer error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 class IngestRequest(BaseModel):
     mode: str = "daily" # 'daily', 'backfill', or 'simfin'
     start_date: Optional[str] = None
