@@ -56,6 +56,76 @@ def task_update_stock_list():
     return "Metadata refresh failed"
 
 @task(retries=2)
+def task_enrich_ciks():
+    """Fetch CIKs by querying Company Profiles individually (Parallel Stable API)."""
+    import concurrent.futures
+    client = QSConnectClient()
+    log_step(client, "INFO", "Ingest", "Enriching CIK identifiers via Parallel Stable Profiles...")
+    
+    try:
+        # 1. Get all symbols missing CIKs
+        con = client._db_manager.connect()
+        missing_df = con.execute("SELECT symbol FROM stock_list_fmp WHERE cik IS NULL OR cik = ''").pl()
+        con.close()
+        
+        pending_symbols = missing_df["symbol"].to_list()
+        total = len(pending_symbols)
+        
+        if total == 0:
+            log_step(client, "SUCCESS", "Ingest", "✅ All symbols already have CIKs.")
+            return "No work needed"
+
+        log_step(client, "INFO", "Ingest", f"Fetching CIK DNA for {total} symbols...")
+        
+        updated_count = 0
+        
+        # Use ThreadPool for I/O concurrency (4 workers stay safe under 300 calls/min)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            def _fetch_cik(symbol):
+                url = f"https://financialmodelingprep.com/stable/profile?symbol={symbol}"
+                try:
+                    data = client._fmp_client._make_request(url)
+                    if data and len(data) > 0:
+                        profile = data[0]
+                        cik = profile.get("cik") or profile.get("CIK")
+                        return symbol, cik
+                except: pass
+                return symbol, None
+
+            future_to_symbol = {executor.submit(_fetch_cik, s): s for s in pending_symbols}
+            
+            batch_updates = []
+            for future in concurrent.futures.as_completed(future_to_symbol):
+                if client.stop_requested: break
+                
+                symbol, cik = future.result()
+                if cik:
+                    batch_updates.append((cik, symbol))
+                    
+                if len(batch_updates) >= 100:
+                    con = client._db_manager.connect()
+                    try:
+                        for cik_val, sym_val in batch_updates:
+                            con.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
+                        updated_count += len(batch_updates)
+                        batch_updates = []
+                        log_step(client, "INFO", "Ingest", f"  > Synced {updated_count}/{total} CIK identifiers...")
+                    finally:
+                        con.close()
+
+            if batch_updates:
+                con = client._db_manager.connect()
+                for cik_val, sym_val in batch_updates:
+                    con.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
+                updated_count += len(batch_updates)
+                con.close()
+                
+        log_step(client, "SUCCESS", "Ingest", f"✅ CIK Enrichment complete. Updated {updated_count} symbols.")
+        
+    except Exception as e:
+        logger.error(f"CIK enrichment failed: {e}")
+
+@task(retries=2)
 def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Prices"):
     """Ingest prices for the Active Universe (SimFin Anchor)."""
     client = QSConnectClient()
@@ -168,6 +238,76 @@ def task_ingest_fundamentals(limit: int = 5):
         logger.error(f"Fundamentals sync failed: {e}")
     return "Fundamentals sync complete"
 
+@task(retries=0)
+def task_stitch_tickers():
+    """Identify and merge duplicate symbols sharing the same CIK (e.g. BRK.B -> BRK-B)."""
+    client = QSConnectClient()
+    db = client._db_manager
+    con = db.connect()
+    
+    log_step(client, "INFO", "Stitcher", "🔍 Starting Ticker Stitching (CIK Merge)...")
+    
+    try:
+        # 1. Find CIKs with multiple symbols
+        duplicates = con.execute("""
+            SELECT cik, list(symbol) as symbols, count(*) as count
+            FROM stock_list_fmp 
+            WHERE cik IS NOT NULL AND cik != '' AND cik != 'None'
+            GROUP BY cik 
+            HAVING count(distinct symbol) > 1
+        """).pl()
+        
+        if duplicates.is_empty():
+            log_step(client, "INFO", "Stitcher", "✅ No ticker mismatches found. Database is clean.")
+            return "No duplicates"
+
+        merged_count = 0
+        for row in duplicates.to_dicts():
+            symbols = row['symbols']
+            cik = row['cik']
+            
+            # 2. Determine Master (the one with the latest price data)
+            # Query max date for each symbol to find the 'Live' one
+            dates_query = f"SELECT symbol, MAX(date) as last_date FROM historical_prices_fmp WHERE symbol IN ({','.join(['?' for _ in symbols])}) GROUP BY symbol"
+            dates_df = con.execute(dates_query, symbols).pl()
+            
+            if dates_df.is_empty(): continue
+            
+            master_symbol = dates_df.sort("last_date", descending=True)["symbol"][0]
+            aliases = [s for s in symbols if s != master_symbol]
+            
+            for source in aliases:
+                log_step(client, "INFO", "Stitcher", f"🧵 Stitching {source} -> {master_symbol} (CIK: {cik})")
+                
+                # A. Register Alias (Permanent Protection)
+                con.execute("""
+                    INSERT OR IGNORE INTO ticker_aliases (source_symbol, master_symbol, cik, reason)
+                    VALUES (?, ?, ?, 'CIK Match')
+                """, [source, master_symbol, cik])
+                
+                # B. Move Price History (Fill Gaps in Master)
+                # We use INSERT OR IGNORE to only fill dates that the master doesn't have yet
+                con.execute(f"""
+                    INSERT OR IGNORE INTO historical_prices_fmp (symbol, date, open, high, low, close, volume, updated_at)
+                    SELECT '{master_symbol}', date, open, high, low, close, volume, updated_at 
+                    FROM historical_prices_fmp 
+                    WHERE symbol = ?
+                """, [source])
+                
+                # C. Delete Source Prices & Stock List Entry
+                con.execute("DELETE FROM historical_prices_fmp WHERE symbol = ?", [source])
+                con.execute("DELETE FROM stock_list_fmp WHERE symbol = ?", [source])
+                merged_count += 1
+        
+        log_step(client, "SUCCESS", "Stitcher", f"✅ Successfully stitched {merged_count} ticker pairs.")
+        return f"Merged {merged_count} symbols"
+        
+    except Exception as e:
+        logger.error(f"Stitching failed: {e}")
+        raise e
+    finally:
+        con.close()
+
 @task
 def task_rebuild_bundle():
     """Finalize data for Zipline."""
@@ -202,6 +342,7 @@ def historical_backfill_flow():
     task_update_stock_list()
     task_ingest_prices(start_date=two_years_ago, desc="2-Year History")
     task_ingest_fundamentals(limit=5)
+    task_stitch_tickers()
     task_rebuild_bundle()
     
     return "Backfill successful"
@@ -214,6 +355,7 @@ def historical_backfill_flow():
 def simfin_bulk_flow():
     """Download and ingest SimFin bulk datasets."""
     task_ingest_simfin()
+    task_stitch_tickers()
     return "SimFin Sync successful"
 
 @task
@@ -370,10 +512,12 @@ def daily_sync_flow():
     # Discovery phase
     task_discover_ipos()
     task_update_stock_list()
+    task_enrich_ciks() # NEW: Fetch CIKs so we can find duplicates
     
     # Data phase
     task_ingest_prices(start_date=yesterday, desc="Daily EOD")
     task_ingest_fundamentals(limit=1) 
+    task_stitch_tickers()
     task_rebuild_bundle()
     
     # Analytics phase

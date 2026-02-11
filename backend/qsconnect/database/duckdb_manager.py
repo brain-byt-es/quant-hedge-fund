@@ -113,6 +113,17 @@ class DuckDBManager:
                 )
             """)
 
+            # NEW: Ticker Alias Map (Prevents future 'Salat' by remapping old tickers to master tickers)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ticker_aliases (
+                    source_symbol VARCHAR PRIMARY KEY,
+                    master_symbol VARCHAR,
+                    cik VARCHAR,
+                    reason VARCHAR,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Migration: Add missing columns if they don't exist
             try:
                 cols = conn.execute("PRAGMA table_info('stock_list_fmp')").fetchall()
@@ -138,6 +149,7 @@ class DuckDBManager:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bulk_company_profiles_fmp (
                     symbol VARCHAR PRIMARY KEY,
+                    cik VARCHAR,
                     company_name VARCHAR,
                     sector VARCHAR,
                     industry VARCHAR,
@@ -523,11 +535,21 @@ class DuckDBManager:
             conn.close()
 
     def upsert_stock_list(self, df: pd.DataFrame) -> int:
-        """Upsert stock list data using persistent schema."""
+        """Upsert stock list data with automatic alias remapping to prevent ticker duplicates."""
         if df.empty: return 0
         conn = self.connect()
         try:
-            # Standardize column mapping to match FMP 'stable' keys to our schema
+            # 1. Ticker Normalization: Use Alias Map to redirect symbols (e.g. BRK.B -> BRK-B)
+            try:
+                aliases = conn.execute("SELECT source_symbol, master_symbol FROM ticker_aliases").df()
+                if not aliases.empty:
+                    alias_map = dict(zip(aliases['source_symbol'], aliases['master_symbol']))
+                    # Remap the 'symbol' column in the incoming dataframe
+                    df['symbol'] = df['symbol'].replace(alias_map)
+                    logger.debug(f"Remapped {len(df[df['symbol'].isin(alias_map.values())])} symbols using alias map.")
+            except: pass
+
+            # 2. Standardize column mapping
             mapping = {
                 "exchangeShortName": "exchange_short_name",
                 "type": "asset_type",
