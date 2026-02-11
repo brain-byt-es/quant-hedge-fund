@@ -100,6 +100,7 @@ class DuckDBManager:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS stock_list_fmp (
                     symbol VARCHAR PRIMARY KEY,
+                    cik VARCHAR,
                     name VARCHAR,
                     exchange VARCHAR,
                     exchange_short_name VARCHAR,
@@ -112,6 +113,16 @@ class DuckDBManager:
                 )
             """)
 
+            # Migration: Add missing columns if they don't exist
+            try:
+                cols = conn.execute("PRAGMA table_info('stock_list_fmp')").fetchall()
+                col_names = [c[1] for c in cols]
+                if 'cik' not in col_names:
+                    conn.execute("ALTER TABLE stock_list_fmp ADD COLUMN cik VARCHAR")
+                    logger.info("Migrated stock_list_fmp: Added 'cik' column.")
+            except Exception as mig_err:
+                logger.debug(f"Migration for stock_list_fmp failed: {mig_err}")
+
             # 3-12. Bulk Financials (Annual & Quarter) placeholders
             financial_tables = [
                 "bulk_income_statement_annual_fmp", "bulk_income_statement_quarter_fmp",
@@ -121,7 +132,7 @@ class DuckDBManager:
                 "bulk_key_metrics_annual_fmp", "bulk_key_metrics_quarter_fmp"
             ]
             for table in financial_tables:
-                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} (symbol VARCHAR, date DATE, period VARCHAR, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} (symbol VARCHAR, date DATE, period VARCHAR, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (symbol, date))")
 
             # 13. Company Profiles
             conn.execute("""
@@ -469,16 +480,28 @@ class DuckDBManager:
             conn.close()
 
     def upsert_fundamentals(self, statement_type: str, period: str, df: pl.DataFrame) -> int:
-        """Upsert fundamental data into the specific bulk table."""
+        """Upsert fundamental data using ON CONFLICT to prevent table wiping."""
         if df.is_empty(): return 0
         table_name = f"bulk_{statement_type.replace('-', '_')}_{period}_fmp"
         conn = self.connect()
         try:
+            # 1. Standardize column names (FMP uses camelCase sometimes)
+            column_mapping = {"symbol": "symbol", "date": "date"}
+            # Ensure mandatory columns are lower case for SQL consistency
+            for col in df.columns:
+                if col.lower() in ["symbol", "date"]:
+                    df = df.rename({col: col.lower()})
+
             conn.register("temp_fund", df)
-            conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM temp_fund")
+            
+            # 2. Perform Institutional Upsert
+            # We use INSERT OR REPLACE which works perfectly with our new PRIMARY KEY(symbol, date)
+            conn.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM temp_fund")
+            
             return len(df)
         finally:
-            conn.unregister("temp_fund")
+            try: conn.unregister("temp_fund")
+            except: pass
             conn.close()
 
     def upsert_stock_list(self, df: pd.DataFrame) -> int:
@@ -495,7 +518,7 @@ class DuckDBManager:
             df = df.rename(columns=mapping)
             
             # Ensure ALL required columns exist
-            required_cols = ["symbol", "name", "exchange", "exchange_short_name", "asset_type", "price"]
+            required_cols = ["symbol", "cik", "name", "exchange", "exchange_short_name", "asset_type", "price"]
             for col in required_cols:
                 if col not in df.columns:
                     # Fallback logic
@@ -515,10 +538,11 @@ class DuckDBManager:
             # Use explicit Upsert with ON CONFLICT for robustness
             conn.execute("""
                 INSERT INTO stock_list_fmp (
-                    symbol, name, exchange, exchange_short_name, asset_type, price, updated_at
+                    symbol, cik, name, exchange, exchange_short_name, asset_type, price, updated_at
                 )
-                SELECT symbol, name, exchange, exchange_short_name, asset_type, price, updated_at FROM temp_stocks
+                SELECT symbol, cik, name, exchange, exchange_short_name, asset_type, price, updated_at FROM temp_stocks
                 ON CONFLICT (symbol) DO UPDATE SET
+                    cik = EXCLUDED.cik,
                     name = EXCLUDED.name,
                     exchange = EXCLUDED.exchange,
                     exchange_short_name = EXCLUDED.exchange_short_name,

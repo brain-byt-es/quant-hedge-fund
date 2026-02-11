@@ -85,22 +85,29 @@ def task_ingest_fundamentals(limit: int = 5):
         
         for stmt in fundamental_types:
             table_name = f"bulk_{stmt.replace('-', '_')}_annual_fmp"
+            # FIX: Handle naming differences between FMP endpoints and SimFin tables
+            clean_name = stmt.split('-')[0]
+            if clean_name == "cash": clean_name = "cashflow" # SimFin uses 'cashflow'
+            if clean_name == "key": clean_name = "key_metrics" # SimFin uses 'key_metrics'
+            simfin_table = f"bulk_{clean_name}_quarter_fmp"
             
             # 1. SMART RESUME + NEGATIVE CACHING
-            existing_data = set(client._db_manager.get_symbols_with_data(table_name))
+            existing_fmp = set(client._db_manager.get_symbols_with_data(table_name))
+            existing_simfin = set(client._db_manager.get_symbols_with_data(simfin_table))
+            
             failed_scans = set(client._db_manager.get_failed_symbols(stmt))
             
-            completed_symbols = existing_data.union(failed_scans)
+            completed_symbols = existing_fmp.union(existing_simfin).union(failed_scans)
             pending_symbols = [s for s in active_symbols if s not in completed_symbols]
             
             total_pending = len(pending_symbols)
             if total_pending == 0:
-                log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already processed.")
+                log_step(client, "INFO", "Ingest", f"✅ {stmt}: All symbols already covered by SimFin or FMP.")
                 continue
 
-            log_step(client, "INFO", "Ingest", f"📥 {stmt}: Pending workload: {total_pending} symbols.")
+            log_step(client, "INFO", "Ingest", f"📥 {stmt}: Pending workload: {total_pending} symbols needing FMP enrichment.")
             
-            batch_size = 500
+            batch_size = 200 # Smaller batches for better UI feedback
             for i in range(0, total_pending, batch_size):
                 if client.stop_requested:
                     log_step(client, "WARNING", "Ingest", "Stop signal received. Aborting fundamentals sync.")
@@ -108,6 +115,9 @@ def task_ingest_fundamentals(limit: int = 5):
 
                 batch_symbols = pending_symbols[i : i + batch_size]
                 update_ui_progress(step=f"Ingesting {stmt}", progress=(i / total_pending) * 100, details=f"{i}/{total_pending}")
+                
+                # Terminal Log
+                log_step(client, "INFO", "Ingest", f"  > {stmt}: Processing batch {i//batch_size + 1} ({len(batch_symbols)} symbols)...")
                 
                 try:
                     # Using FMP via Direct Client (Enriched by SimFin base)
@@ -119,9 +129,17 @@ def task_ingest_fundamentals(limit: int = 5):
                     )
                     
                     if isinstance(data, pd.DataFrame):
+                        # FIX: Force numeric columns to float to prevent PyLong overflow
+                        for col in data.select_dtypes(include=['number']).columns:
+                            data[col] = data[col].astype(float)
                         data = pl.from_pandas(data) if not data.empty else pl.DataFrame()
                     
                     if not data.is_empty():
+                        # FIX: Also force Polars types before DB upsert
+                        data = data.with_columns([
+                            pl.col(c).cast(pl.Float64) for c in data.columns 
+                            if data[c].dtype in [pl.Int64, pl.Int32, pl.Float32]
+                        ])
                         client._db_manager.upsert_fundamentals(stmt, "annual", data)
                         successful_symbols = set(data["symbol"].unique().to_list())
                     else:
@@ -132,7 +150,7 @@ def task_ingest_fundamentals(limit: int = 5):
                             client._db_manager.log_failed_scan(s, stmt, "No data available")
                     
                     import time
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                         
                 except Exception as batch_err:
                     logger.error(f"Batch failed: {batch_err}")

@@ -72,8 +72,8 @@ const data = {
       icon: IconBrain,
     },
     {
-      title: "Risk Governance",
-      url: "/dashboard/governance",
+      title: "Risk Control",
+      url: "/dashboard/live/risk",
       icon: IconShieldCheck,
     },
   ],

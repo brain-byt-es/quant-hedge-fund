@@ -166,12 +166,15 @@ def custom_csv_ingest(environ,
             except: continue
                 
             df = df.reindex(sessions)
-            df['close'] = df['close'].ffill()
+            # Fix: forward fill then backward fill to ensure NO NaNs exist in the session range
+            df['close'] = df['close'].ffill().bfill()
             df['open'] = df['open'].fillna(df['close'])
             df['high'] = df['high'].fillna(df['close'])
             df['low'] = df['low'].fillna(df['close'])
             df['volume'] = df['volume'].fillna(0)
-            df = df.dropna()
+            
+            # CRITICAL: We MUST NOT use dropna() here because it breaks the session alignment
+            # length of df must match length of sessions exactly.
             
             if df.empty: continue
             

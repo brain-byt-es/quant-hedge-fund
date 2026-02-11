@@ -331,6 +331,10 @@ class Client:
                     companies["asset_type"] = "stock"
                     companies["price"] = 0.0 # Will be updated by price ingest or live feed
                     
+                    # Map SimFin ID to cik for mapping logic if direct CIK not present
+                    if "SimFin Id" in companies.columns:
+                        companies["cik"] = companies["SimFin Id"].astype(str)
+                    
                     stats["stock_list"] = self._db_manager.upsert_stock_list(companies)
                     logger.info(f"✅ Ingested {stats['stock_list']} companies.")
                 else:

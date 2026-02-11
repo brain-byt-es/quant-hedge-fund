@@ -51,9 +51,14 @@ class FMPClient(BaseAPIClient):
     
     def get_stock_list(self) -> pd.DataFrame:
         """Get filtered tradable US stock universe (Price > $5, Type: Stock)."""
+        # Using the stable endpoint which includes CIK
         data = self._make_request("https://financialmodelingprep.com/stable/stock-list")
         if data:
             df = pd.DataFrame(data)
+            
+            # Map cik if it exists under different capitalization
+            if "cik" not in df.columns and "CIK" in df.columns:
+                df["cik"] = df["CIK"]
             
             # 1. Exchange Filter (US Majors)
             us_exchanges = ["NASDAQ", "NYSE", "AMEX"]
