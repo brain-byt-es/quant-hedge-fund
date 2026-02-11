@@ -536,7 +536,7 @@ class DuckDBManager:
             df = df.rename(columns=mapping)
             
             # Ensure ALL required columns exist
-            required_cols = ["symbol", "cik", "name", "exchange", "exchange_short_name", "asset_type", "price"]
+            required_cols = ["symbol", "cik", "name", "exchange", "exchange_short_name", "asset_type", "price", "sector", "industry", "country"]
             for col in required_cols:
                 if col not in df.columns:
                     # Fallback logic
@@ -556,9 +556,9 @@ class DuckDBManager:
             # Use explicit Upsert with ON CONFLICT for robustness
             conn.execute("""
                 INSERT INTO stock_list_fmp (
-                    symbol, cik, name, exchange, exchange_short_name, asset_type, price, updated_at
+                    symbol, cik, name, exchange, exchange_short_name, asset_type, price, sector, industry, country, updated_at
                 )
-                SELECT symbol, cik, name, exchange, exchange_short_name, asset_type, price, updated_at FROM temp_stocks
+                SELECT symbol, cik, name, exchange, exchange_short_name, asset_type, price, sector, industry, country, updated_at FROM temp_stocks
                 ON CONFLICT (symbol) DO UPDATE SET
                     cik = EXCLUDED.cik,
                     name = EXCLUDED.name,
@@ -566,6 +566,9 @@ class DuckDBManager:
                     exchange_short_name = EXCLUDED.exchange_short_name,
                     asset_type = EXCLUDED.asset_type,
                     price = EXCLUDED.price,
+                    sector = EXCLUDED.sector,
+                    industry = EXCLUDED.industry,
+                    country = EXCLUDED.country,
                     updated_at = EXCLUDED.updated_at
             """)
             return len(df)
@@ -731,10 +734,12 @@ class DuckDBManager:
             "bulk_income_banks_quarter_fmp",
             "bulk_balance_banks_quarter_fmp",
             "bulk_cashflow_banks_quarter_fmp",
+            "bulk_ratios_banks_quarter_fmp",
             # SimFin Insurance
             "bulk_income_insurance_quarter_fmp",
             "bulk_balance_insurance_quarter_fmp",
             "bulk_cashflow_insurance_quarter_fmp",
+            "bulk_ratios_insurance_quarter_fmp",
             # Core Systems
             "strategy_audit_log",
             "trades",

@@ -61,7 +61,9 @@ export function DataStatusGrid() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 pb-2">
-      {tables.map((table) => {
+      {tables
+        .filter(table => table.count > 0) // HIDE EMPTY TABLES
+        .map((table) => {
         const isActive = table.count > 0;
         const displayName = formatName(table.name);
         

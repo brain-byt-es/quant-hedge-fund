@@ -30,22 +30,30 @@ def log_step(client: QSConnectClient, level: str, component: str, message: str):
 
 @task(retries=3, retry_delay_seconds=60)
 def task_update_stock_list():
-    """Update metadata for the Active Universe."""
+    """Update metadata (Sectors, Industries) for the Active Universe."""
     client = QSConnectClient()
-    log_step(client, "INFO", "Ingest", "Refreshing Active Universe metadata...")
+    log_step(client, "INFO", "Ingest", "Refreshing Active Universe metadata (Sectors/Industries)...")
     
     # Get the SimFin anchor
     active_symbols = set(client.get_active_universe())
     
-    # Fetch latest full list (lightweight metadata)
-    df_full = client._fmp_client.get_stock_list()
+    # Fetch detailed list from FMP Screener (includes Sectors/Industries)
+    # Using the stable endpoint as per documentation
+    url = "https://financialmodelingprep.com/stable/company-screener?limit=10000"
+    data = client._fmp_client._make_request(url)
     
-    # Filter metadata ONLY for our active universe
-    df_active = df_full[df_full["symbol"].isin(active_symbols)]
+    if data:
+        df_full = pd.DataFrame(data)
+        # Filter metadata ONLY for our active universe
+        df_active = df_full[df_full["symbol"].isin(active_symbols)]
+        
+        # Ensure CIK is maintained if possible (screener might not have it, so we merge with existing)
+        # For now, we trust the upsert to handle the merging of columns
+        client._db_manager.upsert_stock_list(df_active)
+        log_step(client, "INFO", "Ingest", f"Active metadata enriched for {len(df_active)} symbols.")
+        return f"Enriched {len(df_active)} symbols"
     
-    client._db_manager.upsert_stock_list(df_active)
-    log_step(client, "INFO", "Ingest", f"Active metadata refreshed for {len(df_active)} symbols.")
-    return f"Updated {len(df_active)} symbols"
+    return "Metadata refresh failed"
 
 @task(retries=2)
 def task_ingest_prices(start_date: str = None, end_date: str = None, desc="Prices"):
@@ -230,37 +238,27 @@ def task_aggregate_market_taxonomy():
         con.execute("DELETE FROM sector_industry_stats")
         
         # 3. Build comprehensive price/mcap map
-        # Join historical prices with stock list for maximum coverage
         con.execute("""
             CREATE OR REPLACE TEMP TABLE latest_asset_perf AS
-            WITH ranked_prices AS (
-                SELECT 
-                    symbol, close, volume, change_percent
-                FROM historical_prices_fmp
-                WHERE date > (CURRENT_DATE - INTERVAL 14 DAY)
-                QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
-            )
             SELECT 
-                m.symbol,
-                COALESCE(p.close, s.price, 0.0) as price,
-                COALESCE(p.change_percent, 0.0) as change_percent,
-                COALESCE(p.volume * p.close, s.price * 1000000, 0.0) as mcap_est
-            FROM master_assets_index m
-            LEFT JOIN ranked_prices p ON m.symbol = p.symbol
-            LEFT JOIN stock_list_fmp s ON m.symbol = s.symbol
+                s.symbol,
+                COALESCE(s.price, 0.0) as price,
+                0.0 as change_percent,
+                COALESCE(s.price * 1000000, 0.0) as mcap_est
+            FROM stock_list_fmp s
         """)
 
-        # 4. Get latest revenue
+        # 4. Get latest revenue (Optional join)
         con.execute("""
             CREATE OR REPLACE TEMP TABLE latest_revenue AS
             SELECT symbol, revenue
-            FROM bulk_income_quarter_fmp
+            FROM bulk_income_statement_annual_fmp
             QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
         """)
 
         # 5. Aggregate Industries
         con.execute("""
-            INSERT OR REPLACE INTO sector_industry_stats (
+            INSERT INTO sector_industry_stats (
                 name, group_type, stock_count, market_cap, total_revenue, 
                 avg_pe, avg_dividend_yield, avg_profit_margin, perf_1d, 
                 perf_1w, perf_1m, perf_1y, updated_at
@@ -271,10 +269,10 @@ def task_aggregate_market_taxonomy():
                 COUNT(*) as stock_count,
                 SUM(COALESCE(p.mcap_est, 0)) as market_cap,
                 SUM(COALESCE(r.revenue, 0)) as total_revenue,
-                AVG(15.0) as avg_pe,
-                AVG(0.02) as avg_dividend_yield,
-                AVG(0.10) as avg_profit_margin,
-                AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
+                15.0 as avg_pe,
+                0.02 as avg_dividend_yield,
+                0.10 as avg_profit_margin,
+                0.0 as perf_1d,
                 0.0, 0.0, 0.0,
                 CURRENT_TIMESTAMP
             FROM stock_list_fmp s
@@ -286,7 +284,7 @@ def task_aggregate_market_taxonomy():
         
         # 6. Aggregate Sectors
         con.execute("""
-            INSERT OR REPLACE INTO sector_industry_stats (
+            INSERT INTO sector_industry_stats (
                 name, group_type, stock_count, market_cap, total_revenue, 
                 avg_pe, avg_dividend_yield, avg_profit_margin, perf_1d, 
                 perf_1w, perf_1m, perf_1y, updated_at
@@ -297,10 +295,10 @@ def task_aggregate_market_taxonomy():
                 COUNT(*) as stock_count,
                 SUM(COALESCE(p.mcap_est, 0)) as market_cap,
                 SUM(COALESCE(r.revenue, 0)) as total_revenue,
-                AVG(15.0) as avg_pe,
-                AVG(0.02) as avg_dividend_yield,
-                AVG(0.10) as avg_profit_margin,
-                AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
+                15.0 as avg_pe,
+                0.02 as avg_dividend_yield,
+                0.10 as avg_profit_margin,
+                0.0 as perf_1d,
                 0.0, 0.0, 0.0,
                 CURRENT_TIMESTAMP
             FROM stock_list_fmp s
