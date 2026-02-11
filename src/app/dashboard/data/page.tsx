@@ -21,6 +21,11 @@ export default function DataHubPage() {
           <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">Storage // DuckDB // Telemetry</p>
       </div>
 
+      {/* Top Section: Status Matrix (Compact Strip) */}
+      <div className="flex-none">
+           <DataStatusGrid />
+      </div>
+
       <Tabs defaultValue="monitor" className="flex-1 flex flex-col min-h-0 gap-4">
         <div className="flex items-center justify-between shrink-0">
             <TabsList className="bg-muted/50 border border-border/50 p-1">
@@ -31,10 +36,6 @@ export default function DataHubPage() {
                     <Database className="h-3 w-3" /> SQL Explorer
                 </TabsTrigger>
             </TabsList>
-            
-            <div className="hidden lg:block">
-                 <DataStatusGrid />
-            </div>
         </div>
 
         {/* Tab 1: Monitor (Current Layout) */}
