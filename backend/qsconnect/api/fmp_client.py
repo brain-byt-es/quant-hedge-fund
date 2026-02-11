@@ -310,8 +310,8 @@ class FMPClient(BaseAPIClient):
                 if progress_callback:
                     progress_callback(completed_count, total_symbols)
                 
-                # Incremental Save (Every 200 symbols to reduce DB lock contention)
-                if save_callback and len(batch_buffer) >= 200:
+                # Incremental Save (Every 20 symbols to ensure persistent progress)
+                if save_callback and len(batch_buffer) >= 20:
                     try:
                         # Check stop signal before writing to DB
                         if stop_check and stop_check():

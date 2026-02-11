@@ -183,36 +183,40 @@ export function ProcessMonitor() {
             </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-4 pt-4">
-        {steps.map((step) => (
-          <div key={step.name} className="space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-mono">
-              <div className="flex items-center gap-2 uppercase tracking-tight">
-                {step.status === "completed" && <CheckCircle2 className="h-3 w-3 text-primary" />}
-                {step.status === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                {step.status === "pending" && <div className="h-3 w-3 rounded-full border border-muted" />}
-                <span className={cn(step.status === "pending" ? "text-muted-foreground" : "text-foreground")}>
-                  {step.name}
-                </span>
+      <CardContent className="flex-1 p-0 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full p-4">
+          <div className="grid gap-4">
+            {steps.map((step) => (
+              <div key={step.name} className="space-y-1.5">
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <div className="flex items-center gap-2 uppercase tracking-tight">
+                    {step.status === "completed" && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                    {step.status === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                    {step.status === "pending" && <div className="h-3 w-3 rounded-full border border-muted" />}
+                    <span className={cn(step.status === "pending" ? "text-muted-foreground" : "text-foreground")}>
+                      {step.name}
+                    </span>
+                  </div>
+                  <span className="text-primary font-bold">
+                    {step.progress > 0 ? `${step.progress.toFixed(1)}%` : "0%"}
+                  </span>
+                </div>
+                <Progress value={step.progress} className="h-1 bg-muted" />
               </div>
-              <span className="text-primary font-bold">
-                {step.progress > 0 ? `${step.progress.toFixed(1)}%` : "0%"}
-              </span>
-            </div>
-            <Progress value={step.progress} className="h-1 bg-muted" />
-          </div>
-        ))}
+            ))}
 
-        {isRunning && (
-            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border pt-3">
-                <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono">
-                    <Zap className="h-3 w-3" /> {stats.speed} sym/s
+            {isRunning && (
+                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border pt-3">
+                    <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono">
+                        <Zap className="h-3 w-3" /> {stats.speed} sym/s
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono justify-end">
+                        <Timer className="h-3 w-3" /> {stats.eta}
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 text-[9px] uppercase text-muted-foreground font-mono justify-end">
-                    <Timer className="h-3 w-3" /> {stats.eta}
-                </div>
-            </div>
-        )}
+            )}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   )

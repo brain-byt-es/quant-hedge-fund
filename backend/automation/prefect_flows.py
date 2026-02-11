@@ -266,7 +266,7 @@ def task_aggregate_market_taxonomy():
                 perf_1w, perf_1m, perf_1y, updated_at
             )
             SELECT 
-                m.category as name,
+                s.industry as name,
                 'industry' as group_type,
                 COUNT(*) as stock_count,
                 SUM(COALESCE(p.mcap_est, 0)) as market_cap,
@@ -277,11 +277,11 @@ def task_aggregate_market_taxonomy():
                 AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
                 0.0, 0.0, 0.0,
                 CURRENT_TIMESTAMP
-            FROM master_assets_index m
-            LEFT JOIN latest_asset_perf p ON m.symbol = p.symbol
-            LEFT JOIN latest_revenue r ON m.symbol = r.symbol
-            WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
-            GROUP BY m.category
+            FROM stock_list_fmp s
+            LEFT JOIN latest_asset_perf p ON s.symbol = p.symbol
+            LEFT JOIN latest_revenue r ON s.symbol = r.symbol
+            WHERE s.industry IS NOT NULL AND s.industry != ''
+            GROUP BY s.industry
         """)
         
         # 6. Aggregate Sectors
@@ -292,7 +292,7 @@ def task_aggregate_market_taxonomy():
                 perf_1w, perf_1m, perf_1y, updated_at
             )
             SELECT 
-                split_part(category, ' - ', 1) as name,
+                s.sector as name,
                 'sector' as group_type,
                 COUNT(*) as stock_count,
                 SUM(COALESCE(p.mcap_est, 0)) as market_cap,
@@ -303,11 +303,11 @@ def task_aggregate_market_taxonomy():
                 AVG(COALESCE(p.change_percent, 0.0)) as perf_1d,
                 0.0, 0.0, 0.0,
                 CURRENT_TIMESTAMP
-            FROM master_assets_index m
-            LEFT JOIN latest_asset_perf p ON m.symbol = p.symbol
-            LEFT JOIN latest_revenue r ON m.symbol = r.symbol
-            WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
-            GROUP BY 1
+            FROM stock_list_fmp s
+            LEFT JOIN latest_asset_perf p ON s.symbol = p.symbol
+            LEFT JOIN latest_revenue r ON s.symbol = r.symbol
+            WHERE s.sector IS NOT NULL AND s.sector != ''
+            GROUP BY s.sector
         """)
         
         count = con.execute("SELECT COUNT(*) FROM sector_industry_stats").fetchone()[0]

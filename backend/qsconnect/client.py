@@ -238,21 +238,17 @@ class Client:
         
         # 2. Smart Resume & Negative Caching
         try:
-            # A. Smart Resume: Filter out symbols that ALREADY HAVE FRESH DATA (last 3 days)
-            # This allows FMP to 'fill the gap' if the DB only has old SimFin data.
-            fresh_symbols_df = self._db_manager.query("""
-                SELECT symbol FROM historical_prices_fmp 
-                GROUP BY symbol 
-                HAVING MAX(date) >= (CURRENT_DATE - INTERVAL 3 DAY)
-            """)
-            existing_symbols = set(fresh_symbols_df["symbol"].to_list()) if not fresh_symbols_df.is_empty() else set()
+            # A. Smart Resume: Filter out symbols that ALREADY HAVE DATA
+            # During a backfill/resume, if we have rows, we skip to save API credits.
+            existing_symbols_df = self._db_manager.query("SELECT DISTINCT symbol FROM historical_prices_fmp")
+            existing_symbols = set(existing_symbols_df["symbol"].to_list()) if not existing_symbols_df.is_empty() else set()
             
             # B. Negative Caching: Filter out symbols known to fail
             failed_symbols = set(self._db_manager.get_failed_symbols("historical_price"))
             
             original_count = len(symbols)
             
-            # Filter: Only download if NOT fresh and NOT failed
+            # Filter: Only download if NOT in DB and NOT failed
             symbols = [
                 s for s in symbols 
                 if s not in existing_symbols and s not in failed_symbols
@@ -260,8 +256,8 @@ class Client:
             
             skipped_count = original_count - len(symbols)
             if skipped_count > 0:
-                logger.info(f"⏭️ Optimization: Skipped {skipped_count} symbols that are already up-to-date or failed.")
-                logger.info(f"📥 Pending workload: {len(symbols)} symbols needing enrichment.")
+                logger.info(f"⏭️ Optimization: Skipped {skipped_count} symbols already in database.")
+                logger.info(f"📥 Pending workload: {len(symbols)} symbols.")
         except Exception as e:
             logger.warning(f"⚠️ Smart Resume check failed: {e}")
 

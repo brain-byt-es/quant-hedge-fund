@@ -494,9 +494,27 @@ class DuckDBManager:
 
             conn.register("temp_fund", df)
             
-            # 2. Perform Institutional Upsert
-            # We use INSERT OR REPLACE which works perfectly with our new PRIMARY KEY(symbol, date)
-            conn.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM temp_fund")
+            # 2. Perform Institutional Upsert (DELETE + INSERT pattern)
+            # This is safer than ON CONFLICT because it handles schema changes dynamically
+            
+            # Extract symbols and dates from temp_fund to delete potential duplicates
+            # Note: We do this in a transaction to ensure atomicity
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                # Delete existing rows for these symbol/date combos
+                conn.execute(f"""
+                    DELETE FROM {table_name} 
+                    WHERE (symbol, date) IN (
+                        SELECT symbol, date FROM temp_fund
+                    )
+                """)
+                
+                # Insert new rows
+                conn.execute(f"INSERT INTO {table_name} SELECT * FROM temp_fund")
+                conn.execute("COMMIT")
+            except Exception as tx_err:
+                conn.execute("ROLLBACK")
+                raise tx_err
             
             return len(df)
         finally:
