@@ -327,8 +327,11 @@ class Client:
                     companies["asset_type"] = "stock"
                     companies["price"] = 0.0 # Will be updated by price ingest or live feed
                     
-                    # Map SimFin ID to cik for mapping logic if direct CIK not present
-                    if "SimFin Id" in companies.columns:
+                    # Map real SEC CIK if present, fallback to SimFin ID
+                    if "CIK" in companies.columns:
+                        # Ensure CIK is a clean string, padded to 10 digits if possible
+                        companies["cik"] = companies["CIK"].apply(lambda x: str(int(x)).zfill(10) if pd.notnull(x) else None)
+                    elif "SimFin Id" in companies.columns:
                         companies["cik"] = companies["SimFin Id"].astype(str)
                     
                     stats["stock_list"] = self._db_manager.upsert_stock_list(companies)

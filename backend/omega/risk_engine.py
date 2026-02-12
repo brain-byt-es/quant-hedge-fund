@@ -172,36 +172,107 @@ class RiskManager:
 
     def calculate_portfolio_var(self, positions: List[Dict[str, Any]], confidence_level: float = 0.95) -> float:
         """
-        Estimate Portfolio Value-at-Risk (VaR) using the historical method.
-        Note: Requires historical returns for all symbols in positions.
+        Estimate Portfolio Value-at-Risk (VaR) using the Historical Simulation method.
+        Fetches real historical returns from DuckDB for all positions.
         """
         import numpy as np
         if not positions:
             return 0.0
             
-        # 1. Get historical returns for each symbol
-        # Simplified: Use 1% as a placeholder if data is missing, 
-        # but in production we'd query DuckDB for the covariance matrix.
-        total_market_value = sum(abs(p["market_value"]) for p in positions)
-        if total_market_value == 0:
-            return 0.0
+        try:
+            from qsconnect.database.duckdb_manager import DuckDBManager
+            from config.settings import get_settings
+            db = DuckDBManager(get_settings().duckdb_path, read_only=True)
             
-        # Simplified Parametric VaR calculation:
-        # VaR = PortfolioValue * Z_score * Portfolio_Volatility
-        # For now, let's assume a default portfolio vol of 15% annual if not calculated
-        vol_daily = 0.15 / np.sqrt(252)
-        z_score = 1.645 if confidence_level == 0.95 else 2.326
-        
-        var_amount = total_market_value * z_score * vol_daily
-        return var_amount
+            symbols = [p["symbol"] for p in positions]
+            weights = np.array([p["market_value"] for p in positions])
+            total_value = sum(abs(w) for w in weights)
+            
+            if total_value == 0: return 0.0
+            
+            # Normalize weights (preserving sign for Long/Short)
+            normalized_weights = weights / total_value
 
-    def calculate_expected_shortfall(self, positions: List[Dict[str, Any]], confidence_level: float = 0.95) -> float:
-        """
-        Estimate Expected Shortfall (Conditional VaR).
-        """
-        var = self.calculate_portfolio_var(positions, confidence_level)
-        # Rule of thumb for normal distribution: ES is roughly 1.2-1.5x VaR at tail
-        return var * 1.25
+            # 1. Fetch last 252 days of returns for all symbols
+            # We use Polars for high-speed pivot and covariance calculation
+            symbols_str = ",".join([f"'{s}'" for s in symbols])
+            sql = f"""
+                SELECT symbol, date, (close / lag(close) OVER (PARTITION BY symbol ORDER BY date)) - 1 as daily_return
+                FROM historical_prices_fmp
+                WHERE symbol IN ({symbols_str})
+                AND date > (CURRENT_DATE - INTERVAL 300 DAY)
+            """
+            df_returns = db.query(sql).drop_nulls()
+            
+            if df_returns.is_empty():
+                logger.warning("No historical returns found for VaR calculation. Falling back to 2% proxy.")
+                return total_value * 0.02
+
+            # Pivot to Symbol Columns
+            pivoted = df_returns.pivot(values="daily_return", index="date", on="symbol").drop("date").fill_null(0.0)
+            returns_matrix = pivoted.to_numpy() # Rows: Days, Cols: Symbols
+            
+            # 2. Calculate Portfolio Returns
+            # Dot product: [Days x Symbols] * [Symbols x 1] = [Days x 1]
+            portfolio_returns = np.dot(returns_matrix, normalized_weights)
+            
+            # 3. Percentile-based VaR
+            # 95% confidence = 5th percentile of losses
+            var_percentile = np.percentile(portfolio_returns, (1 - confidence_level) * 100)
+            
+            # VaR is typically expressed as a positive dollar amount (the potential loss)
+            return abs(var_percentile) * total_value
+
+        except Exception as e:
+            logger.error(f"Advanced VaR calculation failed: {e}. Using fallback.")
+            return sum(abs(p["market_value"]) for p in positions) * 0.02
+
+    def get_portfolio_exposure(self, positions: List[Dict[str, Any]], total_equity: float) -> Dict[str, Any]:
+        """Calculates Long, Short, Gross and Net exposure."""
+        long_val = sum(p["market_value"] for p in positions if p["market_value"] > 0)
+        short_val = sum(abs(p["market_value"]) for p in positions if p["market_value"] < 0)
+        
+        gross = long_val + short_val
+        net = long_val - short_val
+        
+        return {
+            "long_exposure_usd": float(long_val),
+            "short_exposure_usd": float(short_val),
+            "gross_exposure_usd": float(gross),
+            "net_exposure_usd": float(net),
+            "net_leverage": float(net / total_equity) if total_equity > 0 else 0.0,
+            "gross_leverage": float(gross / total_equity) if total_equity > 0 else 0.0
+        }
+
+    def get_concentration_metrics(self, positions: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Detects sector and industry concentration."""
+        from qsconnect.database.duckdb_manager import DuckDBManager
+        from config.settings import get_settings
+        db = DuckDBManager(get_settings().duckdb_path, read_only=True)
+        
+        symbols = [p["symbol"] for p in positions]
+        if not symbols: return {"sectors": [], "industries": []}
+        
+        # Get metadata for positions
+        symbols_str = ",".join([f"'{s}'" for s in symbols])
+        meta = db.query(f"SELECT symbol, sector, industry FROM stock_list_fmp WHERE symbol IN ({symbols_str})").to_dicts()
+        meta_map = {m["symbol"]: m for m in meta}
+        
+        total_value = sum(abs(p["market_value"]) for p in positions)
+        if total_value == 0: return {"sectors": [], "industries": []}
+        
+        sector_map = {}
+        for p in positions:
+            m = meta_map.get(p["symbol"], {"sector": "Unknown", "industry": "Unknown"})
+            sec = m["sector"] or "Unknown"
+            sector_map[sec] = sector_map.get(sec, 0.0) + abs(p["market_value"])
+            
+        sector_list = [
+            {"name": k, "value": v, "weight": v/total_value} 
+            for k, v in sorted(sector_map.items(), key=lambda x: x[1], reverse=True)
+        ]
+        
+        return {"sectors": sector_list}
 
     def get_portfolio_risk(self, positions: List[Dict[str, Any]], total_equity: float) -> Dict[str, Any]:
         """
@@ -209,11 +280,18 @@ class RiskManager:
         """
         var_95 = self.calculate_portfolio_var(positions, 0.95)
         es_95 = self.calculate_expected_shortfall(positions, 0.95)
+        exposure = self.get_portfolio_exposure(positions, total_equity)
+        concentration = self.get_concentration_metrics(positions)
         
         return {
-            "var_95_usd": float(var_95),
-            "var_95_percent": float(var_95 / total_equity) if total_equity > 0 else 0.0,
-            "expected_shortfall_usd": float(es_95),
+            "summary": {
+                "var_95_usd": float(var_95),
+                "var_95_percent": float(var_95 / total_equity) if total_equity > 0 else 0.0,
+                "expected_shortfall_usd": float(es_95),
+                "total_equity": float(total_equity)
+            },
+            "exposure": exposure,
+            "concentration": concentration,
             "stress_tests": self.run_stress_test(positions, total_equity)
         }
 

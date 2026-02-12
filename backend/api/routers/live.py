@@ -41,6 +41,31 @@ def get_positions():
     app = get_omega_app()
     return app.get_positions()
 
+@router.get("/risk")
+def get_portfolio_risk():
+    """Get real-time risk metrics for the entire portfolio."""
+    try:
+        app = get_omega_app()
+        positions = app.get_positions()
+        account = app.get_account_summary() # Assumes this returns equity info
+        
+        total_equity = account.get("NetLiquidation", account.get("Equity", 100000.0))
+        
+        # Format positions for risk engine
+        risk_positions = []
+        for p in positions:
+            risk_positions.append({
+                "symbol": p["symbol"],
+                "market_value": p["market_value"],
+                "quantity": p["quantity"]
+            })
+            
+        return app.risk_manager.get_portfolio_risk(risk_positions, total_equity)
+    except Exception as e:
+        from loguru import logger
+        logger.error(f"Failed to fetch portfolio risk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/orders")
 def get_recent_orders(limit: int = 50):
     app = get_omega_app()

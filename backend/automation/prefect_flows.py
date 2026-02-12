@@ -274,9 +274,21 @@ def task_stitch_tickers():
             if dates_df.is_empty(): continue
             
             master_symbol = dates_df.sort("last_date", descending=True)["symbol"][0]
+            master_last_date = dates_df.sort("last_date", descending=True)["last_date"][0]
             aliases = [s for s in symbols if s != master_symbol]
             
             for source in aliases:
+                # SAFETY CHECK: Only merge if the source is actually 'dead' (stale history)
+                # If the source has a recent price (within last 90 days), it's likely a different share class
+                source_info = dates_df.filter(pl.col("symbol") == source)
+                if not source_info.is_empty():
+                    source_last_date = source_info["last_date"][0]
+                    days_stale = (master_last_date - source_last_date).days
+                    
+                    if days_stale < 90:
+                        logger.warning(f"⚠️ Skipping Stitching for {source} and {master_symbol}: Both appear active (Gap: {days_stale} days). Likely share classes.")
+                        continue
+
                 log_step(client, "INFO", "Stitcher", f"🧵 Stitching {source} -> {master_symbol} (CIK: {cik})")
                 
                 # A. Register Alias (Permanent Protection)
