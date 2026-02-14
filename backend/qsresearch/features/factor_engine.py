@@ -53,6 +53,136 @@ class FactorEngine:
             return 0
         finally: conn.close()
 
+    def calculate_historical_factors(self, start_date: str, end_date: str, frequency: str = "monthly") -> int:
+        """
+        Calculates historical factors for the entire universe at a specific frequency.
+        Populates the 'factor_history' table for point-in-time backtesting.
+        """
+        logger.info(f"Calculating historical factors from {start_date} to {end_date} ({frequency})...")
+        try:
+            conn = self.db_mgr.connect()
+            
+            # Generate date series for evaluation
+            interval = "1 MONTH" if frequency == "monthly" else "1 WEEK"
+            dates_df = conn.execute(f"""
+                SELECT CAST(range AS DATE) as eval_date 
+                FROM range(CAST('{start_date}' AS DATE), CAST('{end_date}' AS DATE) + INTERVAL 1 DAY, INTERVAL {interval})
+            """).df()
+
+            total_inserted = 0
+            for eval_date in dates_df['eval_date']:
+                eval_date_str = eval_date.strftime('%Y-%m-%d')
+                logger.info(f"Processing Factors for {eval_date_str}...")
+                
+                # We reuse the ranking logic but with a PIT (Point-in-Time) filter
+                sql = f"""
+                INSERT OR REPLACE INTO factor_history
+                WITH PriceData AS (
+                    SELECT 
+                        symbol, 
+                        date, 
+                        close, 
+                        volume,
+                        (close / NULLIF(LAG(close) OVER (PARTITION BY symbol ORDER BY date), 0) - 1.0) * 100.0 as change_percent
+                    FROM historical_prices_fmp
+                    WHERE date <= '{eval_date_str}'
+                ),
+                LatestPrices AS (
+                    SELECT symbol, date, close, volume, change_percent
+                    FROM PriceData
+                    QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+                ),
+                PastPrices AS (
+                    SELECT symbol, date, close
+                    FROM historical_prices_fmp
+                    WHERE date < (CAST('{eval_date_str}' AS DATE) - INTERVAL 360 DAY)
+                    QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+                ),
+                FundamentalData AS (
+                    SELECT 
+                        i.symbol, 
+                        i.date as report_date,
+                        COALESCE(i."Publish Date", i.date) as publish_date,
+                        i."Net Income", 
+                        i."Shares (Basic)", 
+                        i.Revenue,
+                        i."Gross Profit",
+                        b."Total Assets",
+                        b."Total Equity",
+                        b."Total Current Assets",
+                        b."Total Current Liabilities",
+                        b."Long Term Debt",
+                        c."Net Cash from Operating Activities" as cfo,
+                        LAG(i."Net Income" / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_roa,
+                        LAG(b."Long Term Debt" / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_leverage,
+                        LAG(b."Total Current Assets" / NULLIF(b."Total Current Liabilities", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_current_ratio,
+                        LAG(i."Shares (Basic)") OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_shares,
+                        LAG(i."Gross Profit" / NULLIF(i.Revenue, 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_gross_margin,
+                        LAG(i.Revenue / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_asset_turnover
+                    FROM bulk_income_quarter_fmp i
+                    LEFT JOIN bulk_balance_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
+                    LEFT JOIN bulk_cashflow_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
+                    WHERE COALESCE(i."Publish Date", i.date) <= '{eval_date_str}'
+                ),
+                LatestFundamentals AS (
+                    SELECT *
+                    FROM FundamentalData
+                    QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY report_date DESC) = 1
+                ),
+                PrevFundamentals AS (
+                    SELECT f.symbol, f.report_date, f.Revenue
+                    FROM FundamentalData f
+                    JOIN LatestFundamentals lf ON f.symbol = lf.symbol AND f.report_date < lf.report_date
+                    QUALIFY ROW_NUMBER() OVER (PARTITION BY f.symbol ORDER BY f.report_date DESC) = 1
+                ),
+                RawFactors AS (
+                    SELECT 
+                        s.symbol, 
+                        CAST('{eval_date_str}' AS DATE) as as_of, 
+                        COALESCE(p.close, s.price, 0.0) as price,
+                        COALESCE(p.volume, 0.0) as volume,
+                        COALESCE(p.close * i."Shares (Basic)", s.price * i."Shares (Basic)", 0.0) as market_cap,
+                        ((COALESCE(p.close, s.price) / NULLIF(p_past.close, 0)) - 1.0) as raw_mom,
+                        (i."Net Income" / NULLIF(b."Total Equity", 0)) as raw_roe,
+                        (i.Revenue - i_prev.Revenue) / NULLIF(i_prev.Revenue, 0) as raw_growth,
+                        (i."Net Income" * 4 / NULLIF(COALESCE(p.close, s.price) * i."Shares (Basic)", 0)) as raw_value,
+                        -- 9-Point Piotroski F-Score
+                        (
+                            CASE WHEN (i."Net Income" / NULLIF(i."Total Assets", 0)) > 0 THEN 1 ELSE 0 END + 
+                            CASE WHEN i.cfo > 0 THEN 1 ELSE 0 END + 
+                            CASE WHEN (i."Net Income" / NULLIF(i."Total Assets", 0)) > COALESCE(i.prev_roa, 0) THEN 1 ELSE 0 END + 
+                            CASE WHEN (i.cfo / NULLIF(i."Total Assets", 0)) > (i."Net Income" / NULLIF(i."Total Assets", 0)) THEN 1 ELSE 0 END + 
+                            CASE WHEN (i."Long Term Debt" / NULLIF(i."Total Assets", 0)) <= COALESCE(i.prev_leverage, 1) THEN 1 ELSE 0 END + 
+                            CASE WHEN (i."Total Current Assets" / NULLIF(i."Total Current Liabilities", 0)) > COALESCE(i.prev_current_ratio, 0) THEN 1 ELSE 0 END + 
+                            CASE WHEN i."Shares (Basic)" <= COALESCE(i.prev_shares, i."Shares (Basic)") THEN 1 ELSE 0 END + 
+                            CASE WHEN (i."Gross Profit" / NULLIF(i.Revenue, 0)) > COALESCE(i.prev_gross_margin, 0) THEN 1 ELSE 0 END + 
+                            CASE WHEN (i.Revenue / NULLIF(i."Total Assets", 0)) > COALESCE(i.prev_asset_turnover, 0) THEN 1 ELSE 0 END
+                        ) as f_score
+                    FROM stock_list_fmp s
+                    LEFT JOIN LatestPrices p ON s.symbol = p.symbol
+                    LEFT JOIN PastPrices p_past ON s.symbol = p_past.symbol
+                    LEFT JOIN LatestFundamentals i ON s.symbol = i.symbol
+                    LEFT JOIN PrevFundamentals i_prev ON s.symbol = i_prev.symbol
+                    LEFT JOIN LatestFundamentals b ON s.symbol = b.symbol
+                )
+                SELECT symbol, as_of, price, market_cap,
+                    COALESCE(PERCENT_RANK() OVER (ORDER BY raw_mom ASC) * 100, 50.0),
+                    COALESCE(PERCENT_RANK() OVER (ORDER BY raw_roe ASC) * 100, 50.0),
+                    COALESCE(PERCENT_RANK() OVER (ORDER BY raw_growth ASC) * 100, 50.0),
+                    COALESCE(PERCENT_RANK() OVER (ORDER BY raw_value ASC) * 100, 50.0),
+                    50.0, f_score, CURRENT_TIMESTAMP
+                FROM RawFactors 
+                WHERE price > 0
+                """
+                conn.execute(sql)
+                total_inserted += conn.execute(f"SELECT COUNT(*) FROM factor_history WHERE date = '{eval_date_str}'").fetchone()[0]
+
+            return total_inserted
+        except Exception as e:
+            logger.error(f"Historical Factor Calculation Error: {e}")
+            return 0
+        finally: conn.close()
+
     def _execute_sql_ranking(self, conn, min_mcap, min_volume):
         sql = """
         INSERT OR REPLACE INTO factor_ranks_snapshot

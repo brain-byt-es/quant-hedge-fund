@@ -11,6 +11,7 @@ interface IndustryData {
     name: string
     count: number
     market_cap?: number
+    total_revenue?: number
     perf_1d?: number
     perf_1y?: number
     avg_dividend_yield?: number

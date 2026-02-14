@@ -324,6 +324,97 @@ def get_asset_list(
         logger.error(f"Asset list failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/heatmap")
+def get_market_heatmap(index: str = "S&P 500"):
+    """
+    Get data for Market Heatmap, grouped by Sector and Industry.
+    Returns a Highcharts-compatible Treemap structure.
+    """
+    try:
+        client = get_qs_client()
+        
+        # Define limits and exchange filters
+        limit = 500
+        exchange_filter = ""
+        
+        if index == "NASDAQ 100":
+            exchange_filter = "AND (m.exchange ILIKE '%NASDAQ%' OR m.exchange = 'NMS')"
+            limit = 100
+        elif index == "DOW 30":
+            limit = 30
+        
+        # Query: Join master index with latest factor ranks
+        # We use split_part to extract Sector and Industry from the category string "Sector - Industry"
+        sql = f"""
+            SELECT 
+                m.symbol,
+                m.name,
+                split_part(m.category, ' - ', 1) as sector,
+                split_part(m.category, ' - ', 2) as industry,
+                r.market_cap,
+                r.change_1d as change_percent
+            FROM master_assets_index m
+            JOIN factor_ranks_snapshot r ON m.symbol = r.symbol
+            WHERE m.type = 'Equity' 
+              AND m.country = 'United States'
+              AND m.category IS NOT NULL
+              AND m.category != ''
+              {exchange_filter}
+            ORDER BY r.market_cap DESC
+            LIMIT {limit}
+        """
+        
+        df = client.query(sql)
+        if df.is_empty():
+            return []
+            
+        rows = df.to_dicts()
+        
+        hc_data = []
+        sectors = set()
+        industries = set()
+        
+        for row in rows:
+            sector = row['sector'] or "Unknown"
+            industry = row['industry'] or sector
+            
+            # 1. Add Sector if new
+            if sector not in sectors:
+                sectors.add(sector)
+                hc_data.append({
+                    "id": f"s_{sector}",
+                    "name": sector,
+                    "level": 1
+                })
+            
+            # 2. Add Industry if new (namespaced by sector)
+            ind_id = f"i_{sector}_{industry}"
+            if ind_id not in industries:
+                industries.add(ind_id)
+                hc_data.append({
+                    "id": ind_id,
+                    "name": industry,
+                    "parent": f"s_{sector}",
+                    "level": 2
+                })
+            
+            # 3. Add Leaf (Stock)
+            hc_data.append({
+                "name": row['symbol'],
+                "fullName": row['name'],
+                "parent": ind_id,
+                "value": row['market_cap'] or 0,
+                "colorValue": row['change_percent'] or 0
+            })
+            
+        return hc_data
+
+    except Exception as e:
+        logger.error(f"Heatmap generation failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/debug_asset/{symbol}")
 def debug_asset(symbol: str):
     try:

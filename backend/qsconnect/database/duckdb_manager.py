@@ -421,6 +421,26 @@ class DuckDBManager:
                 )
             """)
 
+            # 29. Factor History (Point-in-Time Factor Store)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS factor_history (
+                    symbol VARCHAR,
+                    date DATE,
+                    price DOUBLE,
+                    market_cap DOUBLE,
+                    momentum_score DOUBLE,
+                    quality_score DOUBLE,
+                    value_score DOUBLE,
+                    growth_score DOUBLE,
+                    safety_score DOUBLE,
+                    f_score INTEGER,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (symbol, date)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fh_date ON factor_history(date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fh_symbol ON factor_history(symbol)")
+
             # Safe migration: Add total_revenue if missing
             try:
                 cols = conn.execute("PRAGMA table_info('sector_industry_stats')").fetchall()

@@ -90,22 +90,33 @@ def _run_wrapped_fast_engine(
     output_dir: Path,
     log_to_mlflow: bool
 ) -> Dict[str, Any]:
-    """Stable Pandas-based simulator supporting Zipline API."""
+    """Stable Pandas-based simulator supporting Class-based strategies with pre-computed factors."""
+    import importlib.util
 
     # 1. Load Data
     price_data = _load_price_data(bundle_name, start_date, end_date)
     if price_data.empty:
         raise ValueError("No price data found for the selected period.")
 
-    # 2. Extract Logic
+    # 2. Load Pre-computed Factors (Optimized)
+    factor_data = _load_factor_data(start_date, end_date)
+    if not factor_data.empty:
+        logger.info(f"Loaded {len(factor_data)} factor records for backtest.")
+    else:
+        logger.warning("No pre-computed factors found. Strategy logic using factors will fail.")
+
+    # 3. Load Strategy Class Safely
     current_dir = Path(__file__).parent.parent.parent
     strategy_file = current_dir / "qsresearch" / "strategies" / "factor" / "algorithms.py"
 
-    with open(strategy_file, "r") as f:
-        raw_code = f.read()
-
-    code_lines = [l for l in raw_code.split('\n') if not l.strip().startswith(('from zipline', 'import zipline'))]
-    code = '\n'.join(code_lines)
+    spec = importlib.util.spec_from_file_location("user_strategy", strategy_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    
+    if not hasattr(module, 'Strategy'):
+        raise ImportError("Strategy file must contain a 'Strategy' class inheriting from BaseStrategy.")
+    
+    strategy_instance = module.Strategy()
 
     # Context Mock
     class Context:
@@ -117,7 +128,7 @@ def _run_wrapped_fast_engine(
 
     context = Context(capital_base)
 
-    # API Mocks
+    # API Mocks & Injection
     target_weights = {}
     def order_target_percent(asset, weight):
         target_weights[asset.symbol] = weight
@@ -129,31 +140,59 @@ def _run_wrapped_fast_engine(
 
     def record(**kwargs): pass
 
-    # Run Initialize
-    namespace = {'order_target_percent': order_target_percent, 'symbol': symbol, 'record': record, 'context': context}
-    exec(code, namespace)
-    if 'initialize' in namespace:
-        namespace['initialize'](context)
+    # Inject methods into strategy instance
+    strategy_instance.symbol = symbol
+    strategy_instance.order_target_percent = order_target_percent
+    strategy_instance.record = record
 
-    # 3. Simulate
+    # Run Initialize
+    strategy_instance.initialize(context)
+
+    # 4. Simulate
     price_matrix = price_data.pivot(index='date', columns='symbol', values='close')
     returns_matrix = price_matrix.pct_change().fillna(0)
+    
+    # Factor lookup optimization: Group by date
+    factor_by_date = {}
+    if not factor_data.empty:
+        for dt, group in factor_data.groupby('date'):
+            factor_by_date[dt] = group.set_index('symbol').to_dict(orient='index')
 
     class Data:
-        def __init__(self, p): self.prices = p
-        def current(self, asset, field): return self.prices.get(asset.symbol, 0)
+        def __init__(self, p, f): 
+            self.prices = p
+            self.factors = f or {}
+            
+        def current(self, asset, field): 
+            if field == 'price':
+                return self.prices.get(asset.symbol, 0)
+            return self.factors.get(asset.symbol, {}).get(field, 0)
 
     all_signals = []
-    for dt, prices in price_matrix.iterrows():
-        data = Data(prices.to_dict())
-        if 'handle_data' in namespace:
-            namespace['handle_data'](context, data)
+    sim_dates = price_matrix.index.sort_values()
+    
+    last_available_factors = {}
+    sorted_factor_dates = sorted(factor_by_date.keys())
+
+    for dt in sim_dates:
+        if dt in factor_by_date:
+            last_available_factors = factor_by_date[dt]
+        else:
+            recent_dates = [fd for fd in sorted_factor_dates if fd <= dt]
+            if recent_dates:
+                last_available_factors = factor_by_date[recent_dates[-1]]
+
+        prices = price_matrix.loc[dt].to_dict()
+        data = Data(prices, last_available_factors)
+        
+        # Run strategy iteration
+        strategy_instance.handle_data(context, data)
         all_signals.append(target_weights.copy())
 
     signals_df = pd.DataFrame(all_signals, index=price_matrix.index).fillna(0)
     weights = signals_df.shift(1).fillna(0)
 
-    # 4. Returns & Costs
+    # 5. Returns & Costs
     from qsresearch.backtest.brokerage_models import get_brokerage_model
     broker_name = config.get("brokerage", "ALPACA")
     broker_model = get_brokerage_model(broker_name)
@@ -163,40 +202,28 @@ def _run_wrapped_fast_engine(
     port_returns = port_returns / total_weights.replace(0, 1)
 
     # Calculate Realistic Costs
-    # turnover_value = change in weights * portfolio_value
-    # For a vectorized approximation, we use the turnover of weights
     weight_changes = weights.diff().fillna(0)
-
-    # We estimate daily costs as a return drag
-    # fees_drag = (sum of (fee(symbol_turnover) / portfolio_value))
     daily_costs = []
-
-    # Simple portfolio value proxy for share calculation
     current_val = capital_base
-    for dt, changes in weight_changes.iterrows():
+    for dt in sim_dates:
+        changes = weight_changes.loc[dt]
         day_fee = 0.0
         day_slippage = 0.0
 
-        for symbol, d_weight in changes.items():
+        for symbol_name, d_weight in changes.items():
             if d_weight == 0: continue
 
             trade_value = abs(d_weight) * current_val
-            price = price_matrix.at[dt, symbol]
+            price = price_matrix.at[dt, symbol_name]
             shares = int(trade_value / price) if price > 0 else 0
             side = "buy" if d_weight > 0 else "sell"
 
-            # Fees from model
             day_fee += broker_model.calculate_fees(trade_value, shares, side)
-
-            # Slippage from model (weighted by volume if available, else default)
-            slippage_pct = broker_model.get_slippage(symbol, 1000001) # Default to liquid for now
+            slippage_pct = broker_model.get_slippage(symbol_name, 1000001)
             day_slippage += trade_value * slippage_pct
 
-        # Convert total day dollar cost to return drag
         total_drag = (day_fee + day_slippage) / current_val
         daily_costs.append(total_drag)
-
-        # Update current_val for next day's share estimation
         day_ret = port_returns.at[dt] - total_drag
         current_val *= (1 + day_ret)
 
@@ -209,7 +236,7 @@ def _run_wrapped_fast_engine(
         "portfolio_value": cum_returns * capital_base
     })
 
-    # 5. Metrics & MLflow
+    # 6. Metrics & MLflow
     metrics = calculate_all_metrics(performance)
 
     if log_to_mlflow and MLFLOW_AVAILABLE:
@@ -225,6 +252,84 @@ def _run_wrapped_fast_engine(
 
     logger.success(f"Backtest Complete. Return: {metrics.get('portfolio_total_return', 0):.2%}")
     return {"performance": performance, "metrics": metrics, "config": config}
+
+    signals_df = pd.DataFrame(all_signals, index=price_matrix.index).fillna(0)
+    weights = signals_df.shift(1).fillna(0)
+
+    # 5. Returns & Costs
+    from qsresearch.backtest.brokerage_models import get_brokerage_model
+    broker_name = config.get("brokerage", "ALPACA")
+    broker_model = get_brokerage_model(broker_name)
+
+    port_returns = (returns_matrix * weights).sum(axis=1)
+    total_weights = weights.abs().sum(axis=1)
+    port_returns = port_returns / total_weights.replace(0, 1)
+
+    # Calculate Realistic Costs
+    weight_changes = weights.diff().fillna(0)
+    daily_costs = []
+    current_val = capital_base
+    for dt in sim_dates:
+        changes = weight_changes.loc[dt]
+        day_fee = 0.0
+        day_slippage = 0.0
+
+        for symbol_name, d_weight in changes.items():
+            if d_weight == 0: continue
+
+            trade_value = abs(d_weight) * current_val
+            price = price_matrix.at[dt, symbol_name]
+            shares = int(trade_value / price) if price > 0 else 0
+            side = "buy" if d_weight > 0 else "sell"
+
+            day_fee += broker_model.calculate_fees(trade_value, shares, side)
+            slippage_pct = broker_model.get_slippage(symbol_name, 1000001)
+            day_slippage += trade_value * slippage_pct
+
+        total_drag = (day_fee + day_slippage) / current_val
+        daily_costs.append(total_drag)
+        day_ret = port_returns.at[dt] - total_drag
+        current_val *= (1 + day_ret)
+
+    final_returns = port_returns - pd.Series(daily_costs, index=port_returns.index)
+
+    cum_returns = (1 + final_returns).cumprod()
+    performance = pd.DataFrame({
+        "date": price_matrix.index,
+        "returns": final_returns,
+        "portfolio_value": cum_returns * capital_base
+    })
+
+    # 6. Metrics & MLflow
+    metrics = calculate_all_metrics(performance)
+
+    if log_to_mlflow and MLFLOW_AVAILABLE:
+        run_name = config.get("run_name", f"fast_{datetime.now().strftime('%H%M%S')}")
+        with mlflow.start_run(run_name=run_name):
+            _log_params_to_mlflow(config)
+            for k, v in metrics.items():
+                if isinstance(v, (int, float)): mlflow.log_metric(k, v)
+
+            output_path = output_dir / f"fast_perf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+            with open(output_path, "wb") as f: pickle.dump({"metrics": metrics, "config": config}, f)
+            mlflow.log_artifact(str(output_path))
+
+    logger.success(f"Backtest Complete. Return: {metrics.get('portfolio_total_return', 0):.2%}")
+    return {"performance": performance, "metrics": metrics, "config": config}
+
+
+def _load_factor_data(start_date: str, end_date: str) -> pd.DataFrame:
+    """Load pre-computed factors from the database."""
+    from qsconnect import Client
+    client = Client()
+    try:
+        # Load factors from factor_history table
+        sql = f"SELECT * FROM factor_history WHERE date >= '{start_date}' AND date <= '{end_date}'"
+        factors = client.query(sql)
+        return factors.to_pandas()
+    except Exception as e:
+        logger.warning(f"Failed to load factor data: {e}")
+        return pd.DataFrame()
 
 
 def _run_zipline_backtest(strategy_file, bundle_name, start_date, end_date, capital_base, config, output_dir, log_to_mlflow):

@@ -13,6 +13,7 @@ interface IndustryData {
     name: string
     count: number
     market_cap?: number
+    total_revenue?: number
     perf_1d?: number
     // Compat
     symbol?: string

@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import dynamic from "next/dynamic"
 import { Badge } from "@/components/ui/badge"
 import { 
-    IconGridPattern, 
     IconRefresh,
     IconLayoutGrid
 } from "@tabler/icons-react"
@@ -11,15 +11,30 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-export default function MarketHeatmapPage() {
-    const [isLoading, setIsLoading] = useState(true)
-    const [selectedETF, setSelectedETF] = useState("S&P 500")
+// Load Heatmap dynamically to avoid SSR issues with Highcharts
+const MarketHeatmap = dynamic(() => import("@/components/market-heatmap").then(mod => mod.MarketHeatmap), {
+    ssr: false,
+    loading: () => (
+        <div className="flex flex-col items-center justify-center h-[600px] w-full gap-4">
+            <div className="grid grid-cols-4 gap-2 w-64 opacity-20">
+                {Array.from({ length: 16 }).map((_, i) => (
+                    <div key={i} className="bg-muted aspect-square rounded-sm animate-pulse" />
+                ))}
+            </div>
+            <span className="font-mono text-[10px] uppercase font-bold tracking-widest animate-pulse">
+                Initializing Highcharts...
+            </span>
+        </div>
+    )
+})
 
-    useEffect(() => {
-        // Simulating loading delay for the visualization skeleton
-        const timer = setTimeout(() => setIsLoading(false), 800)
-        return () => clearTimeout(timer)
-    }, [])
+export default function MarketHeatmapPage() {
+    const [selectedETF, setSelectedETF] = useState("S&P 500")
+    const [refreshKey, setRefreshKey] = useState(0)
+
+    const handleRefresh = () => {
+        setRefreshKey(prev => prev + 1)
+    }
 
     return (
         <div className="flex flex-col space-y-6">
@@ -55,6 +70,7 @@ export default function MarketHeatmapPage() {
                         variant="outline" 
                         size="sm" 
                         className="h-8 rounded-full px-4 text-[10px] font-black uppercase tracking-widest border-border/50"
+                        onClick={handleRefresh}
                     >
                         <IconRefresh className="size-3 mr-2" /> Refresh
                     </Button>
@@ -62,41 +78,8 @@ export default function MarketHeatmapPage() {
             </div>
 
             <div className="grid grid-cols-1">
-                <div className="bg-card/20 border border-border/50 rounded-2xl overflow-hidden min-h-[600px] relative flex flex-col items-center justify-center p-8 text-center space-y-4">
-                    {isLoading ? (
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="grid grid-cols-4 gap-2 w-64 opacity-20">
-                                {Array.from({ length: 16 }).map((_, i) => (
-                                    <div key={i} className="bg-muted aspect-square rounded-sm animate-pulse" />
-                                ))}
-                            </div>
-                            <span className="font-mono text-[10px] uppercase font-bold tracking-widest animate-pulse">Calculating Tree Dimensions...</span>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="absolute inset-0 grid grid-cols-12 grid-rows-6 gap-1 p-4 opacity-40">
-                                {/* MOCK TREEMAP RECTANGLES */}
-                                <div className="col-span-4 row-span-4 bg-green-500/20 border border-green-500/30 rounded flex items-center justify-center font-black font-mono text-xl">NVDA</div>
-                                <div className="col-span-3 row-span-3 bg-green-500/10 border border-green-500/20 rounded flex items-center justify-center font-black font-mono text-lg">AAPL</div>
-                                <div className="col-span-2 row-span-2 bg-red-500/20 border border-red-500/30 rounded flex items-center justify-center font-black font-mono text-sm">MSFT</div>
-                                <div className="col-span-3 row-span-2 bg-green-500/5 border border-green-500/10 rounded" />
-                                <div className="col-span-2 row-span-2 bg-muted/20 border border-border/30 rounded" />
-                                <div className="col-span-3 row-span-3 bg-green-500/20 border border-green-500/30 rounded flex items-center justify-center font-black font-mono text-md">GOOGL</div>
-                                <div className="col-span-2 row-span-1 bg-red-500/10 border border-red-500/20 rounded" />
-                                <div className="col-span-5 row-span-2 bg-muted/10 border border-border/20 rounded" />
-                            </div>
-                            <div className="z-10 bg-background/80 backdrop-blur-xl p-8 rounded-3xl border border-primary/20 shadow-2xl max-w-md">
-                                <IconGridPattern className="size-12 text-primary mx-auto mb-4 opacity-50" />
-                                <h3 className="text-lg font-black uppercase italic tracking-tight mb-2">Highcharts Engine Required</h3>
-                                <p className="text-xs text-muted-foreground leading-relaxed mb-6">
-                                    Market heatmaps utilize the Highcharts Treemap engine for recursive grouping. For the best performance in this environment, please enable the <span className="text-primary font-bold">Visual Core</span> module.
-                                </p>
-                                <Button className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest">
-                                    Load Interactive Visualization
-                                </Button>
-                            </div>
-                        </>
-                    )}
+                <div className="bg-card/20 border border-border/50 rounded-2xl overflow-hidden min-h-[600px] relative">
+                    <MarketHeatmap key={`${selectedETF}-${refreshKey}`} index={selectedETF} />
                 </div>
             </div>
 
