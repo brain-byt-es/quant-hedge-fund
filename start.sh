@@ -5,12 +5,14 @@ pre_cleanup() {
     echo "🧹 Cleaning up ports and zombie processes..."
     # Kill processes on ports
     lsof -ti:8000 | xargs kill -9 2>/dev/null
+    lsof -ti:8001 | xargs kill -9 2>/dev/null
     lsof -ti:3000 | xargs kill -9 2>/dev/null
     lsof -ti:5000 | xargs kill -9 2>/dev/null
     lsof -ti:4200 | xargs kill -9 2>/dev/null
     
     # Kill backend python processes specifically (prevents DuckDB locks)
     pgrep -f "uvicorn main:app" | xargs kill -9 2>/dev/null
+    pgrep -f "data_service:app" | xargs kill -9 2>/dev/null
     pgrep -f "prefect_flows" | xargs kill -9 2>/dev/null
     
     # AGGRESSIVE: Kill anything holding the DuckDB file lock
@@ -37,6 +39,7 @@ pre_cleanup() {
 cleanup() {
     echo "Stopping servers..."
     kill $BACKEND_PID 2>/dev/null
+    kill $DATA_SERVICE_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     kill $MLFLOW_PID 2>/dev/null
     kill $PREFECT_PID 2>/dev/null
@@ -55,17 +58,22 @@ echo "Starting QuantHedgeFond Platform..."
 export PROJECT_ROOT=$(pwd)
 echo "📂 Project Root set to: $PROJECT_ROOT"
 
-# Start Backend
-echo "Starting Backend (FastAPI)..."
+# 1. Start Data Service (SOLE WRITER)
+echo "Starting Data Service (DuckDB Writer)..."
 cd backend
 if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
 fi
+python -m uvicorn qsconnect.database.data_service:app --port 8001 &
+DATA_SERVICE_PID=$!
+sleep 2 # Give it a head start to claim the file lock
+
+# 2. Start Main API (READERS)
+echo "Starting Backend API (FastAPI Readers)..."
 export HDF5_DIR=/opt/homebrew/opt/hdf5
 export MLFLOW_TRACKING_URI=sqlite:///mlflow.db
-# Using python -m uvicorn to ensure we use the python from the environment
-# workers=1 is crucial for DuckDB concurrency safety in dev mode
-python -m uvicorn main:app --reload --port 8000 --workers 1 &
+# We can now scale workers because the API uses read_only=True
+python -m uvicorn main:app --reload --port 8000 --workers 4 &
 BACKEND_PID=$!
 
 # Start MLflow UI (Strategy Lab)
@@ -86,10 +94,11 @@ npm run dev &
 FRONTEND_PID=$!
 
 echo "Services are running:"
-echo "Backend API:  http://localhost:8000"
+echo "Data Service: http://localhost:8001 (Writer)"
+echo "Backend API:  http://localhost:8000 (Readers)"
 echo "Strategy Lab: http://localhost:5000 (MLflow)"
 echo "Automation:   http://localhost:4200 (Prefect)"
 echo "Dashboard:    http://localhost:3000 (Next.js)"
 
 # Wait for processes
-wait $BACKEND_PID $FRONTEND_PID $MLFLOW_PID $PREFECT_PID
+wait $BACKEND_PID $DATA_SERVICE_PID $FRONTEND_PID $MLFLOW_PID $PREFECT_PID

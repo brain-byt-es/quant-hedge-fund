@@ -10,11 +10,12 @@ from qsconnect import Client as QSConnectClient
 router = APIRouter()
 qs_client = None
 
-def get_qs_client(read_only: bool = False):
+def get_qs_client(read_only: bool = True):
     """Singleton for QS Connect Client (Shared Process Connection)"""
     global qs_client
     if not qs_client:
-        qs_client = QSConnectClient(read_only=read_only)
+        # API Workers are ALWAYS Read-Only to allow concurrency
+        qs_client = QSConnectClient(read_only=True)
     return qs_client
 
 class IngestRequest(BaseModel):
