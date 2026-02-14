@@ -21,8 +21,8 @@ def trigger_factor_update(
     """Trigger the Factor Engine to recalculate universe rankings with optional filters."""
     try:
         client = get_qs_client()
-        # Pass the shared client's DB manager to avoid locking issues
-        engine = FactorEngine(db_mgr=client._db_manager)
+        # FactorEngine already uses RemoteWriter for snapshot calculations
+        engine = FactorEngine()
         count = engine.calculate_universe_ranks(min_mcap=min_mcap, min_volume=min_volume)
         return {"status": "success", "ranked_symbols": count, "filters": {"min_mcap": min_mcap, "min_volume": min_volume}}
     except Exception as e:
@@ -38,8 +38,7 @@ def get_signals(
     min_volume: float = Query(0.0, description="Minimum daily volume in Millions")
 ):
     """
-    Get Factor Rankings from the Factor Engine Snapshot.
-    Returns pre-calculated percentile scores for the entire universe.
+    Get Factor Rankings from the Factor Engine Snapshot via Data Service.
     """
     try:
         client = get_qs_client()
@@ -50,9 +49,6 @@ def get_signals(
             sort_by = "momentum_score"
 
         try:
-            # Join with stock_list_fmp to ensure the universe is visible.
-            # Permissive filtering: If metadata (MCap/Vol) is 0 or NULL, we show the stock 
-            # as 'Unknown' instead of hiding it, unless the user explicitly wants to hide unknowns.
             sql = f"""
                 SELECT 
                     s.symbol,
@@ -82,11 +78,13 @@ def get_signals(
             res = client.query(sql)
             df = res.to_pandas()
             
+            if df.empty:
+                return []
+
             # Ensure unique symbols and add rank index
             df = df.drop_duplicates(subset=['symbol'])
             df['rank'] = range(1, len(df) + 1)
             
-            # Format for frontend (Handle NaN for JSON compliance)
             return df.replace({np.nan: None}).to_dict(orient="records")
         except Exception as db_err:
             logger.error(f"Signal Snapshot Query failed: {db_err}")
@@ -98,27 +96,24 @@ def get_signals(
 
 @router.get("/profile/{symbol}")
 def get_company_profile(symbol: str):
-    """Get comprehensive company profile with Just-in-Time (JIT) API fallback."""
+    """Get comprehensive company profile via Unified Data Service."""
     try:
         client = get_qs_client()
         profile_data = {}
-        api_profile = {} # Initialize early
 
-        # 1. Try to fetch from local DuckDB cache
+        # 1. Fetch from local DuckDB via Proxy
         try:
             res = client.query(f"SELECT * FROM bulk_company_profiles_fmp WHERE symbol = '{symbol}'")
             if not res.is_empty():
                 profile_data = res.to_dicts()[0]
-                # Consistency mapping
                 if "company_name" not in profile_data and "companyName" in profile_data:
                     profile_data["company_name"] = profile_data.pop("companyName")
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
 
-        # 2. Dynamic Price & Market Cap Recovery (SimFin Native)
+        # 2. SimFin Recovery
         if profile_data.get("price", 0) == 0 or profile_data.get("market_cap", 0) == 0:
             try:
-                # Calculate Market Cap: Price * Shares
                 sql_mcap = f"""
                     SELECT 
                         (SELECT close FROM historical_prices_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 1) as price,
@@ -138,151 +133,111 @@ def get_company_profile(symbol: str):
                 if not res.is_empty():
                     price_val = float(res["price"][0]) if res["price"][0] else 0.0
                     shares_val = float(res["shares"][0]) if res["shares"][0] else 0.0
-
                     if price_val > 0: profile_data["price"] = price_val
                     if price_val > 0 and shares_val > 0:
                         profile_data["market_cap"] = price_val * shares_val
-                        logger.info(f"✅ Calculated SimFin Market Cap for {symbol}: ${profile_data['market_cap']:,.0f}")
             except Exception as calc_err:
                 logger.debug(f"SimFin Market Cap calc failed: {calc_err}")
 
-        # 3. JIT Fallback (FMP)
-        current_price = profile_data.get("price")
-        current_mcap = profile_data.get("market_cap")
-        current_beta = profile_data.get("beta")
-        current_ipo = profile_data.get("ipo_date")
+        # 3. JIT Fallback
+        if not profile_data.get("company_name"):
+            api_profile = client._fmp_client.get_company_profile(symbol)
+            if api_profile:
+                profile_data.update(api_profile)
+                # Cache via Proxy
+                client._db_proxy.upsert_company_profiles(pd.DataFrame([api_profile]))
 
-        if not profile_data.get("company_name") or not current_price or not current_mcap or current_beta is None or not current_ipo:
-            try:
-                logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Profile/Price/MCap/Beta/IPO)")
-                api_profile = client._fmp_client.get_company_profile(symbol)
-
-                if api_profile:
-                    if not profile_data.get("company_name"):
-                        profile_data.update({
-                            "symbol": symbol,
-                            "company_name": api_profile.get("companyName", f"{symbol} Corp"),
-                            "sector": api_profile.get("sector", "Technology"),
-                            "industry": api_profile.get("industry", "N/A"),
-                            "description": api_profile.get("description", "No description available."),
-                            "website": api_profile.get("website", ""),
-                            "ceo": api_profile.get("ceo", ""),
-                            "full_time_employees": int(api_profile.get("fullTimeEmployees", 0)) if api_profile.get("fullTimeEmployees") else 0,
-                            "exchange": api_profile.get("exchangeShortName", "NASDAQ"),
-                            "ipo_date": api_profile.get("ipoDate", "N/A"),
-                            "beta": float(api_profile.get("beta", 0.0)) if api_profile.get("beta") else 0.0
-                        })
-
-                    if not profile_data.get("price") and api_profile.get("price"):
-                        profile_data["price"] = float(api_profile["price"])
-                    if not profile_data.get("market_cap") and api_profile.get("mktCap"):
-                        profile_data["market_cap"] = float(api_profile["mktCap"])
-                    if not profile_data.get("beta") and api_profile.get("beta"):
-                        profile_data["beta"] = float(api_profile["beta"])
-                    if not profile_data.get("ipo_date") and api_profile.get("ipoDate"):
-                        profile_data["ipo_date"] = api_profile["ipoDate"]
-                    if not profile_data.get("exchange") and api_profile.get("exchangeShortName"):
-                        profile_data["exchange"] = api_profile["exchangeShortName"]
-
-                    # Cache back to DB
-                    try:
-                        import pandas as pd
-                        client._db_manager.upsert_company_profiles(pd.DataFrame([api_profile]))
-                    except: pass
-            except Exception as jit_err:
-                logger.error(f"❌ JIT Fallback failed for {symbol}: {jit_err}")
-
-        # 4. Final Data Assembly
         if not profile_data.get("company_name"):
             raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found.")
 
-        # Factor Ranks
-        try:
-            engine = FactorEngine(db_mgr=client._db_manager)
-            ranks = engine.get_ranks(symbol)
-        except: ranks = None
+        # Ranks via Proxy
+        engine = FactorEngine()
+        ranks = engine.get_ranks(symbol)
 
-        if not ranks:
-            ranks = {
-                "factor_attribution": [
-                    {"factor": "Momentum", "score": 50}, {"factor": "Quality", "score": 50},
-                    {"factor": "Growth", "score": 50}, {"factor": "Value", "score": 50},
-                    {"factor": "Safety", "score": 50},
-                ],
-                "raw_metrics": { "f_score": 0 }
-            }
-
-        response = {
+        return {
             "symbol": symbol,
             "company_name": profile_data.get("company_name"),
             "sector": profile_data.get("sector"),
             "industry": profile_data.get("industry"),
             "description": profile_data.get("description"),
             "website": profile_data.get("website"),
-            "ceo": profile_data.get("ceo"),
-            "full_time_employees": profile_data.get("full_time_employees"),
             "price": profile_data.get("price"),
-            "updated_at": profile_data.get("updated_at"),
             "market_cap": profile_data.get("market_cap"),
-            "beta": profile_data.get("beta"),
-            "ipo_date": profile_data.get("ipo_date"),
-            "exchange": profile_data.get("exchange"),
-            "factor_attribution": ranks["factor_attribution"],
-            "raw_factor_metrics": ranks["raw_metrics"]
+            "factor_attribution": ranks["factor_attribution"] if ranks else [],
+            "raw_factor_metrics": ranks["raw_metrics"] if ranks else {}
         }
-
-        # News
-        try:
-            news_df = client._fmp_client.get_stock_news(symbol, limit=5)
-            response["latest_news"] = news_df.replace({np.nan: None}).to_dict(orient="records") if not news_df.empty else []
-        except Exception as news_err:
-            logger.debug(f"News fetch failed for {symbol}: {news_err}")
-            response["latest_news"] = []
-
-        # Smart Insider Sentiment (Net Value Flow)
-        try:
-            insider_df = client._fmp_client.get_insider_trades(symbol, limit=100)
-
-            # Persist to DB so Factor Engine can calculate score
-            if not insider_df.empty:
-                try:
-                    client._db_manager.upsert_insider_trades(insider_df)
-                except Exception as db_ins_err:
-                    logger.debug(f"Failed to persist JIT insider trades for {symbol}: {db_ins_err}")
-
-            if not insider_df.empty:
-                # Filter for Open Market transactions (P = Purchase, S = Sale)
-                buys = insider_df[insider_df["transactionType"].str.contains("Purchase|Buy|P-Purchase", case=False, na=False)]
-                sells = insider_df[insider_df["transactionType"].str.contains("Sale|Sell|S-Sale", case=False, na=False)]
-
-                # Calculate volumes safely
-                buy_vol = (buys["securitiesTransacted"] * buys["price"]).sum() if not buys.empty else 0
-                sell_vol = (sells["securitiesTransacted"] * sells["price"]).sum() if not sells.empty else 0
-
-                net_flow = buy_vol - sell_vol
-
-                if net_flow > 5_000_000:
-                    response["insider_sentiment"] = "STRONG BUY"
-                elif net_flow > 500_000:
-                    response["insider_sentiment"] = "BULLISH"
-                elif net_flow < -5_000_000:
-                    response["insider_sentiment"] = "DUMPING"
-                elif net_flow < -500_000:
-                    response["insider_sentiment"] = "BEARISH"
-                else:
-                    response["insider_sentiment"] = "NEUTRAL"
-            else:
-                response["insider_sentiment"] = "NEUTRAL"
-
-        except Exception as ins_err:
-            logger.debug(f"Insider analysis failed for {symbol}: {ins_err}")
-            response["insider_sentiment"] = "NEUTRAL"
-
-        return response
 
     except Exception as e:
         logger.error(f"Error in get_company_profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/price-history/{symbol}")
+def get_price_history(symbol: str, lookback: int = 252):
+    """Get historical prices via Data Service proxy."""
+    try:
+        client = get_qs_client()
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=lookback * 1.5)
+        sql = f"""
+            SELECT date, close 
+            FROM historical_prices_fmp 
+            WHERE symbol = '{symbol}' 
+            AND date >= '{start_date.strftime('%Y-%m-%d')}'
+            ORDER BY date ASC
+        """
+        res = client.query(sql)
+        if not res.is_empty():
+            return res.select(
+                pl.col("date").dt.strftime("%Y-%m-%d"),
+                pl.col("close")
+            ).to_dicts()
+        return []
+    except Exception as e:
+        logger.error(f"Price history query failed: {e}")
+        return []
+
+@router.get("/financials/{symbol}")
+def get_financial_statements(symbol: str):
+    """Fetch financials via Data Service proxy."""
+    try:
+        client = get_qs_client()
+        income = client.query(f"SELECT * FROM bulk_income_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
+        balance = client.query(f"SELECT * FROM bulk_balance_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
+        cash = client.query(f"SELECT * FROM bulk_cashflow_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date ASC LIMIT 20").to_dicts()
+
+        return {"income": income, "balance": balance, "cash": cash}
+    except Exception as e:
+        logger.error(f"Failed to fetch financials for {symbol}: {e}")
+        return {"income": [], "balance": [], "cash": []}
+
+@router.get("/stock-ratios/{symbol}")
+def get_stock_ratios(symbol: str):
+    """Get ratios via FinanceToolkit (Requires transposed data from Data Service)."""
+    try:
+        # FinanceToolkit logic remains the same as it uses the client's proxy query methods
+        engine = FactorEngine()
+        return engine.get_detailed_metrics(symbol)
+    except Exception as e:
+        logger.error(f"FinanceToolkit ratios failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UpdateCodeRequest(BaseModel):
+    code: str
+
+@router.get("/algorithms/code")
+def get_algorithms_code():
+    from pathlib import Path
+    path = Path(__file__).parent.parent.parent / "qsresearch" / "strategies" / "factor" / "algorithms.py"
+    with open(path, "r") as f:
+        return {"code": f.read()}
+
+@router.post("/algorithms/code")
+def update_algorithms_code(request: UpdateCodeRequest):
+    from pathlib import Path
+    path = Path(__file__).parent.parent.parent / "qsresearch" / "strategies" / "factor" / "algorithms.py"
+    with open(path, "w") as f:
+        f.write(request.code)
+    return {"status": "success", "message": "Algorithms updated successfully."}
 
 @router.post("/aggregate_taxonomy")
 def trigger_taxonomy_aggregation():

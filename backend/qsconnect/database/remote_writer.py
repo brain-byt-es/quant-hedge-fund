@@ -1,6 +1,6 @@
 """
 QS Connect - Remote Writer Client
-Proxy class that routes write operations to the dedicated Data Service.
+Proxy class that routes all database operations to the dedicated Data Service.
 """
 
 import requests
@@ -11,18 +11,31 @@ from loguru import logger
 
 class RemoteWriter:
     """
-    Proxy for DuckDB write operations.
-    Talks to the Data Service microservice.
+    Proxy for DuckDB operations.
+    Talks to the Unified Data Service microservice.
     """
     
     def __init__(self, base_url: str = "http://localhost:8001"):
         self.base_url = base_url
 
+    def query(self, sql: str) -> pl.DataFrame:
+        """Execute a SQL query via the Data Service."""
+        try:
+            response = requests.post(
+                f"{self.base_url}/query",
+                json={"sql": sql},
+                timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
+            return pl.from_dicts(data) if data else pl.DataFrame()
+        except Exception as e:
+            logger.error(f"Remote Query Failed: {e}")
+            return pl.DataFrame()
+
     def execute(self, sql: str, params: Optional[List[Any]] = None):
         """Execute a SQL command via the Data Service."""
         try:
-            # Handle pandas/polars data in params if needed by the service
-            # For simplicity, we assume params are simple types or handled by the service
             response = requests.post(
                 f"{self.base_url}/execute",
                 json={"sql": sql, "params": params},
@@ -90,7 +103,6 @@ class RemoteWriter:
         """Upsert company profiles via the Data Service."""
         try:
             data = df.to_dict(orient="records")
-            # Note: The service needs to handle the complex Profile SQL or we use simple execute
             response = requests.post(
                 f"{self.base_url}/execute",
                 json={

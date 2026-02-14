@@ -1,7 +1,7 @@
 """
-QS Connect - Data Service (Writer)
-A dedicated microservice that owns the Read-Write connection to DuckDB.
-Ensures all INSERT/UPDATE/DELETE operations are serialized and prevent file locking.
+QS Connect - Data Service (Unified)
+The sole owner of the DuckDB connection. All other processes (API, Ingestion)
+must communicate with this service for both READ and WRITE operations.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -15,7 +15,7 @@ from pathlib import Path
 from qsconnect.database.duckdb_manager import DuckDBManager
 from config.settings import get_settings
 
-app = FastAPI(title="Quant Science Data Service (Writer)")
+app = FastAPI(title="Quant Science Data Service (Unified)")
 db_mgr = None
 
 class SQLCommand(BaseModel):
@@ -26,15 +26,26 @@ class SQLCommand(BaseModel):
 def startup_event():
     global db_mgr
     settings = get_settings()
-    # The Data Service is the SOLE WRITER
+    # The Data Service is the SOLE process allowed to touch the file
     db_mgr = DuckDBManager(settings.duckdb_path, read_only=False)
-    logger.info("Data Service (Writer) started and DuckDB RW connection initialized.")
+    logger.info("Unified Data Service started. Ownership of quant.duckdb established.")
 
 @app.on_event("shutdown")
 def shutdown_event():
     if db_mgr:
         db_mgr.close()
-        logger.info("Data Service (Writer) shutdown complete.")
+        logger.info("Unified Data Service shutdown complete.")
+
+@app.post("/query")
+async def query_data(command: SQLCommand):
+    """Execute a SELECT query and return results."""
+    try:
+        df = db_mgr.query(command.sql)
+        # Convert to records for JSON transport
+        return df.to_dicts()
+    except Exception as e:
+        logger.error(f"Query Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/execute")
 async def execute_command(command: SQLCommand):
@@ -72,9 +83,18 @@ async def upsert_fundamentals(payload: Dict[str, Any]):
         logger.error(f"Fundamental Upsert Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/")
+async def root():
+    return {
+        "service": "Quant Science Unified Data Service",
+        "status": "online",
+        "endpoints": ["/query", "/execute", "/upsert/prices", "/upsert/fundamentals", "/health"]
+    }
+
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "mode": "writer"}
+    stats = db_mgr.get_table_stats() if db_mgr else []
+    return {"status": "healthy", "tables": stats}
 
 if __name__ == "__main__":
     import uvicorn

@@ -90,8 +90,12 @@ class TradingApp:
         # Governance & Strategy Layer
         if not hasattr(self, '_db_manager'):
             from qsconnect.database.duckdb_manager import DuckDBManager
-            self._db_manager = DuckDBManager(settings.duckdb_path)
+            # TradingApp is a READER in the API process
+            self._db_manager = DuckDBManager(settings.duckdb_path, read_only=True)
 
+        from qsconnect.database.remote_writer import RemoteWriter
+        self._writer = RemoteWriter()
+        
         self.gov = GovernanceManager(self._db_manager)
         self.registry = get_registry()
         self.risk_manager = RiskManager()
