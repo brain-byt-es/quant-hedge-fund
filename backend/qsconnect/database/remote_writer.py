@@ -116,3 +116,31 @@ class RemoteWriter:
         except Exception as e:
             logger.error(f"Remote Profile Upsert Failed: {e}")
             return 0
+
+    def calculate_historical_factors(self, start_date: str, end_date: str, frequency: str = "monthly") -> int:
+        """Trigger historical factor calculation via Data Service."""
+        try:
+            response = requests.post(
+                f"{self.base_url}/factors/historical",
+                json={
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "frequency": frequency
+                },
+                timeout=1200 # Large timeout for heavy batch
+            )
+            response.raise_for_status()
+            return response.json().get("count", 0)
+        except Exception as e:
+            logger.error(f"Remote Historical Factors Failed: {e}")
+            return 0
+
+    def clear_factor_history(self) -> bool:
+        """Clear the factor history table via Data Service."""
+        try:
+            response = requests.post(f"{self.base_url}/factors/clear", timeout=30)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.error(f"Remote Clear Factors Failed: {e}")
+            return False

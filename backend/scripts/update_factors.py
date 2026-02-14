@@ -1,6 +1,6 @@
 """
 Script to trigger Factor Engine ranking.
-Updates the `factor_ranks_snapshot` and `factor_history` tables in DuckDB.
+Updates the `factor_ranks_snapshot` and `factor_history` tables via Unified Data Service.
 """
 
 import argparse
@@ -18,6 +18,7 @@ from qsresearch.features.factor_engine import FactorEngine
 def main():
     parser = argparse.ArgumentParser(description="Update Factor Engine rankings.")
     parser.add_argument("--historical", action="store_true", help="Calculate historical factors")
+    parser.add_argument("--clear", action="store_true", help="Clear existing factor history before calculation")
     parser.add_argument("--start", type=str, default="2023-01-01", help="Start date for historical calculation")
     parser.add_argument("--end", type=str, default=None, help="End date for historical calculation")
     parser.add_argument("--frequency", type=str, default="monthly", choices=["monthly", "weekly"], help="Frequency for historical calculation")
@@ -28,15 +29,22 @@ def main():
     logger.info("QS Hedge Fund - Factor Ranking Update")
     logger.info("=" * 60)
 
+    # FactorEngine now handles its own proxy connection to the Unified Data Service
     engine = FactorEngine()
 
     try:
+        if args.clear:
+            logger.warning("Cleaning factor history table...")
+            success = engine.writer.clear_factor_history()
+            if success: logger.success("Factor history cleared.")
+            else: logger.error("Failed to clear factor history.")
+
         if args.historical:
             from datetime import datetime
             end_date = args.end or datetime.now().strftime("%Y-%m-%d")
             logger.info(f"Running historical factor calculation from {args.start} to {end_date}...")
             count = engine.calculate_historical_factors(args.start, end_date, frequency=args.frequency)
-            logger.success(f"Successfully calculated {count} historical factor records.")
+            logger.success(f"Successfully calculated {count} historical factor records (with Volatility).")
         else:
             count = engine.calculate_universe_ranks()
             logger.success(f"Successfully ranked {count} symbols in snapshot.")

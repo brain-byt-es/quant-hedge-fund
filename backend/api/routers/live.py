@@ -18,35 +18,55 @@ class BrokerConfigRequest(BaseModel):
     active_broker: str
 
 @router.get("/status")
-def get_live_status():
+async def get_live_status():
     app = get_omega_app()
-    status = app.get_health_status()
-    # Augment with broker info
+    status = await app.get_health_status()
+    
+    # Risk V2: Augment with dynamic circuit breaker info
+    # We calculate the current realized vol and regime-adjusted limit for the UI
+    positions = await app.broker.get_positions()
+    total_equity = status.get("net_liquidation", 0.0)
+    realized_vol = app.risk_manager.calculate_portfolio_volatility(positions)
+    
+    regime = "Neutral"
+    if app.active_strategy and "regime_snapshot" in app.active_strategy:
+        regime = app.active_strategy["regime_snapshot"].get("regime_label", "Neutral")
+        
+    # Formula matched with backend halt logic
+    z_score = 2.33
+    regime_mult = app.risk_manager.get_market_regime_multiplier(regime)
+    config_floor = app.risk_manager.limits.get("GLOBAL_LIMITS", {}).get("daily_loss_limit_usd", 5000.0)
+    
+    dynamic_limit = total_equity * realized_vol * z_score * regime_mult
+    status["dynamic_loss_limit"] = float(max(dynamic_limit, config_floor))
+    status["portfolio_volatility"] = float(realized_vol)
+    status["market_regime"] = regime
     status["active_broker"] = getattr(app, "broker_type", "UNKNOWN")
+    
     return status
 
 @router.post("/config")
-def configure_live_ops(config: BrokerConfigRequest):
+async def configure_live_ops(config: BrokerConfigRequest):
     """Configure live operations (e.g. switch broker)."""
     app = get_omega_app()
-    success = app.set_broker(config.active_broker)
+    success = await app.set_broker(config.active_broker)
     if success:
         return {"status": "updated", "active_broker": app.broker_type}
     else:
         raise HTTPException(status_code=500, detail="Failed to switch broker")
 
 @router.get("/positions")
-def get_positions():
+async def get_positions():
     app = get_omega_app()
-    return app.get_positions()
+    return await app.broker.get_positions()
 
 @router.get("/risk")
-def get_portfolio_risk():
+async def get_portfolio_risk():
     """Get real-time risk metrics for the entire portfolio."""
     try:
         app = get_omega_app()
-        positions = app.get_positions()
-        account = app.get_account_summary() # Assumes this returns equity info
+        positions = await app.broker.get_positions()
+        account = await app.get_account_info()
 
         total_equity = account.get("NetLiquidation", account.get("Equity", 100000.0))
 
@@ -66,9 +86,9 @@ def get_portfolio_risk():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/orders")
-def get_recent_orders(limit: int = 50):
+async def get_recent_orders(limit: int = 50):
     app = get_omega_app()
-    return app.get_recent_orders(limit=limit)
+    return await app.get_recent_orders(limit=limit)
 
 @router.websocket("/ws/ticks")
 async def websocket_tick_stream(websocket: WebSocket):
@@ -81,7 +101,7 @@ async def websocket_tick_stream(websocket: WebSocket):
     try:
         while True:
             # Poll for live candle updates
-            if app.is_connected() or True:
+            if app.is_connected():
                 data = app.get_live_candles()
                 if data:
                     await websocket.send_json({
@@ -91,7 +111,7 @@ async def websocket_tick_stream(websocket: WebSocket):
                     })
 
             # Send heartbeat/pnl updates
-            status = app.get_health_status()
+            status = await app.get_health_status()
             await websocket.send_json({
                 "type": "status",
                 "data": status
@@ -107,13 +127,29 @@ async def websocket_tick_stream(websocket: WebSocket):
         except: pass
 
 @router.post("/order")
-def submit_order(order: OrderRequest):
+async def submit_order(order: OrderRequest):
     app = get_omega_app()
-    trade = app.submit_order(order.model_dump())
-    if trade:
-        return {"status": "submitted", "order_id": str(trade.order.orderId)}
-    else:
-        raise HTTPException(status_code=400, detail="Order submission failed")
+    # Refactored TradingApp uses order_target_percent or submit_order
+    # Using the refactored logic for lifecycle persistence
+    try:
+        # Check if we should use target percent or raw quantity
+        # For simplicity, we use order_target_percent with current logic if it was a target order,
+        # but here the request is a raw quantity.
+        
+        # We need a dedicated async submit_order in TradingApp or use broker directly
+        trade = await app.broker.submit_order(
+            symbol=order.symbol,
+            quantity=order.quantity,
+            side=order.side,
+            order_type=order.order_type
+        )
+        
+        if trade:
+            return {"status": "submitted"}
+        else:
+            raise HTTPException(status_code=400, detail="Order submission failed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/halt")
 def emergency_halt():

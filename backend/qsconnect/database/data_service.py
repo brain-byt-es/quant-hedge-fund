@@ -22,6 +22,11 @@ class SQLCommand(BaseModel):
     sql: str
     params: Optional[List[Any]] = None
 
+class HistoricalFactorRequest(BaseModel):
+    start_date: str
+    end_date: str
+    frequency: str = "monthly"
+
 @app.on_event("startup")
 def startup_event():
     global db_mgr
@@ -41,7 +46,6 @@ async def query_data(command: SQLCommand):
     """Execute a SELECT query and return results."""
     try:
         df = db_mgr.query(command.sql)
-        # Convert to records for JSON transport
         return df.to_dicts()
     except Exception as e:
         logger.error(f"Query Error: {e}")
@@ -83,12 +87,38 @@ async def upsert_fundamentals(payload: Dict[str, Any]):
         logger.error(f"Fundamental Upsert Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/factors/historical")
+async def calculate_historical_factors(request: HistoricalFactorRequest):
+    """Trigger remote calculation of historical factors."""
+    try:
+        from qsresearch.features.factor_engine import FactorEngine
+        engine = FactorEngine(db_mgr=db_mgr)
+        count = engine.calculate_historical_factors(
+            request.start_date, 
+            request.end_date, 
+            request.frequency
+        )
+        return {"status": "success", "count": count}
+    except Exception as e:
+        logger.error(f"Remote Factor Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/factors/clear")
+async def clear_factors():
+    """Wipe the factor history table to allow full recalculation."""
+    try:
+        db_mgr.execute("DELETE FROM factor_history")
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Clear Factor Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     return {
         "service": "Quant Science Unified Data Service",
         "status": "online",
-        "endpoints": ["/query", "/execute", "/upsert/prices", "/upsert/fundamentals", "/health"]
+        "endpoints": ["/query", "/execute", "/upsert/prices", "/upsert/fundamentals", "/factors/historical", "/factors/clear", "/health"]
     }
 
 @app.get("/health")

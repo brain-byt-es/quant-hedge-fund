@@ -428,6 +428,7 @@ class DuckDBManager:
                     date DATE,
                     price DOUBLE,
                     market_cap DOUBLE,
+                    volatility DOUBLE, -- Pre-computed 20-day realized volatility
                     momentum_score DOUBLE,
                     quality_score DOUBLE,
                     value_score DOUBLE,
@@ -438,6 +439,17 @@ class DuckDBManager:
                     PRIMARY KEY (symbol, date)
                 )
             """)
+            
+            # Migration: Add volatility column if missing
+            try:
+                cols = conn.execute("PRAGMA table_info('factor_history')").fetchall()
+                col_names = [c[1] for c in cols]
+                if 'volatility' not in col_names:
+                    conn.execute("ALTER TABLE factor_history ADD COLUMN volatility DOUBLE")
+                    logger.info("Migrated factor_history: Added 'volatility' column.")
+            except Exception as mig_err:
+                logger.debug(f"Migration for factor_history failed: {mig_err}")
+
             conn.execute("CREATE INDEX IF NOT EXISTS idx_fh_date ON factor_history(date)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_fh_symbol ON factor_history(symbol)")
 
