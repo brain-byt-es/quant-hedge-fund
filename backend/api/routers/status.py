@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from api.routers.data import get_qs_client
 
 router = APIRouter()
@@ -14,9 +15,9 @@ def get_system_logs(limit: int = 50):
     try:
         client = get_qs_client()
         # Access db_manager directly via client (a bit of a reach-around, but standard for this architecture)
-        # Assuming client exposes it or we add a wrapper. 
+        # Assuming client exposes it or we add a wrapper.
         # Client has `_db_manager`. I should probably expose `get_logs` in Client.
-        # But `Client` is "Data Client". 
+        # But `Client` is "Data Client".
         # Let's add `get_logs` to Client class first.
         logs = client.get_system_logs(limit)
         return logs.to_dicts()

@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 from loguru import logger
 
 # Ensure backend is in path
@@ -7,14 +8,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from api.routers.data import get_qs_client
 
+
 def update_top_funds():
     logger.info("🚀 Updating Top Hedge Funds with Real Stats...")
-    
+
     try:
         client = get_qs_client()
         db = client._db_manager
         con = db.connect()
-        
+
         # Hardcoded data from research.py
         top_funds = [
             {"cik": "0001067983", "name": "Berkshire Hathaway Inc", "manager": "Warren Buffett", "portfolio_value": 267300000000, "top_holdings": "GOOGL,AMZN,ALLY", "strategy": "Value", "success_rate": 95.0, "rank": 1},
@@ -28,7 +30,7 @@ def update_top_funds():
             {"cik": "0001603466", "name": "Point72 Asset Management", "manager": "Steve Cohen", "portfolio_value": 34100000000, "top_holdings": "NVDA,AMZN,MSFT", "strategy": "L/S Equity", "success_rate": 87.0, "rank": 9},
             {"cik": "0001167483", "name": "Tiger Global Management", "manager": "Chase Coleman", "portfolio_value": 12800000000, "top_holdings": "META,AMZN,MSFT", "strategy": "Growth", "success_rate": 86.0, "rank": 10}
         ]
-        
+
         for fund in top_funds:
             logger.info(f"Updating {fund['name']}...")
             # We use an UPDATE statement
@@ -44,7 +46,7 @@ def update_top_funds():
                     rank = {fund['rank']}
                 WHERE cik = '{fund['cik']}'
             """)
-            
+
         logger.success("✅ Top funds updated.")
 
     except Exception as e:

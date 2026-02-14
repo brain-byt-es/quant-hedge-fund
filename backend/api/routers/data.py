@@ -1,9 +1,8 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-from datetime import date, datetime
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
-import duckdb
+from pydantic import BaseModel
 
 from config.settings import get_settings
 from qsconnect import Client as QSConnectClient
@@ -11,11 +10,11 @@ from qsconnect import Client as QSConnectClient
 router = APIRouter()
 qs_client = None
 
-def get_qs_client():
+def get_qs_client(read_only: bool = False):
     """Singleton for QS Connect Client (Shared Process Connection)"""
     global qs_client
     if not qs_client:
-        qs_client = QSConnectClient(read_only=False)
+        qs_client = QSConnectClient(read_only=read_only)
     return qs_client
 
 class IngestRequest(BaseModel):
@@ -115,10 +114,10 @@ async def run_custom_query(request: QueryRequest):
         sql = request.sql.strip()
         if "limit" not in sql.lower() and sql.lower().startswith("select"):
             sql += f" LIMIT {request.limit}"
-            
+
         logger.info(f"Executing SQL Explorer query: {sql[:100]}...")
         df = client._db_manager.query(sql)
-        
+
         # Convert to list of dicts for JSON frontend
         return df.to_dicts()
     except Exception as e:
@@ -133,25 +132,29 @@ class IngestRequest(BaseModel):
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
     """Trigger data ingestion in a background thread using the shared connection."""
-    
+
     def run_ingestion():
         client = get_qs_client()
         try:
-            from automation.prefect_flows import daily_sync_flow, historical_backfill_flow, simfin_bulk_flow
-            
+            from automation.prefect_flows import (
+                daily_sync_flow,
+                historical_backfill_flow,
+                simfin_bulk_flow,
+            )
+
             # Reset stop signal
             client.stop_requested = False
-            
+
             logger.info(f"Starting background ingestion: {request.mode}")
             save_ingestion_state({"status": "running", "step": f"Initializing {request.mode}...", "progress": 0, "details": ""})
-            
+
             if request.mode == "daily":
                 daily_sync_flow()
             elif request.mode == "simfin":
                 simfin_bulk_flow()
             else:
                 historical_backfill_flow()
-                
+
             save_ingestion_state({"status": "completed", "step": f"Finished: {request.mode}", "progress": 100, "details": "Done"})
         except Exception as e:
             logger.error(f"Ingestion failed: {e}")

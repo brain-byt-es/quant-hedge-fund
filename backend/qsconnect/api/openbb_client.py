@@ -1,14 +1,16 @@
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict
+
 import pandas as pd
-from openbb import obb
 from loguru import logger
+from openbb import obb
+
 
 class OpenBBClient:
     """
     Modular Data Hub using OpenBB Platform.
     Fungiert als 'LEGO'-Adapter für verschiedene Datenquellen.
     """
-    
+
     def __init__(self):
         # OpenBB Platform is stateless by default in Python SDK
         logger.info("OpenBB Platform SDK initialized as primary data pipeline")
@@ -27,9 +29,9 @@ class OpenBBClient:
         """Fetch historical price data."""
         try:
             res = obb.equity.price.historical(
-                symbol=symbol, 
-                start_date=start_date, 
-                end_date=end_date, 
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
                 provider=provider
             )
             return res.to_df()
@@ -46,7 +48,7 @@ class OpenBBClient:
                 res = obb.equity.fundamental.balance(symbol=symbol, provider=provider)
             else:
                 res = obb.equity.fundamental.cash(symbol=symbol, provider=provider)
-            
+
             return res.to_df()
         except Exception as e:
             logger.error(f"OpenBB Financials Error ({symbol}/{statement_type}): {e}")

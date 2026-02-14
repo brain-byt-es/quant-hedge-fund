@@ -1,35 +1,37 @@
-import sys
 import os
-import pandas as pd
-import financedatabase as fd
-from loguru import logger
+import sys
 from datetime import datetime
+
+import financedatabase as fd
+import pandas as pd
+from loguru import logger
 
 # Ensure backend is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 
 from api.routers.data import get_qs_client
 
+
 class FinanceDBSosync:
     """
     Synchronizes the global asset universe from FinanceDatabase (JerBouma)
     into the local DuckDB 'master_assets_index'.
     """
-    
+
     def __init__(self):
         self.client = get_qs_client()
         self.db = self.client._db_manager
-        
+
     def sync_all(self):
         logger.info("🌍 Starting Global Asset Sync via FinanceDatabase...")
-        
+
         self.sync_equities()
         self.sync_etfs()
         self.sync_cryptos()
         self.sync_indices()
         self.sync_currencies()
         self.sync_funds()
-        
+
         logger.success("✅ Global Asset Sync Complete.")
 
     def _bulk_insert(self, df: pd.DataFrame, asset_type: str):
@@ -39,19 +41,19 @@ class FinanceDBSosync:
 
         # Standardization
         df = df.reset_index() # 'symbol' is often the index in fd
-        
+
         # Ensure columns exist before renaming
         cols = df.columns.tolist()
-        
+
         # Mapping logic
         # Schema: symbol, name, type, category, exchange, country, currency, market_cap, isin, cusip
-        
+
         # Create a standardized DataFrame
         standard_df = pd.DataFrame()
         standard_df['symbol'] = df['symbol'] if 'symbol' in cols else df.index
         standard_df['name'] = df['name'] if 'name' in cols else "Unknown"
         standard_df['type'] = asset_type
-        
+
         # Category Logic
         if asset_type == 'Equity':
             standard_df['category'] = df['sector'].fillna('') + " - " + df['industry'].fillna('')
@@ -67,7 +69,7 @@ class FinanceDBSosync:
             standard_df['category'] = 'Fiat Currency'
         else:
             standard_df['category'] = 'Other'
-            
+
         standard_df['exchange'] = df['exchange'] if 'exchange' in cols else 'N/A'
         standard_df['country'] = df['country'] if 'country' in cols else 'Global'
         standard_df['currency'] = df['currency'] if 'currency' in cols else 'N/A'
@@ -75,16 +77,16 @@ class FinanceDBSosync:
         standard_df['isin'] = df['isin'] if 'isin' in cols else None
         standard_df['cusip'] = df['cusip'] if 'cusip' in cols else None
         standard_df['updated_at'] = datetime.now()
-        
+
         # Clean up category (remove leading/trailing ' - ' if missing parts)
         standard_df['category'] = standard_df['category'].astype(str).str.strip(' - ')
-        
+
         # Fill NaNs
         standard_df = standard_df.fillna("N/A")
-        
+
         count = len(standard_df)
         logger.info(f"Inserting {count} {asset_type}s...")
-        
+
         # DuckDB Insert
         con = self.db.connect()
         try:

@@ -9,13 +9,13 @@ MOMENTUM_FACTOR_CONFIG = {
     # MLflow settings
     "experiment_name": "Momentum Factor Strategy",
     "run_name": "qsmom_equal_weight_long_only",
-    
+
     # Backtest parameters
     "bundle_name": "historical_prices_fmp",
     "start_date": "2015-01-01",
     "end_date": "2025-02-14",
     "capital_base": 1_000_000,
-    
+
     # Preprocessing pipeline
     "preprocessing": [
         {
@@ -57,7 +57,7 @@ MOMENTUM_FACTOR_CONFIG = {
             },
         },
     ],
-    
+
     # Factor calculation
     "factors": [
         {
@@ -84,7 +84,7 @@ MOMENTUM_FACTOR_CONFIG = {
             },
         },
     ],
-    
+
     # Algorithm settings
     "algorithm": {
         "callable": "qsresearch.strategies.factor.algorithms:use_factor_as_signal",
@@ -94,7 +94,7 @@ MOMENTUM_FACTOR_CONFIG = {
             "threshold": None,
         },
     },
-    
+
     # Portfolio construction
     "portfolio_strategy": {
         "func": "long_short_equal_weight_portfolio",
@@ -104,11 +104,11 @@ MOMENTUM_FACTOR_CONFIG = {
             "long_threshold": 1.0,
         },
     },
-    
+
     # Risk settings
     "stop_loss_enabled": False,
     "stop_loss_pct": 0.15,
-    
+
     # Benchmark
     "benchmark_symbol": "SPY",
 }
@@ -120,7 +120,7 @@ VALUE_FACTOR_CONFIG = {
     "bundle_name": "historical_prices_fmp",
     "start_date": "2015-01-01",
     "capital_base": 1_000_000,
-    
+
     "preprocessing": [
         {
             "name": "price_preprocessor",
@@ -128,12 +128,12 @@ VALUE_FACTOR_CONFIG = {
             "params": {"min_trading_days": 504},
         },
         {
-            "name": "universe_screener", 
+            "name": "universe_screener",
             "func": "qsresearch.preprocessors.universe_screener:universe_screener",
             "params": {"volume_top_n": 500},
         },
     ],
-    
+
     "algorithm": {
         "callable": "qsresearch.strategies.factor.algorithms:use_factor_as_signal",
         "params": {
@@ -141,7 +141,7 @@ VALUE_FACTOR_CONFIG = {
             "top_n": 30,
         },
     },
-    
+
     "portfolio_strategy": {
         "func": "long_short_equal_weight_portfolio",
         "params": {

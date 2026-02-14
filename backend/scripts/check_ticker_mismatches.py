@@ -1,8 +1,8 @@
-import duckdb
 from pathlib import Path
-import pandas as pd
-import polars as pl
+
+import duckdb
 from loguru import logger
+
 
 def check_mismatches():
     db_path = Path("data/quant.duckdb")
@@ -37,20 +37,20 @@ def check_mismatches():
             JOIN cik_counts c ON s.cik = c.cik
             ORDER BY s.cik, s.symbol
         """
-        
+
         df = conn.execute(sql_duplicates).pl()
-        
+
         if df.is_empty():
             logger.success("✅ No CIK duplicates found! All symbols are uniquely identified.")
             return
 
         logger.warning(f"⚠️ Found {df['cik'].n_unique()} companies with multiple tickers.")
-        
+
         # Display the report
         print("\n" + "="*80)
         print(f"{'CIK':12} | {'Symbol':8} | {'Prices':8} | {'Start':10} | {'End':10} | {'Name'}")
         print("-" * 80)
-        
+
         for row in df.iter_rows(named=True):
             price_str = f"{row['price_count']:,}"
             first = str(row['first_date']) if row['first_date'] else "N/A"
@@ -60,7 +60,7 @@ def check_mismatches():
 
         # 2. Identify "Ghost" symbols (No prices but have a CIK match that HAS prices)
         # This tells us which ones we can safely merge/delete.
-        
+
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
     finally:

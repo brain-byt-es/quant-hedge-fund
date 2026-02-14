@@ -4,7 +4,7 @@ Quant Hedge Fund - Constants and Enums
 Shared constants and enumeration types used throughout the system.
 """
 
-from enum import Enum, auto
+from enum import Enum
 
 
 class DataSource(str, Enum):

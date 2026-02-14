@@ -3,9 +3,9 @@ Emergency Control System
 Persists critical operational state (HALT) to disk for backend enforcement.
 """
 import json
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 from loguru import logger
 
 # Path to shared state file
@@ -20,7 +20,7 @@ class EmergencyControl:
         EmergencyControl.resume()
         status = EmergencyControl.get_status()
     """
-    
+
     @staticmethod
     def _ensure_dir():
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ class EmergencyControl:
         """Check if system is currently halted."""
         if not STATE_FILE.exists():
             return False
-            
+
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
@@ -83,7 +83,7 @@ class EmergencyControl:
         """Get full status object."""
         if not STATE_FILE.exists():
             return {"halted": False, "reason": "System Normal", "timestamp": ""}
-            
+
         try:
             with open(STATE_FILE, "r") as f:
                 return json.load(f)

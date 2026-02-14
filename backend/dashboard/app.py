@@ -3,26 +3,26 @@ QS Hedge Fund Dashboard - Operational Control Plane
 No-emoji, professional SVG-based UI.
 """
 
-import streamlit as st
+import importlib
+import time  # For lag calculations
+from datetime import datetime, timedelta
+
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import numpy as np
-from pathlib import Path
-from plotly.subplots import make_subplots
+import streamlit as st
 from loguru import logger
-import importlib
-import omega.ai_service
+from plotly.subplots import make_subplots
 
+import omega.ai_service
+from config.registry import get_registry
 from config.settings import get_settings
+from omega.ai_service import get_market_analyst
+from omega.risk_engine import RiskManager
 from qsconnect.database.duckdb_manager import DuckDBManager
+from qsconnect.emergency import EmergencyControl
 from qsresearch.governance.manager import GovernanceManager
 from qsresearch.governance.reporting import ReportingEngine
-from config.registry import get_registry
-from qsconnect.emergency import EmergencyControl
-from omega.risk_engine import RiskManager
-from omega.ai_service import get_market_analyst
-import time # For lag calculations
 
 # Page configuration
 st.set_page_config(
@@ -149,7 +149,7 @@ def render_live_chart(db_mgr, symbol):
         LIMIT 300
     """
     df = db_mgr.query_pandas(query)
-    
+
     if df.empty:
         st.warning(f"No live candle data available for {symbol}. Waiting for ticks...")
         return
@@ -168,7 +168,7 @@ def render_live_chart(db_mgr, symbol):
             xaxis_rangeslider_visible=False,
         )
         st.session_state.figs[symbol] = fig
-    
+
     # Create Subplots: Row 1 = Candles/VWAP, Row 2 = Volume
     fig = make_subplots(
         rows=2, cols=1,
@@ -176,7 +176,7 @@ def render_live_chart(db_mgr, symbol):
         vertical_spacing=0.03,
         row_heights=[0.7, 0.3]
     )
-    
+
     # Calculate VWAP
     # VWAP = Cumulative(Volume * Price) / Cumulative(Volume)
     if not df.empty and 'close' in df.columns and 'volume' in df.columns:
@@ -184,12 +184,12 @@ def render_live_chart(db_mgr, symbol):
         # Improvement: Anchor to start of day if possible
         start_of_day = df['timestamp'].iloc[-1].replace(hour=0, minute=0, second=0, microsecond=0) \
             if not df.empty else None
-            
+
         # Filter for current session if possible, otherwise rolling VWAP
         df['cum_pv'] = (df['close'] * df['volume']).cumsum()
         df['cum_vol'] = df['volume'].cumsum()
         df['vwap'] = df['cum_pv'] / df['cum_vol']
-        
+
         # Add VWAP Trace
         fig.add_trace(go.Scatter(
             x=df['timestamp'],
@@ -239,9 +239,9 @@ def render_live_chart(db_mgr, symbol):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis_rangeslider_visible=False
     )
-    
+
     st.plotly_chart(fig, use_container_width=True, config={
-        'scrollZoom': True, 
+        'scrollZoom': True,
         'displayModeBar': True,
         'staticPlot': False
     })
@@ -251,7 +251,7 @@ def render_market_profile(db_mgr, symbol, days=30):
     # 1. Fetch Historical Data from DuckDB
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
-    
+
     try:
         query = f"""
             SELECT date as timestamp, open, high, low, close, volume 
@@ -261,7 +261,7 @@ def render_market_profile(db_mgr, symbol, days=30):
             ORDER BY date ASC
         """
         df = db_mgr.query_pandas(query)
-        
+
         if df.empty:
             st.warning(f"No historical data for {symbol} in 'prices' table.")
             return
@@ -273,7 +273,7 @@ def render_market_profile(db_mgr, symbol, days=30):
     # 2. Calculate Volume Profile
     price = df['close']
     volume = df['volume']
-    
+
     # Create histograms where bins=24
     if len(price) > 0:
         counts, bin_edges = np.histogram(price, bins=24, weights=volume)
@@ -284,12 +284,12 @@ def render_market_profile(db_mgr, symbol, days=30):
 
     # 3. Create Subplots
     fig = make_subplots(
-        rows=1, cols=2, 
-        column_widths=[0.2, 0.8], 
-        shared_yaxes=True, 
+        rows=1, cols=2,
+        column_widths=[0.2, 0.8],
+        shared_yaxes=True,
         horizontal_spacing=0.02
     )
-    
+
     # 4. Add Volume Profile (Left)
     fig.add_trace(go.Bar(
         x=counts,
@@ -299,16 +299,16 @@ def render_market_profile(db_mgr, symbol, days=30):
         marker_color='rgba(0, 255, 136, 0.3)', # Greenish tint
         showlegend=False
     ), row=1, col=1)
-    
+
     # 5. Add Candlestick (Right)
     fig.add_trace(go.Candlestick(
         x=df['timestamp'],
         open=df['open'], high=df['high'], low=df['low'], close=df['close'],
         name=symbol
     ), row=1, col=2)
-    
+
     fig.update_layout(
-        title=f"Market Profile: {symbol} ({days} Days)", 
+        title=f"Market Profile: {symbol} ({days} Days)",
         xaxis_rangeslider_visible=False,
         template="plotly_dark",
         height=600,
@@ -318,7 +318,7 @@ def render_market_profile(db_mgr, symbol, days=30):
     # Be explicit about shared Y
     fig.update_yaxes(side="right", row=1, col=2)
     fig.update_xaxes(showticklabels=False, row=1, col=1) # Hide volume numbers
-    
+
     st.plotly_chart(fig, use_container_width=True)
 
 def check_password():
@@ -329,7 +329,7 @@ def check_password():
     settings = get_settings()
     st.markdown("### 🔒 Restricted Access")
     pwd = st.text_input("Enter Operational Password", type="password")
-    
+
     if st.button("Login"):
         if pwd == settings.dashboard_password:
             st.session_state.password_correct = True
@@ -351,12 +351,11 @@ def main():
     registry = get_registry()
     registry = get_registry()
     risk_manager = RiskManager()
-    
+
     # Force reload of AI module to fix stale code
     importlib.reload(omega.ai_service)
-    from omega.ai_service import get_market_analyst
     ai_analyst = get_market_analyst(force_refresh=True)
-    
+
     active_strat = gov_mgr.get_active_strategy()
 
     # Sidebar: System Health & Emergency Controls
@@ -379,15 +378,15 @@ def main():
                 if clicked:
                     st.session_state.dark_mode = True
                     st.rerun()
-        
+
         colH1, colH2 = st.columns([1.5, 1])
         with colH1:
             st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:8px;">{render_icon("check-circle", "#00ff88")} IBKR API</div>', unsafe_allow_html=True)
             st.markdown(f'<div style="display:flex; align-items:center;">{render_icon("check-circle", "#00ff88")} Truth Layer</div>', unsafe_allow_html=True)
         with colH2:
-            st.markdown(f'<div style="margin-bottom:8px;"><span class="status-dot"></span><span class="status-text">Live (Mixed)</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div><span class="status-dot" style="background-color:#00ff88; box-shadow:0 0 5px #00ff88;"></span><span class="status-text">Multi-Asset</span></div>', unsafe_allow_html=True)
-            
+            st.markdown('<div style="margin-bottom:8px;"><span class="status-dot"></span><span class="status-text">Live (Mixed)</span></div>', unsafe_allow_html=True)
+            st.markdown('<div><span class="status-dot" style="background-color:#00ff88; box-shadow:0 0 5px #00ff88;"></span><span class="status-text">Multi-Asset</span></div>', unsafe_allow_html=True)
+
         # Real-time Engine metrics
         st.divider()
         try:
@@ -403,14 +402,14 @@ def main():
                 st.warning("Waiting for Engine ticks...")
         except:
             pass
-            
+
         st.divider()
-        
+
         st.markdown(f'<h3 style="display:flex; align-items:center; color:#e74c3c;">{render_icon("shield", "#e74c3c")} Emergency Controls</h3>', unsafe_allow_html=True)
-        
+
         # Check backend state
         system_halted = EmergencyControl.is_halted()
-        
+
         if not system_halted:
             if st.button("HALT ALL TRADING", type="primary", use_container_width=True):
                 if EmergencyControl.halt("Manually Triggered from Dashboard"):
@@ -425,10 +424,10 @@ def main():
                     st.rerun()
                 else:
                     st.error("Failed to Resume - Check Logs")
-                
+
         if st.button("CANCEL ALL ORDERS", use_container_width=True, disabled=True):
             st.toast("Not Wired to Backend yet")
-            
+
         if st.button("FLATTEN ALL POSITIONS", use_container_width=True, disabled=True):
             st.warning("Action: Immediate Portfolio Liquidation")
             if st.button("CONFIRM FLATTEN", type="primary"):
@@ -440,7 +439,7 @@ def main():
         st.text_input("Daily Loss Limit (USD)", value=f"{global_limits.get('daily_loss_limit_usd', 0):,.0f}", disabled=True)
         st.text_input("Max Symbol Exposure (%)", value=f"{global_limits.get('max_symbol_exposure_pct', 0) * 100:.0f}%", disabled=True)
         st.text_input("Max Leverage", value=f"{global_limits.get('max_total_leverage', 0):.1f}x", disabled=True)
-        
+
         st.divider()
         pass
 
@@ -454,7 +453,7 @@ def main():
 
     # Main Header
     st.markdown(f'<div class="main-header">{render_icon("shield")} Operational Control Plane</div>', unsafe_allow_html=True)
-    
+
     if active_strat:
         expiry_days = (active_strat['ttl_expiry'] - datetime.now()).days if isinstance(active_strat['ttl_expiry'], datetime) else "N/A"
         st.caption(f"Active Strategy: {active_strat['strategy_hash'][:12]} | Stage: {active_strat['stage']} | TTL: {expiry_days} days remaining")
@@ -466,15 +465,15 @@ def main():
         pnl_query = "SELECT SUM(quantity * (fill_price * -1)) as cash_flow FROM trades" # Simplified cash flow
         cash_flow_df = db_mgr.query_pandas(pnl_query)
         realized_cash = cash_flow_df['cash_flow'].iloc[0] if not cash_flow_df.empty and cash_flow_df['cash_flow'].iloc[0] else 0.0
-        
+
         # Unrealized P&L would need live prices * positions (Complexity: High)
         # For now, we show Cash Balance
         current_equity = start_balance + realized_cash
-        
+
         # 2. Exposure
         # Sum of absolute market value of open positions
-        exposure_val = 0.0 
-        
+        exposure_val = 0.0
+
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.metric("Paper Equity", f"${current_equity:,.2f}", "0.0%")
@@ -484,7 +483,7 @@ def main():
             st.metric("Realized P&L", f"${realized_cash:,.2f}", "0%")
         with m4:
             st.metric("Trades Today", "0", "0")
-            
+
     except Exception as e:
         st.error(f"Metrics Error: {e}")
 
@@ -504,7 +503,7 @@ def main():
 
     with tab1:
         st.markdown(f"#### {render_icon('terminal')} Real-Time Truth Layer & Order Blotter", unsafe_allow_html=True)
-        
+
         # Live Chart Section
         try:
             # Fetch symbols and metadata
@@ -513,33 +512,33 @@ def main():
         except Exception:
             symbol_meta = pd.DataFrame()
             active_symbols = []
-            
+
         if not active_symbols:
             # st.warning("No active symbols found in DB.") # Silence is golden
             active_symbols = []
-            
+
         if not active_symbols:
             active_symbols = ["AMZN"] # Fallback for UI skeleton
-            
+
         chart_col, info_col = st.columns([3, 1])
         with chart_col:
             col_sel1, col_sel2 = st.columns([1, 1])
             with col_sel1:
                 classes = ["ALL"] + sorted(list(symbol_meta['asset_class'].unique())) if not symbol_meta.empty else ["ALL"]
                 selected_class = st.selectbox("Filter Class", classes)
-            
+
             filtered_symbols = active_symbols
             if selected_class != "ALL" and not symbol_meta.empty:
                 filtered_symbols = symbol_meta[symbol_meta['asset_class'] == selected_class]['symbol'].tolist()
-                
+
             with col_sel2:
                 selected_symbol = st.selectbox("Select Symbol", filtered_symbols if filtered_symbols else ["AMZN"], key="chart_sym")
-            
+
             # Pre-fetch metadata for header usage
             meta = {}
             if not symbol_meta.empty and selected_symbol in symbol_meta['symbol'].values:
                 meta = symbol_meta[symbol_meta['symbol'] == selected_symbol].iloc[0]
-            
+
             # --- Live Quote Header ---
             latest_quote = db_mgr.query_pandas(f"""
                 SELECT close, open, volume, timestamp 
@@ -548,37 +547,37 @@ def main():
                 ORDER BY timestamp DESC 
                 LIMIT 1
             """)
-            
+
             if not latest_quote.empty:
                 last_price = latest_quote['close'][0]
                 open_price = latest_quote['open'][0]
                 last_vol = latest_quote['volume'][0]
                 change = last_price - open_price
                 pct_change = (change / open_price) * 100 if open_price != 0 else 0
-                
+
                 c_met1, c_met2, c_met3 = st.columns(3)
-                
+
                 # Enhanced Price Clarity
                 mid_price = last_price # Placeholder if missing
                 source_lbl = f"{meta['source'] if 'source' in meta else 'UNKNOWN'}"
-                
+
                 # Calculate Latency
                 last_ts = latest_quote['timestamp'][0]
                 latency_ms = (datetime.now() - last_ts).total_seconds() * 1000
                 lat_color = "green" if latency_ms < 2000 else "orange" if latency_ms < 5000 else "red"
-                
+
                 c_met1.metric("Last Price", f"{last_price:,.2f}", f"{change:+.2f} ({pct_change:+.2f}%)")
                 c_met2.metric("Market Context", f"{source_lbl}", f"Lat: {latency_ms:.0f}ms", delta_color="off")
                 c_met3.metric("Volume", f"{last_vol:,}", None)
-                
+
                 # Latency Badge
                 st.caption(f"🕒 Updated: {last_ts.strftime('%H:%M:%S')} (Latency: :{lat_color}[{latency_ms:.0f}ms])")
-            
+
             render_live_chart(db_mgr, selected_symbol)
-        
+
         with info_col:
-            st.markdown(f"**Market Context**")
-            
+            st.markdown("**Market Context**")
+
             # Lookup metadata for selected symbol
             if not symbol_meta.empty and selected_symbol in symbol_meta['symbol'].values:
                 meta = symbol_meta[symbol_meta['symbol'] == selected_symbol].iloc[0]
@@ -591,17 +590,17 @@ def main():
             st.markdown(f'<div style="background:rgba(31,119,180,0.1); padding:8px; border-radius:4px; border-left:4px solid #1f77b4; margin-bottom:10px;">'
                         f'<b>Source</b>: {source}<br/>'
                         f'<b>Class</b>: {aclass}</div>', unsafe_allow_html=True)
-            
+
             is_tradable = registry.is_tradable(selected_symbol)
             if is_tradable:
                 st.markdown(f'<div style="color:#00ff88; font-size:0.85rem;">{render_icon("check-circle", "#00ff88")} Tradable (IBKR)</div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div style="color:#e74c3c; font-size:0.85rem;">{render_icon("lock", "#e74c3c")} View-Only</div>', unsafe_allow_html=True)
-            
-            st.markdown(f"**Interval**: 1 min")
-            
+
+            st.markdown("**Interval**: 1 min")
+
             st.divider()
-            
+
             # --- AI Insight Panel (Moved to Main View) ---
             with st.expander("🤖 AI Insight Engine", expanded=True):
                 if st.button(f"Analyze {selected_symbol}", use_container_width=True, key="btn_ai_main"):
@@ -616,7 +615,7 @@ def main():
                             avg_vol = ai_df['volume'].mean()
                             curr_vol = ai_df['volume'].iloc[0]
                             rvol = curr_vol / avg_vol if avg_vol > 0 else 1.0
-                            
+
                             snapshot = {
                                 "symbol": selected_symbol,
                                 "price": last_close,
@@ -627,7 +626,7 @@ def main():
                                 "volatility": volatility,
                                 "session": "LIVE_TRADE"
                             }
-                            
+
                             import concurrent.futures
                             def run_ai_suite_sync():
                                 with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -636,34 +635,34 @@ def main():
                                     f3 = executor.submit(ai_analyst.check_risk_guardrail, selected_symbol, snapshot)
                                     f4 = executor.submit(ai_analyst.suggest_trade_levels, selected_symbol, snapshot)
                                     return [f.result() for f in [f1, f2, f3, f4]]
-                            
+
                             results = run_ai_suite_sync()
                             st.session_state[f"ai_suite_{selected_symbol}"] = results
-                
+
                 # Render AI Results
                 if f"ai_suite_{selected_symbol}" in st.session_state:
                     res_summary, res_regime, res_risk, res_levels = st.session_state[f"ai_suite_{selected_symbol}"]
-                    
+
                     # Regime
                     regime = res_regime.get("regime", "UNKNOWN")
                     r_conf = res_regime.get("confidence", 0) * 100
                     st.markdown(f"**Regime**: `{regime}` ({r_conf:.0f}%)")
-                    
+
                     # Summary
                     st.info(res_summary.get('summary', 'N/A'))
-                    
+
                     # Risk
                     risk_lvl = res_risk.get("risk_level", "UNKNOWN")
                     risk_color = "red" if risk_lvl == "HIGH" else "orange" if risk_lvl == "MEDIUM" else "green"
                     st.markdown(f"**Risk**: :{risk_color}[{risk_lvl}]")
                     st.caption(res_risk.get('explanation'))
-                    
+
                     # Levels
                     c1, c2 = st.columns(2)
                     c1.metric("SL", res_levels.get("stop_loss"))
                     c2.metric("TP", res_levels.get("take_profit"))
 
-            
+
             # Simple heartbeat to trigger streamlit rerun
             st.caption("Auto-refreshing live data...")
             time.sleep(5) # Throttling for maximum Windows/OneDrive stability
@@ -694,19 +693,19 @@ def main():
                 def color_side(val):
                     color = '#2ecc71' if val == 'BUY' else '#e74c3c'
                     return f'color: {color}; font-weight: bold'
-                
+
                 st.dataframe(
                     trades.style.map(color_side, subset=['Side']),
-                    use_container_width=True, 
+                    use_container_width=True,
                     hide_index=True
                 )
             else:
                 st.info("No trades recorded today. Waiting for strategy execution...")
         except Exception as e:
             st.info(f"Trade ledger not initialized or empty. {e}")
-            
+
         st.caption(f"Last Refreshed: {datetime.now().strftime('%H:%M:%S')}")
-    
+
     with tab2:
         st.markdown(f"#### {render_icon('bar-chart')} Current Holdings", unsafe_allow_html=True)
     with tab2:
@@ -714,7 +713,7 @@ def main():
         st.info("Live positions view requires persistent portfolio service.")
         # Placeholder for real connection
         # positions = db_mgr.query_pandas("SELECT * FROM positions") ...
-        
+
     with tab3:
         st.markdown(f"#### {render_icon('bot')} Staged Deployment & Approval", unsafe_allow_html=True)
         st.info("Strategy staging area for proposed models.")
@@ -727,24 +726,24 @@ def main():
                 st.warning("No strategy active in FULL/CANARY stage.")
         with c2:
             st.markdown("**2️⃣ AI Strategy Proposal**")
-            
+
             if "proposed_strat" not in st.session_state:
                 st.info("No strategy generated yet.")
             else:
                 st.json(st.session_state.proposed_strat)
-                
+
             colGen, colApp = st.columns(2)
             with colGen:
                 if st.button("✨ GENERATE NEW (AI)", type="secondary"):
                     with st.spinner("Analyzing SimFin Market Regime..."):
                         try:
                             # 1. Init Generator
-                            from qsresearch.llm.strategy_generator import StrategyGenerator
                             from qsconnect import Client as QSClient
-                            
+                            from qsresearch.llm.strategy_generator import StrategyGenerator
+
                             gen = StrategyGenerator()
                             client = QSClient()
-                            
+
                             # 2. Get Real Market Data (Proxy with AAPL for regime detection if SPY missing)
                             # Ideally we want a market index, but let's use a liquid stock as proxy for now
                             prices = client.get_prices(start_date=(datetime.now() - timedelta(days=300)).strftime("%Y-%m-%d"))
@@ -756,26 +755,26 @@ def main():
                             else:
                                 st.error("No price data found in DB to analyze.")
                                 st.stop()
-                                
+
                             # 3. Generate
                             config = gen.generate_strategy(proxy_prices)
                             st.session_state.proposed_strat = config
                             st.rerun()
-                            
+
                         except Exception as e:
                             st.error(f"Generation failed: {e}")
-            
+
             with colApp:
                 if "proposed_strat" in st.session_state:
                     if st.button("LOG & APPROVE", type="primary"):
                         proposed = st.session_state.proposed_strat
                         # Mock regime for now, or extract from generator result if available
                         strat_hash = gov_mgr.log_strategy_approval(
-                            config=proposed, 
-                            regime_snapshot=proposed.get("regime_snapshot", {}), 
-                            llm_reasoning=proposed.get("reasoning", "Manual Approval"), 
-                            human_rationale="Dashboard Approval", 
-                            approved_by="ADMIN", 
+                            config=proposed,
+                            regime_snapshot=proposed.get("regime_snapshot", {}),
+                            llm_reasoning=proposed.get("reasoning", "Manual Approval"),
+                            human_rationale="Dashboard Approval",
+                            approved_by="ADMIN",
                             stage="PAPER"
                         )
                         st.success(f"Strategy {strat_hash[:8]} deployed to PAPER")
@@ -787,7 +786,7 @@ def main():
         audit_sql = "SELECT strategy_hash, stage, approved_by, approved_at, human_rationale FROM strategy_audit_log ORDER BY approved_at DESC"
         audit_data = db_mgr.query_pandas(audit_sql)
         st.dataframe(audit_data, use_container_width=True, hide_index=True)
-        
+
     with tab5:
         st.markdown(f"#### {render_icon('activity')} Strategy Drift Monitor", unsafe_allow_html=True)
         if active_strat:
@@ -815,7 +814,7 @@ def main():
 
     with tab7:
         st.markdown(f"#### {render_icon('shield')} Portfolio Risk & Compliance", unsafe_allow_html=True)
-        
+
         rcol1, rcol2 = st.columns(2)
         with rcol1:
             st.markdown("##### Global Capacity")
@@ -828,12 +827,12 @@ def main():
             }
             for k, v in metrics.items():
                 st.write(f"**{k}:** {v}")
-                
+
             st.markdown("##### Execution Authority")
             auth = risk_manager.limits.get("EXECUTION_AUTHORITY", {})
             for broker, classes in auth.items():
                 st.write(f"**{broker}:** {', '.join(classes)}")
-                
+
         with rcol2:
             st.markdown("##### Asset Class Exposure Limits")
             ac_limits = risk_manager.limits.get("ASSET_CLASS_LIMITS", {})
@@ -843,13 +842,13 @@ def main():
             ])
             if not ac_df.empty:
                 st.table(ac_df.set_index("Class"))
-        
+
         st.divider()
         st.info("💡 These limits are enforced at the engine level in `omega/risk_engine.py`. Any order violating these will be hard-rejected before reaching the broker.")
 
     with tab8:
         st.markdown(f"#### {render_icon('bar-chart')} Market Profile Analysis", unsafe_allow_html=True)
-        
+
         cP1, cP2 = st.columns([1, 3])
         with cP1:
             try:
@@ -857,10 +856,10 @@ def main():
                 avail_symbols = db_mgr.query_pandas("SELECT DISTINCT symbol FROM prices LIMIT 10")['symbol'].tolist()
             except:
                 avail_symbols = ["AAPL", "MSFT", "SPY"]
-                
+
             prof_symbol = st.selectbox("Symbol", avail_symbols if avail_symbols else ["AAPL"], key="prof_sym")
             days = st.slider("Lookback Days", 5, 60, 30)
-            
+
         with cP2:
             render_market_profile(db_mgr, prof_symbol, days)
 

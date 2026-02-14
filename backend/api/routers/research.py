@@ -1,14 +1,14 @@
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-import pandas as pd
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 import polars as pl
-from datetime import datetime, timedelta, date
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
+from pydantic import BaseModel
 
 from api.routers.data import get_qs_client
-
 from qsresearch.features.factor_engine import FactorEngine
 
 router = APIRouter()
@@ -33,7 +33,9 @@ def trigger_factor_update(
 def get_signals(
     lookback: int = 252,
     limit: int = 5000,
-    sort_by: str = "momentum_score"
+    sort_by: str = "momentum_score",
+    min_mcap: float = Query(0.0, description="Minimum market cap in Millions"),
+    min_volume: float = Query(0.0, description="Minimum daily volume in Millions")
 ):
     """
     Get Factor Rankings from the Factor Engine Snapshot.
@@ -41,55 +43,57 @@ def get_signals(
     """
     try:
         client = get_qs_client()
-        
+
         # Validate sort column
         valid_cols = ["momentum_score", "quality_score", "value_score", "growth_score", "safety_score", "f_score"]
         if sort_by not in valid_cols:
             sort_by = "momentum_score"
-            
+
         try:
+            # Join with stock_list_fmp to ensure the universe is visible.
+            # Permissive filtering: If metadata (MCap/Vol) is 0 or NULL, we show the stock 
+            # as 'Unknown' instead of hiding it, unless the user explicitly wants to hide unknowns.
             sql = f"""
                 SELECT 
-                    symbol,
-                    price,
-                    volume,
-                    market_cap,
-                    change_1d as change_percent,
-                    ROUND(momentum_score, 1) as momentum,
-                    ROUND(quality_score, 1) as quality,
-                    ROUND(value_score, 1) as value,
-                    ROUND(growth_score, 1) as growth,
-                    ROUND(safety_score, 1) as safety,
-                    f_score,
-                    as_of
-                FROM factor_ranks_snapshot
-                WHERE price > 0.5 
-                  AND price < 5000000 -- Filter data errors
-                  AND market_cap > 1000000 -- Min $1M Cap
-                ORDER BY {sort_by} DESC
+                    s.symbol,
+                    COALESCE(r.price, s.price, 0.0) as price,
+                    COALESCE(r.volume, 0.0) as volume,
+                    COALESCE(r.market_cap, 0.0) as market_cap,
+                    COALESCE(r.change_1d, 0.0) as change_percent,
+                    COALESCE(ROUND(r.momentum_score, 1), 50.0) as momentum,
+                    COALESCE(ROUND(r.quality_score, 1), 50.0) as quality,
+                    COALESCE(ROUND(r.value_score, 1), 50.0) as value,
+                    COALESCE(ROUND(r.growth_score, 1), 50.0) as growth,
+                    COALESCE(ROUND(r.safety_score, 1), 50.0) as safety,
+                    COALESCE(r.f_score, 0) as f_score,
+                    COALESCE(r.as_of, CURRENT_DATE) as as_of
+                FROM stock_list_fmp s
+                LEFT JOIN factor_ranks_snapshot r ON s.symbol = r.symbol
+                WHERE (COALESCE(r.market_cap, 0.0) >= {min_mcap * 1_000_000} 
+                       OR COALESCE(r.market_cap, 0.0) = 0 
+                       OR {min_mcap} = 0)
+                  AND (COALESCE(r.volume, 0.0) >= {min_volume * 1_000_000} 
+                       OR COALESCE(r.volume, 0.0) = 0 
+                       OR {min_volume} = 0)
+                ORDER BY s.symbol ASC
                 LIMIT {limit}
             """
             
             res = client.query(sql)
-            
-            if res.is_empty():
-                # Fallback: Trigger calculation if empty
-                from qsresearch.features.factor_engine import FactorEngine
-                engine = FactorEngine(db_mgr=client._db_manager)
-                engine.calculate_universe_ranks()
-                res = client.query(sql) # Retry
-                
             df = res.to_pandas()
+            
+            # Ensure unique symbols and add rank index
+            df = df.drop_duplicates(subset=['symbol'])
             df['rank'] = range(1, len(df) + 1)
             
             # Format for frontend (Handle NaN for JSON compliance)
             return df.replace({np.nan: None}).to_dict(orient="records")
-            
         except Exception as db_err:
             logger.error(f"Signal Snapshot Query failed: {db_err}")
             return []
 
     except Exception as e:
+        logger.error(f"Error in get_signals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/profile/{symbol}")
@@ -110,7 +114,7 @@ def get_company_profile(symbol: str):
                     profile_data["company_name"] = profile_data.pop("companyName")
         except Exception as e:
             logger.debug(f"DB Fetch failed for {symbol}: {e}")
-            
+
         # 2. Dynamic Price & Market Cap Recovery (SimFin Native)
         if profile_data.get("price", 0) == 0 or profile_data.get("market_cap", 0) == 0:
             try:
@@ -134,9 +138,9 @@ def get_company_profile(symbol: str):
                 if not res.is_empty():
                     price_val = float(res["price"][0]) if res["price"][0] else 0.0
                     shares_val = float(res["shares"][0]) if res["shares"][0] else 0.0
-                    
+
                     if price_val > 0: profile_data["price"] = price_val
-                    if price_val > 0 and shares_val > 0: 
+                    if price_val > 0 and shares_val > 0:
                         profile_data["market_cap"] = price_val * shares_val
                         logger.info(f"✅ Calculated SimFin Market Cap for {symbol}: ${profile_data['market_cap']:,.0f}")
             except Exception as calc_err:
@@ -147,12 +151,12 @@ def get_company_profile(symbol: str):
         current_mcap = profile_data.get("market_cap")
         current_beta = profile_data.get("beta")
         current_ipo = profile_data.get("ipo_date")
-        
+
         if not profile_data.get("company_name") or not current_price or not current_mcap or current_beta is None or not current_ipo:
             try:
                 logger.warning(f"🚀 JIT TRIGGER: Real-time intelligence required for {symbol}. (Reason: Missing Profile/Price/MCap/Beta/IPO)")
                 api_profile = client._fmp_client.get_company_profile(symbol)
-                
+
                 if api_profile:
                     if not profile_data.get("company_name"):
                         profile_data.update({
@@ -179,7 +183,7 @@ def get_company_profile(symbol: str):
                         profile_data["ipo_date"] = api_profile["ipoDate"]
                     if not profile_data.get("exchange") and api_profile.get("exchangeShortName"):
                         profile_data["exchange"] = api_profile["exchangeShortName"]
-                        
+
                     # Cache back to DB
                     try:
                         import pandas as pd
@@ -197,7 +201,7 @@ def get_company_profile(symbol: str):
             engine = FactorEngine(db_mgr=client._db_manager)
             ranks = engine.get_ranks(symbol)
         except: ranks = None
-        
+
         if not ranks:
             ranks = {
                 "factor_attribution": [
@@ -238,7 +242,7 @@ def get_company_profile(symbol: str):
         # Smart Insider Sentiment (Net Value Flow)
         try:
             insider_df = client._fmp_client.get_insider_trades(symbol, limit=100)
-            
+
             # Persist to DB so Factor Engine can calculate score
             if not insider_df.empty:
                 try:
@@ -250,13 +254,13 @@ def get_company_profile(symbol: str):
                 # Filter for Open Market transactions (P = Purchase, S = Sale)
                 buys = insider_df[insider_df["transactionType"].str.contains("Purchase|Buy|P-Purchase", case=False, na=False)]
                 sells = insider_df[insider_df["transactionType"].str.contains("Sale|Sell|S-Sale", case=False, na=False)]
-                
+
                 # Calculate volumes safely
                 buy_vol = (buys["securitiesTransacted"] * buys["price"]).sum() if not buys.empty else 0
                 sell_vol = (sells["securitiesTransacted"] * sells["price"]).sum() if not sells.empty else 0
-                
+
                 net_flow = buy_vol - sell_vol
-                
+
                 if net_flow > 5_000_000:
                     response["insider_sentiment"] = "STRONG BUY"
                 elif net_flow > 500_000:
@@ -269,13 +273,13 @@ def get_company_profile(symbol: str):
                     response["insider_sentiment"] = "NEUTRAL"
             else:
                 response["insider_sentiment"] = "NEUTRAL"
-                
+
         except Exception as ins_err:
             logger.debug(f"Insider analysis failed for {symbol}: {ins_err}")
             response["insider_sentiment"] = "NEUTRAL"
 
         return response
-        
+
     except Exception as e:
         logger.error(f"Error in get_company_profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -284,21 +288,22 @@ def get_company_profile(symbol: str):
 def trigger_taxonomy_aggregation():
     """Trigger the aggregation of sector and industry stats."""
     try:
-        from automation.prefect_flows import task_aggregate_market_taxonomy
         from datetime import datetime, timedelta
-        
+
+        from automation.prefect_flows import task_aggregate_market_taxonomy
+
         # 1. Run Core SQL Aggregation (Counts & Local Mcap)
         task_aggregate_market_taxonomy.fn()
-        
+
         # 2. Seed Real-Time Performance from FMP (Optional/Best Effort)
         try:
             client = get_qs_client()
             fmp = client._fmp_client
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            
+
             df_sec = fmp.get_sector_performance(yesterday)
             df_ind = fmp.get_industry_performance(yesterday)
-            
+
             con = client._db_manager.connect()
             try:
                 if not df_sec.empty:
@@ -307,7 +312,7 @@ def trigger_taxonomy_aggregation():
                         perf = row.get('changesPercentage', 0.0)
                         if name:
                             con.execute(f"UPDATE sector_industry_stats SET perf_1d = {perf} WHERE group_type = 'sector' AND (name ILIKE '%{name}%' OR '{name}' ILIKE '%' || name || '%')")
-                
+
                 if not df_ind.empty:
                     for _, row in df_ind.iterrows():
                         name = row.get('industry')
@@ -318,7 +323,7 @@ def trigger_taxonomy_aggregation():
                 con.close()
         except Exception as fmp_err:
             logger.warning(f"FMP Performance seeding skipped: {fmp_err}")
-                
+
         return {"status": "success", "message": "Market taxonomy aggregated successfully."}
     except Exception as e:
         logger.error(f"Taxonomy aggregation failed: {e}")
@@ -332,18 +337,18 @@ def get_monte_carlo(run_id: str, simulations: int = 1000):
     """
     from api.routers.backtest import get_mlflow_client
     client = get_mlflow_client()
-    
+
     try:
         run = client.get_run(run_id)
         # In a real system, we'd pull the actual 'equity_curve' artifact from MLflow
         # For this prototype, we simulate based on the run's Sharpe and Return
         sharpe = run.data.metrics.get("sharpe", 1.0)
         ann_return = run.data.metrics.get("annual_return", 0.1)
-        
+
         # Daily parameters
         daily_ret = ann_return / 252
         daily_vol = (ann_return / sharpe) / np.sqrt(252) if sharpe > 0 else 0.02
-        
+
         # Run simulations
         horizon = 252
         paths = np.zeros((simulations, horizon))
@@ -351,9 +356,9 @@ def get_monte_carlo(run_id: str, simulations: int = 1000):
             # Geometric Brownian Motion proxy
             returns = np.random.normal(daily_ret, daily_vol, horizon)
             paths[i] = np.cumprod(1 + returns)
-            
+
         final_returns = paths[:, -1] - 1
-        
+
         return {
             "run_id": run_id,
             "simulations": simulations,
@@ -393,11 +398,11 @@ def get_price_history(symbol: str, lookback: int = 252):
             else:
                 logger.debug(f"No price history found for {symbol}")
                 return []
-                
+
         except Exception as db_err:
             logger.error(f"Price history query failed for {symbol}: {db_err}")
             return []
-        
+
     except HTTPException as http_ex:
         raise http_ex
     except Exception as e:
@@ -411,20 +416,20 @@ def get_intraday_chart(symbol: str):
         client = get_qs_client()
         # Fetch from FMP API (Live/Recent)
         df = client._fmp_client.get_intraday_chart(symbol, interval="1min")
-        
+
         if df.empty:
             return []
-            
+
         # FMP returns newest first, so we reverse for charting
         df = df.sort_values(by="date", ascending=True)
-        
+
         # Keep only the latest trading session (approx last 400 minutes to be safe)
         # Or filter by today's date if possible, but FMP returns 'YYYY-MM-DD HH:MM:SS'
         # A simple limit is safer for a lightweight chart
         df = df.tail(390) # Standard trading day is 390 minutes
-        
+
         return df.replace({np.nan: None}).to_dict(orient="records")
-        
+
     except Exception as e:
         logger.error(f"Intraday chart error: {e}")
         return []
@@ -433,7 +438,11 @@ def get_intraday_chart(symbol: str):
 def get_algorithms_code():
     """Read the source code of the strategies/algorithms.py file."""
     try:
-        path = "backend/qsresearch/strategies/factor/algorithms.py"
+        from pathlib import Path
+        # Determine base path dynamically
+        current_dir = Path(__file__).parent.parent.parent # backend/
+        path = current_dir / "qsresearch" / "strategies" / "factor" / "algorithms.py"
+
         with open(path, "r") as f:
             return {"code": f.read()}
     except Exception as e:
@@ -446,13 +455,16 @@ class UpdateCodeRequest(BaseModel):
 def update_algorithms_code(request: UpdateCodeRequest):
     """Update the source code of the strategies/algorithms.py file."""
     try:
-        path = "backend/qsresearch/strategies/factor/algorithms.py"
+        from pathlib import Path
+        current_dir = Path(__file__).parent.parent.parent # backend/
+        path = current_dir / "qsresearch" / "strategies" / "factor" / "algorithms.py"
+
         # Optional: Add basic safety check (e.g. valid python syntax)
-        # compile(request.code, path, 'exec')
-        
+        # compile(request.code, str(path), 'exec')
+
         with open(path, "w") as f:
             f.write(request.code)
-        
+
         logger.info("Manual Algorithm Update: algorithms.py updated via frontend.")
         return {"status": "success", "message": "Algorithms updated successfully."}
     except Exception as e:
@@ -466,7 +478,7 @@ def get_financial_statements(symbol: str):
         income = client.query(f"SELECT * FROM bulk_income_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
         balance = client.query(f"SELECT * FROM bulk_balance_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date DESC LIMIT 20").to_dicts()
         cash = client.query(f"SELECT * FROM bulk_cashflow_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date ASC LIMIT 20").to_dicts() # ASC for internal logic, but UI will flip
-        
+
         return {
             "income": income,
             "balance": balance,
@@ -499,33 +511,33 @@ def get_stock_360(symbol: str):
     try:
         client = get_qs_client()
         fmp = client._fmp_client
-        
+
         # 1. Real-time Quote
         quote = fmp.get_quote(symbol) or {}
-        
+
         # 2. Company Profile
         profile = fmp.get_company_profile(symbol) or {}
-        
+
         # 3. Stats (Float & Valuation)
         shares_out = quote.get("sharesOutstanding", 0)
         if not shares_out and profile.get("mktCap") and profile.get("price"):
              shares_out = profile["mktCap"] / profile["price"]
-             
+
         float_shares = shares_out # Defaulting to shares out for now if explicit float missing
-        
+
         # Try to get P/B Ratio from FMP Ratios if possible, else 0
         pb_ratio = quote.get("priceAvg200", 0) / 100 # Placeholder for P/B logic or fetch
-        
+
         stats = {
             "market_cap": quote.get("marketCap") or profile.get("mktCap"),
             "shares_outstanding": shares_out,
             "float": float_shares,
             "pe_ratio": quote.get("pe"),
             "eps": quote.get("eps"),
-            "pb_ratio": pb_ratio, 
+            "pb_ratio": pb_ratio,
             "volume_avg": quote.get("avgVolume"),
             "volume": quote.get("volume"),
-            "vwap": quote.get("priceAvg50"), 
+            "vwap": quote.get("priceAvg50"),
             "beta": profile.get("beta")
         }
 
@@ -557,7 +569,7 @@ def get_stock_360(symbol: str):
             "ask": quote.get("askPrice", 0.0) or (quote.get("price", 0) * 1.01),
             "bid_size": quote.get("bidSize", 100),
             "ask_size": quote.get("askSize", 100),
-            "status": "Closed" if not datetime.now().hour in range(9, 16) else "Open"
+            "status": "Closed" if datetime.now().hour not in range(9, 16) else "Open"
         }
 
         # 6. Contact & Details
@@ -574,7 +586,7 @@ def get_stock_360(symbol: str):
         # 7. Catalysts (News & Insider)
         news = fmp.get_stock_news(symbol, limit=15).replace({np.nan: None}).to_dict(orient="records")
         insider = fmp.get_insider_trades(symbol, limit=10).replace({np.nan: None}).to_dict(orient="records")
-        
+
         catalysts = []
         for n in news:
             catalysts.append({
@@ -592,7 +604,7 @@ def get_stock_360(symbol: str):
                 "url": i.get("link"),
                 "source": "Form 4"
             })
-            
+
         catalysts.sort(key=lambda x: x["date"] or "", reverse=True)
 
         return {
@@ -629,7 +641,7 @@ def get_all_politician_trades(limit: int = 100):
         # Fetch both Senate and House for a complete view
         s_df = client._fmp_client.get_all_senate_trades(limit=limit // 2)
         h_df = client._fmp_client.get_all_house_trades(limit=limit // 2)
-        
+
         # Merge if data exists
         dfs = []
         if not s_df.empty:
@@ -638,18 +650,18 @@ def get_all_politician_trades(limit: int = 100):
         if not h_df.empty:
             h_df["house"] = "House"
             dfs.append(h_df)
-            
+
         if not dfs:
             return []
-            
+
         df = pd.concat(dfs, ignore_index=True)
-        
+
         # Mapping for frontend consistency
         if "office" in df.columns:
             df["representative"] = df["office"]
         elif "firstName" in df.columns and "lastName" in df.columns:
             df["representative"] = df["firstName"] + " " + df["lastName"]
-            
+
         # Standardize date columns
         if "transactionDate" not in df.columns and "date" in df.columns:
             df["transactionDate"] = df["date"]
@@ -674,7 +686,7 @@ def calculate_politician_ranks(limit: int = 1000):
         # Get a larger sample for better ranking distribution
         s_df = client._fmp_client.get_all_senate_trades(limit=500)
         h_df = client._fmp_client.get_all_house_trades(limit=500)
-        
+
         dfs = []
         if not s_df.empty:
             s_df["house"] = "Senate"
@@ -682,12 +694,12 @@ def calculate_politician_ranks(limit: int = 1000):
         if not h_df.empty:
             h_df["house"] = "House"
             dfs.append(h_df)
-            
+
         if not dfs:
             return pd.DataFrame()
-            
+
         df = pd.concat(dfs, ignore_index=True)
-        
+
         # Mapping
         if "office" in df.columns:
             df["representative"] = df["office"]
@@ -709,7 +721,7 @@ def calculate_politician_ranks(limit: int = 1000):
             return 0
 
         df["est_amount"] = df["amount"].apply(parse_amount)
-        
+
         # Group by Politician
         ranks = df.groupby("representative").agg({
             "est_amount": "sum",
@@ -717,17 +729,17 @@ def calculate_politician_ranks(limit: int = 1000):
             "house": "first",
             "disclosureDate": "max"
         }).rename(columns={"symbol": "trades", "disclosureDate": "last_trade"})
-        
+
         # Score calculation: 70% Volume, 30% Activity
         # Normalize
         if not ranks.empty:
             ranks["vol_score"] = ranks["est_amount"] / (ranks["est_amount"].max() or 1)
             ranks["act_score"] = ranks["trades"] / (ranks["trades"].max() or 1)
             ranks["total_score"] = (ranks["vol_score"] * 0.7) + (ranks["act_score"] * 0.3)
-            
+
             ranks = ranks.sort_values(by="total_score", ascending=False)
             ranks["rank"] = range(1, len(ranks) + 1)
-            
+
         return ranks.reset_index()
     except Exception as e:
         logger.error(f"Ranking calculation failed: {e}")
@@ -738,7 +750,7 @@ def get_top_politicians(limit: int = 50):
     """Get the highest-ranked politicians by trading activity."""
     df = calculate_politician_ranks()
     if df.empty: return []
-    
+
     # Format for frontend
     data = df.head(limit).replace({np.nan: None}).to_dict(orient="records")
     # Clean up currency for display
@@ -747,7 +759,7 @@ def get_top_politicians(limit: int = 50):
         item["rank_display"] = f"#{item['rank']}"
         # Success rate simulator based on rank (higher rank = higher 'simulated' success for UI)
         item["success_rate"] = f"{max(50, 95 - item['rank'])}%"
-        
+
     return data
 
 @router.get("/politician-history/{name}")
@@ -755,12 +767,12 @@ def get_politician_history(name: str, limit: int = 100):
     """Get trading history and stats for a specific politician."""
     try:
         client = get_qs_client()
-        
+
         # Get Rank first
         all_ranks = calculate_politician_ranks()
         politician_rank = "#---"
         success_rate = "---"
-        
+
         if not all_ranks.empty:
             match = all_ranks[all_ranks["representative"].str.contains(name, case=False, na=False)]
             if not match.empty:
@@ -770,7 +782,7 @@ def get_politician_history(name: str, limit: int = 100):
         # Search in both Senate and House by name
         s_df = client._fmp_client.get_senate_trades_by_name(name)
         h_df = client._fmp_client.get_house_trades_by_name(name)
-        
+
         dfs = []
         if not s_df.empty:
             s_df["house"] = "Senate"
@@ -778,26 +790,26 @@ def get_politician_history(name: str, limit: int = 100):
         if not h_df.empty:
             h_df["house"] = "House"
             dfs.append(h_df)
-            
+
         if not dfs:
             return {"stats": {"rank": politician_rank, "success_rate": success_rate}, "trades": []}
-            
+
         df = pd.concat(dfs, ignore_index=True)
-        
+
         # Format representative name
         if "office" in df.columns:
             df["representative"] = df["office"]
         elif "firstName" in df.columns and "lastName" in df.columns:
             df["representative"] = df["firstName"] + " " + df["lastName"]
-            
+
         # Standardize date
         if "transactionDate" not in df.columns and "date" in df.columns:
             df["transactionDate"] = df["date"]
-            
+
         # Basic Stats
         total_transactions = len(df)
         last_transaction = df["transactionDate"].max() if "transactionDate" in df.columns else "Unknown"
-        
+
         # Calculate Buy/Sell Ratio
         buys = len(df[df["type"].str.contains("Purchase|Buy", case=False, na=False)])
         sells = len(df[df["type"].str.contains("Sale|Sell", case=False, na=False)])
@@ -819,7 +831,7 @@ def get_politician_history(name: str, limit: int = 100):
             return 0
 
         total_est_amount = df["amount"].apply(parse_amount).sum()
-        
+
         # Return merged data
         return {
             "stats": {
@@ -860,7 +872,7 @@ def get_reddit_sentiment():
             {"symbol": "META", "name": "Meta", "rank": 9, "mentions": 380, "lastMentions": 350, "sentiment": 0.58, "lastSentiment": 0.52},
             {"symbol": "COIN", "name": "Coinbase", "rank": 10, "mentions": 310, "lastMentions": 280, "sentiment": 0.82, "lastSentiment": 0.75}
         ]
-        
+
         return trending
     except Exception as e:
         logger.error(f"Failed to fetch Reddit sentiment: {e}")
@@ -874,16 +886,16 @@ def get_hedge_funds(search: Optional[str] = None, limit: int = 50, background_ta
     import requests
     try:
         client = get_qs_client()
-        
+
         # 1. Base Search Logic
         sql = "SELECT * FROM institutional_filers"
         if search:
             sql += f" WHERE name ILIKE '%{search}%' OR cik = '{search}'"
         else:
             sql += " ORDER BY rank ASC, portfolio_value DESC"
-        
+
         sql += f" LIMIT {limit}"
-        
+
         try:
             res = client.query(sql)
             if not res.is_empty():
@@ -893,20 +905,20 @@ def get_hedge_funds(search: Optional[str] = None, limit: int = 50, background_ta
                     if item.get("portfolio_value"):
                         val = item["portfolio_value"]
                         item["portfolio_value"] = f"${val/1e9:.1f}B" if val > 1e9 else f"${val/1e6:.1f}M"
-                    
+
                     # Ensure top_holdings is always a list
                     raw_holdings = item.get("top_holdings")
                     if raw_holdings and isinstance(raw_holdings, str):
                         item["top_holdings"] = raw_holdings.split(",")
                     else:
                         item["top_holdings"] = []
-                    
+
                     # Simulated rank-based metrics if missing
                     rank = item.get("rank") or 9999
                     if not item.get("success_rate") or item["success_rate"] == 0:
                         item["success_rate"] = f"{max(50, 95 - (rank // 100))}%"
                     item["rank"] = f"#{rank}" if rank < 9999 else "---"
-                    
+
                 return data
         except Exception as db_err:
             logger.debug(f"DB Search failed: {db_err}")
@@ -962,7 +974,7 @@ def trigger_fund_ingestion():
         client = get_qs_client()
         db = client._db_manager
         logger.info("🚀 Starting Background Fund Ingestion...")
-        
+
         offset = 0
         limit = 1000
         while True:
@@ -971,7 +983,7 @@ def trigger_fund_ingestion():
             if res.status_code != 200: break
             data = res.json()
             if not data: break
-            
+
             rows = []
             for item in data:
                 rows.append({
@@ -984,16 +996,16 @@ def trigger_fund_ingestion():
                     "success_rate": 0.0,
                     "rank": 9999
                 })
-            
+
             if rows:
                 import pandas as pd
                 df = pd.DataFrame(rows)
                 # Use standard persistence via DuckDB
                 db.connect().execute("INSERT OR IGNORE INTO institutional_filers SELECT * EXCLUDE(updated_at), CURRENT_TIMESTAMP FROM df")
-            
+
             if len(data) < limit: break
             offset += limit
-            
+
         logger.info("✅ Fund Ingestion Complete.")
     except Exception as e:
         logger.error(f"Fund Ingestion failed: {e}")
@@ -1008,28 +1020,28 @@ def get_hedge_fund_holdings(cik: str, limit: int = 100):
         h_res = requests.get(header_url, timeout=10)
         if h_res.status_code != 200 or not h_res.json():
             raise HTTPException(status_code=404, detail="No filings found for this CIK")
-            
+
         filing = h_res.json()[0]
         acc_num = filing["accession_number"]
         total_value = filing.get("table_value_total", 1) # Avoid div by zero
-        
+
         # 2. Get entries
         holdings_url = f"https://forms13f.com/api/v1/form?accession_number={acc_num}&cik={cik}&limit={limit}"
         ho_res = requests.get(holdings_url, timeout=10)
         if ho_res.status_code != 200:
             return {"stats": {}, "holdings": []}
-            
+
         data = ho_res.json()
-        
+
         # Group entries by ticker to avoid duplicates
         ticker_map = {}
         for item in data:
             ticker = item.get("ticker")
             if not ticker: continue
-            
+
             val = item.get("value", 0)
             shares = item.get("ssh_prnamt", 0)
-            
+
             if ticker in ticker_map:
                 ticker_map[ticker]["value"] += val
                 ticker_map[ticker]["shares"] += shares
@@ -1041,7 +1053,7 @@ def get_hedge_fund_holdings(cik: str, limit: int = 100):
                     "value": val,
                     "type": item.get("put_call", "Long") or "Long"
                 }
-        
+
         # Calculate weights and format
         holdings = []
         for ticker, pos in ticker_map.items():
@@ -1050,10 +1062,10 @@ def get_hedge_fund_holdings(cik: str, limit: int = 100):
                 **pos,
                 "weight": round(weight, 2)
             })
-            
+
         # Sort by weight
         holdings.sort(key=lambda x: x["weight"], reverse=True)
-        
+
         return {
             "stats": {
                 "name": filing.get("company_name", "Unknown Fund"),
@@ -1075,14 +1087,14 @@ def get_ipo_calendar_endpoint():
         client = get_qs_client()
         if not client:
             raise Exception("QS Client not initialized")
-        
+
         logger.info("Fetching IPO Calendar from FMP...")
         df = client._fmp_client.get_ipo_calendar()
-        
+
         if df.empty:
             logger.warning("IPO Calendar returned empty dataset.")
             return []
-            
+
         # Format for frontend (Handle NaN for JSON compliance)
         data = df.replace({np.nan: None}).to_dict(orient="records")
         logger.info(f"Successfully fetched {len(data)} IPO events.")
@@ -1144,9 +1156,9 @@ def get_comparison_data(request: ComparisonRequest):
     try:
         client = get_qs_client()
         fmp = client._fmp_client
-        
+
         output = {"graph": {}, "table": []}
-        
+
         for symbol in request.tickerList:
             # 1. Graph Data (Prices)
             try:
@@ -1156,7 +1168,7 @@ def get_comparison_data(request: ComparisonRequest):
                     # Sort by date asc
                     prices_df = prices_df.sort_values(by="date", ascending=True)
                     history = [{"date": str(d), "value": float(v)} for d, v in zip(prices_df["date"], prices_df["close"])]
-                    
+
                     # Calculate returns for specific windows
                     def calc_ret(days):
                         if len(prices_df) < days: return 0
@@ -1193,7 +1205,7 @@ def get_comparison_data(request: ComparisonRequest):
                     })
             except Exception as e:
                 logger.error(f"Comparison table fetch failed for {symbol}: {e}")
-                
+
         return output
     except Exception as e:
         logger.error(f"Global comparison failure: {e}")

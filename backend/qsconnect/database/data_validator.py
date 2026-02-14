@@ -5,15 +5,14 @@ Institutional-grade data validation for market and fundamental data.
 Detects gaps, outliers, and anomalies to ensure research integrity.
 """
 
-import polars as pl
-from loguru import logger
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 
 class DataValidator:
     """
     Validator for identifying data quality issues in DuckDB.
     """
-    
+
     def __init__(self, db_manager):
         self.db = db_manager
 

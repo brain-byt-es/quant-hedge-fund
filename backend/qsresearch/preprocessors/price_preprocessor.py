@@ -4,7 +4,6 @@ QS Research - Price Data Preprocessor
 Cleans and prepares price data for backtesting.
 """
 
-from typing import Optional, List
 import pandas as pd
 from loguru import logger
 
@@ -53,78 +52,78 @@ def preprocess_price_data(
     """
     initial_count = len(df)
     initial_symbols = df[symbol_column].nunique()
-    
+
     logger.info(f"Preprocessing {initial_count} rows, {initial_symbols} symbols")
-    
+
     df = df.copy()
-    
+
     # Ensure date is datetime
     if not pd.api.types.is_datetime64_any_dtype(df[date_column]):
         df[date_column] = pd.to_datetime(df[date_column])
-    
+
     # Sort by symbol and date
     df = df.sort_values([symbol_column, date_column])
-    
+
     # 1. Remove symbols with insufficient trading days
     if remove_low_trading_days:
         trading_days = df.groupby(symbol_column).size()
         valid_symbols = trading_days[trading_days >= min_trading_days].index
         df = df[df[symbol_column].isin(valid_symbols)]
-        
+
         removed = initial_symbols - df[symbol_column].nunique()
         logger.info(f"Removed {removed} symbols with < {min_trading_days} trading days")
-    
+
     # 2. Remove large price gaps
     if remove_large_gaps:
         # Calculate daily returns
         df["_returns"] = df.groupby(symbol_column)[close_column].pct_change()
-        
+
         # Flag extreme returns (> 100% or < -50%)
         extreme_mask = (df["_returns"].abs() > 1.0) | (df["_returns"] < -0.5)
         extreme_count = extreme_mask.sum()
-        
+
         if extreme_count > 0:
             # Remove these rows
             df = df[~extreme_mask]
             logger.info(f"Removed {extreme_count} rows with extreme price gaps")
-        
+
         df = df.drop(columns=["_returns"])
-    
+
     # 3. Remove low volume periods
     if remove_low_volume:
         # Calculate average volume per symbol
         df["_avg_vol"] = df.groupby(symbol_column)[volume_column].transform("mean")
-        
+
         # Remove days where volume is < 10% of average
         low_vol_mask = df[volume_column] < (df["_avg_vol"] * 0.1)
         low_vol_count = low_vol_mask.sum()
-        
+
         if low_vol_count > 0:
             df = df[~low_vol_mask]
             logger.info(f"Removed {low_vol_count} low volume rows")
-        
+
         df = df.drop(columns=["_avg_vol"])
-    
+
     # 4. Handle missing values
     # Forward fill prices within each symbol
     price_cols = [open_column, high_column, low_column, close_column]
     for col in price_cols:
         if col in df.columns:
             df[col] = df.groupby(symbol_column)[col].ffill()
-    
+
     # Fill missing volume with 0
     if volume_column in df.columns:
         df[volume_column] = df[volume_column].fillna(0)
-    
+
     # Drop any remaining NaN rows
     df = df.dropna(subset=[close_column])
-    
+
     final_count = len(df)
     final_symbols = df[symbol_column].nunique()
-    
+
     logger.info(
         f"Preprocessed data: {final_count} rows ({final_count/initial_count:.1%}), "
         f"{final_symbols} symbols ({final_symbols/initial_symbols:.1%})"
     )
-    
+
     return df.reset_index(drop=True)

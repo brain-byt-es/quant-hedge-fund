@@ -3,12 +3,15 @@ Factor Engine - The "Brain" of Quant Science.
 Institutional-grade metrics with 130+ ratios via FinanceToolkit.
 """
 
-from typing import Dict, Any, List
-import pandas as pd
+from typing import Any, Dict
+
 import numpy as np
-from loguru import logger
+import pandas as pd
 from financetoolkit import Toolkit
+from loguru import logger
+
 from config.settings import get_settings
+
 
 class FactorEngine:
     def __init__(self, db_mgr=None):
@@ -32,6 +35,8 @@ class FactorEngine:
                     as_of DATE,
                     price DOUBLE,
                     market_cap DOUBLE,
+                    volume DOUBLE,
+                    change_1d DOUBLE,
                     momentum_score DOUBLE,
                     quality_score DOUBLE,
                     growth_score DOUBLE,
@@ -49,31 +54,102 @@ class FactorEngine:
         finally: conn.close()
 
     def _execute_sql_ranking(self, conn, min_mcap, min_volume):
-        sql = f"""
+        sql = """
         INSERT OR REPLACE INTO factor_ranks_snapshot
-        WITH RawFactors AS (
+        WITH PriceData AS (
             SELECT 
-                p.symbol, p.date as as_of, p.close as price, (p.close * COALESCE(i."Shares (Basic)", 0)) as market_cap,
-                ((p.close / NULLIF(p_past.close, 0)) - 1.0) as raw_mom,
+                symbol, 
+                date, 
+                close, 
+                volume,
+                (close / NULLIF(LAG(close) OVER (PARTITION BY symbol ORDER BY date), 0) - 1.0) * 100.0 as change_percent
+            FROM historical_prices_fmp
+        ),
+        LatestPrices AS (
+            SELECT symbol, date, close, volume, change_percent
+            FROM PriceData
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+        ),
+        PastPrices AS (
+            SELECT symbol, date, close
+            FROM historical_prices_fmp
+            WHERE date < (CURRENT_DATE - INTERVAL 360 DAY)
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+        ),
+        FundamentalData AS (
+            SELECT 
+                i.symbol, 
+                i.date, 
+                i."Net Income", 
+                i."Shares (Basic)", 
+                i.Revenue,
+                i."Gross Profit",
+                b."Total Assets",
+                b."Total Equity",
+                b."Total Current Assets",
+                b."Total Current Liabilities",
+                b."Long Term Debt",
+                c."Net Cash from Operating Activities" as cfo,
+                LAG(i."Net Income" / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_roa,
+                LAG(b."Long Term Debt" / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_leverage,
+                LAG(b."Total Current Assets" / NULLIF(b."Total Current Liabilities", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_current_ratio,
+                LAG(i."Shares (Basic)") OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_shares,
+                LAG(i."Gross Profit" / NULLIF(i.Revenue, 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_gross_margin,
+                LAG(i.Revenue / NULLIF(b."Total Assets", 0)) OVER (PARTITION BY i.symbol ORDER BY i.date) as prev_asset_turnover
+            FROM bulk_income_quarter_fmp i
+            LEFT JOIN bulk_balance_quarter_fmp b ON i.symbol = b.symbol AND i.date = b.date
+            LEFT JOIN bulk_cashflow_quarter_fmp c ON i.symbol = c.symbol AND i.date = c.date
+        ),
+        LatestFundamentals AS (
+            SELECT *
+            FROM FundamentalData
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) = 1
+        ),
+        PrevFundamentals AS (
+            SELECT f.symbol, f.date, f.Revenue
+            FROM FundamentalData f
+            JOIN LatestFundamentals lf ON f.symbol = lf.symbol AND f.date < lf.date
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY f.symbol ORDER BY f.date DESC) = 1
+        ),
+        RawFactors AS (
+            SELECT 
+                s.symbol, 
+                COALESCE(p.date, CURRENT_DATE) as as_of, 
+                COALESCE(p.close, s.price, 0.0) as price,
+                COALESCE(p.volume, 0.0) as volume,
+                COALESCE(p.change_percent, 0.0) as change_1d,
+                COALESCE(p.close * i."Shares (Basic)", s.price * i."Shares (Basic)", 0.0) as market_cap,
+                ((COALESCE(p.close, s.price) / NULLIF(p_past.close, 0)) - 1.0) as raw_mom,
                 (i."Net Income" / NULLIF(b."Total Equity", 0)) as raw_roe,
                 (i.Revenue - i_prev.Revenue) / NULLIF(i_prev.Revenue, 0) as raw_growth,
-                (i."Net Income" * 4 / NULLIF(p.close * i."Shares (Basic)", 0)) as raw_value,
-                (CASE WHEN i."Net Income" > 0 THEN 1 ELSE 0 END) as f_score
-            FROM historical_prices_fmp p
-            LEFT JOIN stock_list_fmp s ON p.symbol = s.symbol
-            LEFT JOIN bulk_income_quarter_fmp i ON p.symbol = i.symbol
-            LEFT JOIN bulk_income_quarter_fmp i_prev ON p.symbol = i_prev.symbol AND i_prev.date < i.date
-            LEFT JOIN bulk_balance_quarter_fmp b ON p.symbol = b.symbol
-            LEFT JOIN historical_prices_fmp p_past ON p.symbol = p_past.symbol AND p_past.date < (p.date - INTERVAL 360 DAY)
-            QUALIFY ROW_NUMBER() OVER (PARTITION BY p.symbol ORDER BY p.date DESC, i.date DESC, i_prev.date DESC) = 1
+                (i."Net Income" * 4 / NULLIF(COALESCE(p.close, s.price) * i."Shares (Basic)", 0)) as raw_value,
+                -- 9-Point Piotroski F-Score
+                (
+                    CASE WHEN (i."Net Income" / NULLIF(i."Total Assets", 0)) > 0 THEN 1 ELSE 0 END + -- 1. Positive ROA
+                    CASE WHEN i.cfo > 0 THEN 1 ELSE 0 END + -- 2. Positive CFO
+                    CASE WHEN (i."Net Income" / NULLIF(i."Total Assets", 0)) > COALESCE(i.prev_roa, 0) THEN 1 ELSE 0 END + -- 3. Delta ROA
+                    CASE WHEN (i.cfo / NULLIF(i."Total Assets", 0)) > (i."Net Income" / NULLIF(i."Total Assets", 0)) THEN 1 ELSE 0 END + -- 4. Accruals
+                    CASE WHEN (i."Long Term Debt" / NULLIF(i."Total Assets", 0)) <= COALESCE(i.prev_leverage, 1) THEN 1 ELSE 0 END + -- 5. Leverage
+                    CASE WHEN (i."Total Current Assets" / NULLIF(i."Total Current Liabilities", 0)) > COALESCE(i.prev_current_ratio, 0) THEN 1 ELSE 0 END + -- 6. Current Ratio
+                    CASE WHEN i."Shares (Basic)" <= COALESCE(i.prev_shares, i."Shares (Basic)") THEN 1 ELSE 0 END + -- 7. No New Shares
+                    CASE WHEN (i."Gross Profit" / NULLIF(i.Revenue, 0)) > COALESCE(i.prev_gross_margin, 0) THEN 1 ELSE 0 END + -- 8. Gross Margin
+                    CASE WHEN (i.Revenue / NULLIF(i."Total Assets", 0)) > COALESCE(i.prev_asset_turnover, 0) THEN 1 ELSE 0 END -- 9. Asset Turnover
+                ) as f_score
+            FROM stock_list_fmp s
+            LEFT JOIN LatestPrices p ON s.symbol = p.symbol
+            LEFT JOIN PastPrices p_past ON s.symbol = p_past.symbol
+            LEFT JOIN LatestFundamentals i ON s.symbol = i.symbol
+            LEFT JOIN PrevFundamentals i_prev ON s.symbol = i_prev.symbol
+            LEFT JOIN LatestFundamentals b ON s.symbol = b.symbol -- Use the same joined data
         )
-        SELECT symbol, as_of, price, market_cap,
+        SELECT symbol, as_of, price, market_cap, volume, change_1d,
             COALESCE(PERCENT_RANK() OVER (ORDER BY raw_mom ASC) * 100, 50.0),
             COALESCE(PERCENT_RANK() OVER (ORDER BY raw_roe ASC) * 100, 50.0),
             COALESCE(PERCENT_RANK() OVER (ORDER BY raw_growth ASC) * 100, 50.0),
             COALESCE(PERCENT_RANK() OVER (ORDER BY raw_value ASC) * 100, 50.0),
             50.0, f_score, CURRENT_TIMESTAMP
-        FROM RawFactors WHERE market_cap >= {min_mcap}
+        FROM RawFactors 
+        WHERE price > 0
         """
         conn.execute(sql)
 
@@ -87,17 +163,17 @@ class FactorEngine:
             balance = self.db_mgr.query_pandas(f"SELECT * FROM bulk_balance_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date ASC")
             cash = self.db_mgr.query_pandas(f"SELECT * FROM bulk_cashflow_quarter_fmp WHERE symbol = '{symbol}' ORDER BY date ASC")
             prices = self.db_mgr.query_pandas(f"SELECT date, close as 'Adj Close' FROM historical_prices_fmp WHERE symbol = '{symbol}' ORDER BY date ASC")
-            
+
             if income.empty or balance.empty:
                 return {"error": f"Insufficient data for {symbol}. Ingest SimFin/FMP bulk data first."}
 
             # 2. Comprehensive Mapping for FinanceToolkit (JerBouma)
             # These map SimFin/FMP keys to the internal names Toolkit expects for its models.
             inc_map = {
-                'Revenue': 'Revenue', 
-                'Cost of Revenue': 'Cost of Goods Sold', 
-                'Gross Profit': 'Gross Profit', 
-                'Net Income': 'Net Income', 
+                'Revenue': 'Revenue',
+                'Cost of Revenue': 'Cost of Goods Sold',
+                'Gross Profit': 'Gross Profit',
+                'Net Income': 'Net Income',
                 'Shares (Basic)': 'Weighted Average Shares',
                 'Operating Income (Loss)': 'Operating Income',
                 'Pretax Income (Loss), Adj.': 'Income Before Tax',
@@ -107,10 +183,10 @@ class FactorEngine:
                 'Interest Expense, Net': 'Interest Expense'
             }
             bal_map = {
-                'Total Assets': 'Total Assets', 
-                'Total Equity': 'Total Equity', 
-                'Long Term Debt': 'Long Term Debt', 
-                'Total Current Assets': 'Total Current Assets', 
+                'Total Assets': 'Total Assets',
+                'Total Equity': 'Total Equity',
+                'Long Term Debt': 'Long Term Debt',
+                'Total Current Assets': 'Total Current Assets',
                 'Total Current Liabilities': 'Total Current Liabilities',
                 'Cash, Cash Equivalents & Short Term Investments': 'Cash and Cash Equivalents',
                 'Inventories': 'Inventory',
@@ -119,7 +195,7 @@ class FactorEngine:
                 'Intangible Assets': 'Intangible Assets'
             }
             cas_map = {
-                'Net Cash from Operating Activities': 'Operating Cash Flow', 
+                'Net Cash from Operating Activities': 'Operating Cash Flow',
                 'Depreciation & Amortization': 'Depreciation and Amortization',
                 'Capital Expenditures': 'Capital Expenditure'
             }
@@ -155,9 +231,9 @@ class FactorEngine:
                 "Efficiency": toolkit.ratios.collect_efficiency_ratios,
                 "Solvency": toolkit.ratios.collect_solvency_ratios
             }
-            
+
             grouped = {cat: {} for cat in categories}
-            
+
             for cat_name, func in categories.items():
                 try:
                     df = func()
@@ -185,7 +261,7 @@ class FactorEngine:
             except: pass
 
             total_metrics = sum(len(v) for v in grouped.values())
-            
+
             return {
                 "ratios": grouped,
                 "piotroski": {"Score": piotroski_score},

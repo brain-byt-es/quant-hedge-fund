@@ -3,12 +3,13 @@ QS Governance Manager
 Handles strategy lifecycle, audit logs, and safety gates.
 """
 
-import json
 import hashlib
+import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, Optional
+
 from loguru import logger
-from pathlib import Path
+
 
 class GovernanceManager:
     """Manages the governance and audit trail for trading strategies."""
@@ -36,25 +37,25 @@ class GovernanceManager:
         """Log a newly approved strategy to the audit trail."""
         strat_hash = self.generate_config_hash(config)
         ttl_expiry = datetime.now() + timedelta(days=ttl_days)
-        
+
         sql = """
             INSERT OR REPLACE INTO strategy_audit_log 
             (strategy_hash, config_json, regime_snapshot, llm_reasoning, human_rationale, approved_by, stage, ttl_expiry, mlflow_run_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
-            strat_hash, 
-            json.dumps(config), 
-            json.dumps(regime_snapshot), 
-            llm_reasoning, 
-            human_rationale, 
-            approved_by, 
-            stage, 
+            strat_hash,
+            json.dumps(config),
+            json.dumps(regime_snapshot),
+            llm_reasoning,
+            human_rationale,
+            approved_by,
+            stage,
             ttl_expiry,
             mlflow_run_id
         )
         self.db.execute(sql, params)
-        
+
         logger.info(f"Strategy {strat_hash[:8]} logged in stage {stage} by {approved_by}")
         return strat_hash
 
@@ -68,7 +69,7 @@ class GovernanceManager:
             ORDER BY approved_at DESC LIMIT 1
         """
         result_df = self.db.query(sql)
-        
+
         if not result_df.is_empty():
             row = result_df.row(0)
             config = json.loads(row[0])
@@ -83,14 +84,14 @@ class GovernanceManager:
         valid_stages = ["SHADOW", "PAPER", "CANARY", "FULL"]
         if next_stage not in valid_stages:
             raise ValueError(f"Invalid stage: {next_stage}")
-            
+
         sql = """
             UPDATE strategy_audit_log 
             SET stage = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP
             WHERE strategy_hash = ?
         """
         self.db.execute(sql, (next_stage, approved_by, strat_hash))
-        
+
         logger.info(f"Strategy {strat_hash[:8]} promoted to {next_stage} by {approved_by}")
 
     def log_drift(self, strat_hash: str, metric: str, expected: float, actual: float):
@@ -99,13 +100,13 @@ class GovernanceManager:
         status = "GREEN"
         if drift_score > 0.5: status = "RED"
         elif drift_score > 0.2: status = "YELLOW"
-        
+
         sql = """
             INSERT INTO strategy_drift_logs (strategy_hash, metric_name, expected_value, actual_value, drift_score, status)
             VALUES (?, ?, ?, ?, ?, ?)
         """
         self.db.execute(sql, (strat_hash, metric, expected, actual, drift_score, status))
-        
+
         if status == "RED":
             logger.error(f"CRITICAL DRIFT: Strategy {strat_hash[:8]} {metric} has drift score {drift_score:.2f}")
             # Here we would trigger an auto-halt in a real system

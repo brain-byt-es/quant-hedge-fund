@@ -1,5 +1,6 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional
 from loguru import logger
 
 from api.routers.data import get_qs_client
@@ -23,8 +24,8 @@ def get_tactical_scanner(
     try:
         client = get_qs_client()
         signals = find_momentum_rockets(
-            client, 
-            min_price=min_price, 
+            client,
+            min_price=min_price,
             max_price=max_price,
             max_mcap=max_mcap,
             min_gain_pct=min_gain,

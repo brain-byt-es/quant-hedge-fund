@@ -5,12 +5,13 @@ This module implements the Time-Predictable Inference Scheduling (TIP-Search) al
 as described in arXiv:2506.08026.
 """
 
-from typing import List, Optional
 import time
+from typing import List, Optional
+
 from loguru import logger
 
-from qsresearch.realtime.tasks import InferenceTask
 from qsresearch.realtime.models import ModelWrapper
+from qsresearch.realtime.tasks import InferenceTask
 
 
 class TIPSearchScheduler:
@@ -20,7 +21,7 @@ class TIPSearchScheduler:
     The scheduler filters models based on deadline constraints and selects 
     the one with the highest expected accuracy.
     """
-    
+
     def __init__(self, models: List[ModelWrapper]):
         """
         Initialize the scheduler with a pool of available models.
@@ -30,15 +31,15 @@ class TIPSearchScheduler:
         """
         self.models = models
         self.validate_pool()
-        
+
     def validate_pool(self):
         """Ensure the model pool is valid (e.g., at least one model)."""
         if not self.models:
             logger.warning("TIP-Search Scheduler initialized with empty model pool!")
-        
+
         # Sort models by latency (fastest first) for easier debugging/fallback
         self.models.sort(key=lambda m: m.p99_latency_ns)
-        
+
     def schedule(self, task: InferenceTask) -> Optional[ModelWrapper]:
         """
         Select the best model for the given task.
@@ -57,21 +58,21 @@ class TIPSearchScheduler:
         # Step 1: Filter eligible models
         eligible_models = []
         current_time = time.monotonic_ns()
-        
+
         for model in self.models:
             # Check feasibility: current_time + latency <= deadline
             if current_time + model.p99_latency_ns <= task.deadline_ns:
                 eligible_models.append(model)
-                
+
         # Step 2: Handle no solution
         if not eligible_models:
             logger.warning(f"Deadline violation! No model can meet deadline for task {task.task_id}")
             return None
-            
+
         # Step 3: Select expected best model
         # We want the model with the highest estimated accuracy
         selected_model = max(eligible_models, key=lambda m: m.estimated_accuracy(task))
-        
+
         return selected_model
 
     def get_fastest_model(self) -> Optional[ModelWrapper]:

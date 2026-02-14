@@ -212,7 +212,7 @@ export default function IndustryDetailPage() {
                     </CardHeader>
                     <CardContent className="px-5 pb-4">
                         <div className="text-3xl font-black font-mono tracking-tighter">
-                            {stats.mcap > 0 ? `$${(stats.mcap / 1e9).toFixed(1)}B` : "$-"}
+                            {stats.mcap !== undefined && stats.mcap !== null ? `$${(stats.mcap / 1e9).toFixed(1)}B` : "$-"}
                         </div>
                     </CardContent>
                 </Card>
@@ -224,7 +224,7 @@ export default function IndustryDetailPage() {
                     </CardHeader>
                     <CardContent className="px-5 pb-4">
                         <div className="text-3xl font-black font-mono tracking-tighter">
-                            {stats.revenue > 0 ? `$${(stats.revenue / 1e9).toFixed(1)}B` : "$-"}
+                            {stats.revenue !== undefined && stats.revenue !== null ? `$${(stats.revenue / 1e9).toFixed(1)}B` : "$-"}
                         </div>
                     </CardContent>
                 </Card>

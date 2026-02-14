@@ -1,12 +1,13 @@
-import sys
 import os
-import pandas as pd
+import sys
+
 from loguru import logger
 
 # Ensure backend is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from qsresearch.features.factor_engine import FactorEngine
+
 
 def test_ratios():
     engine = FactorEngine()

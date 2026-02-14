@@ -1,10 +1,11 @@
+import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 
-from api.routers.main_router import api_router
 from api.routers.data import get_qs_client
+from api.routers.main_router import api_router
 from omega.singleton import get_omega_app
 
 # Initialize logging
@@ -20,17 +21,17 @@ async def lifespan(app: FastAPI):
         get_omega_app()
         # Initialize Data Client early
         client = get_qs_client()
-        
+
         # System Heartbeat Logging
         client.log_event("INFO", "System", "Quant Hedge Fund Platform: Neural Bridge Established.")
         client.log_event("INFO", "Omega", "Execution Layer Singletons online.")
         client.log_event("INFO", "Research", "Research Lab data connectors active.")
-        
+
     except Exception as e:
         logger.error(f"Error initializing services: {e}")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down services...")
     try:

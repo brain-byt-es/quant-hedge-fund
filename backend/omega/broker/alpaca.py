@@ -1,33 +1,36 @@
+from typing import Any, Dict, List, Optional
+
 import alpaca_trade_api as tradeapi
-from typing import Dict, List, Any, Optional
 from loguru import logger
+
 from .base import BaseBroker
+
 
 class AlpacaBroker(BaseBroker):
     def __init__(self, api_key: str, secret_key: str, paper: bool = True, base_url: str = ""):
         self.api_key = api_key
         self.secret_key = secret_key
-        
+
         # Priority: 1. Manual Base URL from .env, 2. Logic based on paper flag
         if base_url:
             self.base_url = base_url
         else:
             self.base_url = "https://paper-api.alpaca.markets" if paper else "https://api.alpaca.markets"
-            
+
         self._api = None
         self._connected = False
-        
+
     def connect(self) -> bool:
         try:
             # Clean base_url: Remove trailing /v2 if present to avoid duplication by SDK
             clean_url = self.base_url.rstrip("/")
             if clean_url.endswith("/v2"):
                 clean_url = clean_url[:-3]
-                
+
             self._api = tradeapi.REST(
-                self.api_key, 
-                self.secret_key, 
-                clean_url, 
+                self.api_key,
+                self.secret_key,
+                clean_url,
                 api_version='v2'
             )
             # Test connection
@@ -50,7 +53,7 @@ class AlpacaBroker(BaseBroker):
             equity = float(acct.equity)
             last_equity = float(acct.last_equity)
             daily_pnl = equity - last_equity
-            
+
             return {
                 "NetLiquidation": equity,
                 "BuyingPower": float(acct.buying_power),
@@ -102,7 +105,7 @@ class AlpacaBroker(BaseBroker):
             side = side.lower()
             type_map = {"MKT": "market", "LMT": "limit"}
             alpaca_type = type_map.get(order_type.upper(), "market")
-            
+
             order = self._api.submit_order(
                 symbol=symbol,
                 qty=abs(quantity),

@@ -5,10 +5,9 @@ This module defines the wrapper class for models to be used with the TIP-Search 
 It encapsulates the model prediction logic along with its latency profile and accuracy estimator.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Protocol
 import time
-from loguru import logger
+from typing import Any, Protocol
+
 from qsresearch.realtime.tasks import InferenceTask
 
 
@@ -28,19 +27,19 @@ class ModelWrapper:
         p99_latency_ns: Profiled 99th percentile inference latency in nanoseconds
         base_accuracy: Baseline accuracy/score (0.0 to 1.0)
     """
-    
+
     def __init__(
-        self, 
-        name: str, 
-        model: Any, 
-        p99_latency_ns: int, 
+        self,
+        name: str,
+        model: Any,
+        p99_latency_ns: int,
         base_accuracy: float = 0.5
     ):
         self.name = name
         self.model = model
         self.p99_latency_ns = p99_latency_ns
         self.base_accuracy = base_accuracy
-        
+
     def predict(self, task: InferenceTask) -> Any:
         """
         Execute inference on the task.
@@ -53,7 +52,7 @@ class ModelWrapper:
         """
         # In a real low-latency system, we might want to measure actual runtime here
         return self.model.predict(task.features)
-        
+
     def estimated_accuracy(self, task: InferenceTask) -> float:
         """
         Estimate the accuracy of this model for the specific task.
@@ -70,7 +69,7 @@ class ModelWrapper:
         """
         # TODO: Implement dynamic accuracy estimation based on task.domain or features
         return self.base_accuracy
-        
+
     def check_deadline(self, task: InferenceTask) -> bool:
         """
         Check if the model can process the task within the deadline.

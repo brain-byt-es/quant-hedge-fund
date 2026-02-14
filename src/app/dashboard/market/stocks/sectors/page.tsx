@@ -26,7 +26,8 @@ interface IndustryData {
 }
 
 const abbreviateNumber = (num: number | undefined | null) => {
-    if (num === undefined || num === null || num === 0) return "-"
+    if (num === undefined || num === null) return "-"
+    if (num === 0) return "0.00"
     if (num >= 1e12) return (num / 1e12).toFixed(2) + "T"
     if (num >= 1e9) return (num / 1e9).toFixed(2) + "B"
     if (num >= 1e6) return (num / 1e6).toFixed(2) + "M"
@@ -35,7 +36,7 @@ const abbreviateNumber = (num: number | undefined | null) => {
 }
 
 const formatPercent = (num: number | undefined | null) => {
-    if (num === undefined || num === null || num === 0) return "-"
+    if (num === undefined || num === null) return "-"
     return `${num > 0 ? '+' : ''}${num.toFixed(2)}%`
 }
 
@@ -86,16 +87,23 @@ export default function IndustrySectorsPage() {
             className: "text-right"
         },
         {
+            header: "Revenue",
+            accessorKey: "total_revenue",
+            cell: (item: IndustryData) => <span className="font-mono text-xs text-muted-foreground">{abbreviateNumber(item.total_revenue)}</span>,
+            sortable: true,
+            className: "text-right"
+        },
+        {
             header: "Div. Yield",
             accessorKey: "avg_dividend_yield",
-            cell: (item: IndustryData) => <span className="font-mono text-xs">{item.avg_dividend_yield ? item.avg_dividend_yield.toFixed(2) + '%' : '-'}</span>,
+            cell: (item: IndustryData) => <span className="font-mono text-xs">{item.avg_dividend_yield !== undefined && item.avg_dividend_yield !== null ? item.avg_dividend_yield.toFixed(2) + '%' : '-'}</span>,
             sortable: true,
             className: "text-right"
         },
         {
             header: "PE Ratio",
             accessorKey: "pe_ratio",
-            cell: (item: IndustryData) => <span className="font-mono text-xs">{item.pe_ratio ? item.pe_ratio.toFixed(2) : '-'}</span>,
+            cell: (item: IndustryData) => <span className="font-mono text-xs">{item.pe_ratio !== undefined && item.pe_ratio !== null ? item.pe_ratio.toFixed(2) : '-'}</span>,
             sortable: true,
             className: "text-right"
         },

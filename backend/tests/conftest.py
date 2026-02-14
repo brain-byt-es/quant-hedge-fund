@@ -4,13 +4,13 @@ Pytest Configuration and Shared Fixtures
 Provides common fixtures for QuantHedgeFund tests.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from datetime import datetime
+
+import numpy as np
 import pandas as pd
 import polars as pl
-import numpy as np
+import pytest
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def temp_dir():
 def sample_prices_df():
     """Create sample price data for testing."""
     dates = pd.date_range("2024-01-01", periods=300, freq="D")
-    
+
     data = {
         "symbol": ["AAPL"] * 300,
         "date": dates,
@@ -34,12 +34,12 @@ def sample_prices_df():
         "close": np.random.uniform(150, 200, 300),
         "volume": np.random.randint(1000000, 10000000, 300),
     }
-    
+
     df = pd.DataFrame(data)
     # Ensure high >= low
     df["high"] = df[["high", "open", "close"]].max(axis=1) + 1
     df["low"] = df[["low", "open", "close"]].min(axis=1) - 1
-    
+
     return df
 
 

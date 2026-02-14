@@ -1,5 +1,17 @@
 from fastapi import APIRouter
-from api.routers import data, backtest, ai, live, governance, status, research, tactical, search, screener
+
+from api.routers import (
+    ai,
+    backtest,
+    data,
+    governance,
+    live,
+    research,
+    screener,
+    search,
+    status,
+    tactical,
+)
 
 api_router = APIRouter()
 

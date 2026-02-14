@@ -1,6 +1,9 @@
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
+
 from .base import BaseBroker
+
 
 class IBBroker(BaseBroker):
     def __init__(self, host: str, port: int, client_id: int):
@@ -9,12 +12,12 @@ class IBBroker(BaseBroker):
         self.client_id = client_id
         self._ib = None
         self._connected = False
-        
+
     def connect(self) -> bool:
         try:
             import nest_asyncio
             nest_asyncio.apply()
-            
+
             from ib_insync import IB
             if self._ib is None:
                 try:
@@ -26,7 +29,7 @@ class IBBroker(BaseBroker):
 
             if not self._ib.isConnected():
                 self._ib.connect(self.host, self.port, self.client_id)
-            
+
             self._connected = True
             return True
         except RuntimeError as e:
@@ -66,7 +69,7 @@ class IBBroker(BaseBroker):
                 qty = pos.position
                 # Note: Skipping real-time price fetch for simplicity in this port
                 # Ideally reuse the reqMktData logic from original TradingApp
-                current_price = avg 
+                current_price = avg
                 positions.append({
                     "symbol": pos.contract.symbol,
                     "quantity": qty,
@@ -95,21 +98,21 @@ class IBBroker(BaseBroker):
     def submit_order(self, symbol: str, quantity: int, side: str, order_type: str, price: float = None) -> Optional[Any]:
         if not self.is_connected(): return None
         try:
-            from ib_insync import Stock, MarketOrder, LimitOrder, AlgoOrder
+            from ib_insync import AlgoOrder, LimitOrder, MarketOrder, Stock
             contract = Stock(symbol, "SMART", "USD")
-            
+
             order = None
             action = side.upper()
             qty = abs(quantity)
             ot = order_type.upper()
-            
+
             if ot == "MKT":
                 order = MarketOrder(action, qty)
             elif ot == "ADAPTIVE":
                 # Adaptive Algo
                 # Note: Adaptive requires a price (usually current market or limit)
                 # If price is None, we can't really do a Limit Adaptive safely without more context
-                # For safety, if no price, default to MKT or fail? 
+                # For safety, if no price, default to MKT or fail?
                 # Let's assume price is provided or we use MKT Adaptive if supported (it is usually Limit)
                 if price:
                     order = LimitOrder(action, qty, price)
@@ -118,14 +121,14 @@ class IBBroker(BaseBroker):
                 else:
                     # Fallback to Market Adaptive? Or just Market.
                     # IBKR Adaptive usually works best as Limit.
-                    order = MarketOrder(action, qty) 
+                    order = MarketOrder(action, qty)
                     order.algoStrategy = "Adaptive"
                     order.algoParams = [("adaptivePriority", "Normal")]
             elif ot == "VWAP":
                 # VWAP Algo
                 order = AlgoOrder(
-                    action=action, 
-                    totalQuantity=qty, 
+                    action=action,
+                    totalQuantity=qty,
                     algoStrategy="Vwap",
                     algoParams=[
                         ("startTime", ""), # Now
@@ -137,11 +140,11 @@ class IBBroker(BaseBroker):
             elif ot == "TWAP":
                 # TWAP Algo
                 order = AlgoOrder(
-                    action=action, 
-                    totalQuantity=qty, 
+                    action=action,
+                    totalQuantity=qty,
                     algoStrategy="Twap",
                     algoParams=[
-                        ("startTime", ""), 
+                        ("startTime", ""),
                         ("endTime", ""),
                         ("strategyType", "Marketable")
                     ]
@@ -152,7 +155,7 @@ class IBBroker(BaseBroker):
                     order = LimitOrder(action, qty, price)
                 else:
                     order = MarketOrder(action, qty)
-            
+
             trade = self._ib.placeOrder(contract, order)
             logger.info(f"IBKR Order Submitted: {ot} {action} {qty} {symbol}")
             return trade

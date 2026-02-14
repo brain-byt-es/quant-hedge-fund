@@ -1,50 +1,27 @@
 "use client"
 
-const sampleCode = `from zipline.api import order_target, record, symbol
+import React from "react"
 
-def initialize(context):
-    context.i = 0
-    context.asset = symbol('AAPL')
+interface CodeEditorProps {
+  value: string
+  onChange: (val: string) => void
+}
 
-def handle_data(context, data):
-    # Skip first 300 days to get full windows
-    context.i += 1
-    if context.i < 300:
-        return
-
-    # Compute averages
-    # history() has to be called with the same params
-    # from day to day. Otherwise the cache is rejected.
-    short_mavg = data.history(context.asset, 'price', 100, '1d').mean()
-    long_mavg = data.history(context.asset, 'price', 300, '1d').mean()
-
-    # Trading logic
-    if short_mavg > long_mavg:
-        # order_target orders as many shares as needed to
-        # achieve the desired number of shares.
-        order_target(context.asset, 100)
-    elif short_mavg < long_mavg:
-        order_target(context.asset, 0)
-
-    # Save values for later inspection
-    record(AAPL=data.current(context.asset, 'price'),
-           short_mavg=short_mavg,
-           long_mavg=long_mavg)`
-
-export function CodeEditor() {
+export function CodeEditor({ value, onChange }: CodeEditorProps) {
   return (
-    <div className="relative h-full font-mono text-sm bg-[#1e1e1e] rounded-lg border border-border overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-8 bg-[#252526] flex items-center px-4 border-b border-[#3e3e3e] text-xs text-muted-foreground select-none">
-            strategy.py
+    <div className="relative h-full font-mono text-sm bg-[#09090b] rounded-xl overflow-hidden group">
+        <div className="absolute top-0 left-0 right-0 h-8 bg-muted/30 flex items-center px-4 border-b border-border/50 text-[10px] uppercase font-black tracking-widest text-muted-foreground select-none z-10">
+            algorithms.py // Strategy Logic
         </div>
         <textarea 
-            className="w-full h-full p-4 pt-10 bg-transparent text-gray-300 resize-none focus:outline-none"
-            defaultValue={sampleCode}
+            className="w-full h-full p-4 pt-12 bg-transparent text-chart-3 resize-none focus:outline-none custom-scrollbar leading-relaxed selection:bg-primary/30"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
             spellCheck={false}
         />
-        {/* Line Numbers Fake Overlay */}
-        <div className="absolute top-10 left-0 w-8 text-right pr-2 text-gray-600 select-none pointer-events-none text-sm leading-6">
-            {Array.from({length: 25}).map((_, i) => (
+        {/* Subtle Line Numbers Placeholder */}
+        <div className="absolute top-12 left-0 w-8 text-right pr-2 text-muted-foreground/20 select-none pointer-events-none text-[10px] leading-relaxed">
+            {Array.from({length: 40}).map((_, i) => (
                 <div key={i}>{i+1}</div>
             ))}
         </div>

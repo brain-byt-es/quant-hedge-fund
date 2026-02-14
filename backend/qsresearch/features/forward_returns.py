@@ -5,6 +5,7 @@ Calculate forward returns for target variable creation in ML strategies.
 """
 
 from typing import List
+
 import pandas as pd
 from loguru import logger
 
@@ -32,17 +33,17 @@ def add_forward_returns(
         DataFrame with forward return columns added
     """
     df = df.sort_values([symbol_column, date_column]).copy()
-    
+
     for period in forward_periods:
         col_name = f"forward_return_{period}d"
-        
+
         # Calculate forward return per symbol
         df[col_name] = df.groupby(symbol_column)[close_column].transform(
             lambda x: x.shift(-period) / x - 1
         )
-        
+
         logger.debug(f"Added forward return column: {col_name}")
-    
+
     logger.info(f"Added {len(forward_periods)} forward return columns")
     return df
 
@@ -66,10 +67,10 @@ def add_forward_return_quintiles(
         DataFrame with quintile labels (1-5)
     """
     df = df.copy()
-    
+
     # Calculate quintiles cross-sectionally (within each date)
     df[output_column] = df.groupby(date_column)[forward_column].transform(
         lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5], duplicates="drop")
     )
-    
+
     return df

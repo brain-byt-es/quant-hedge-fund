@@ -38,6 +38,7 @@ export default function IndustryOverview() {
                 const grouped: Record<string, IndustryData[]> = {}
                 
                 res.forEach((item: IndustryData) => {
+                    if (!item.name) return
                     const parts = item.name.split(' - ')
                     const sectorName = parts.length > 1 ? parts[0] : 'Other'
                     const industryName = parts.length > 1 ? parts[1] : item.name
@@ -79,6 +80,19 @@ export default function IndustryOverview() {
             accessorKey: "market_cap",
             cell: (item: IndustryData) => {
                 const val = item.market_cap || 0
+                return (
+                    <span className="font-mono text-[10px] font-bold text-muted-foreground">
+                        {val > 0 ? `$${(val / 1e9).toFixed(1)}B` : "-"}
+                    </span>
+                )
+            },
+            className: "text-right"
+        },
+        {
+            header: "Revenue",
+            accessorKey: "total_revenue",
+            cell: (item: IndustryData) => {
+                const val = item.total_revenue || 0
                 return (
                     <span className="font-mono text-[10px] font-bold text-muted-foreground">
                         {val > 0 ? `$${(val / 1e9).toFixed(1)}B` : "-"}

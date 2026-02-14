@@ -11,8 +11,8 @@ Main Features:
 - Zipline bundle creation
 """
 
-from qsconnect.client import Client
 from qsconnect.api.fmp_client import FMPClient
 from qsconnect.api.simfin_client import SimFinClient
+from qsconnect.client import Client
 
 __all__ = ["Client", "FMPClient", "SimFinClient"]

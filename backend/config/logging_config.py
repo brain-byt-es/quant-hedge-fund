@@ -6,6 +6,7 @@ Structured logging setup using loguru for the entire system.
 
 import sys
 from pathlib import Path
+
 from loguru import logger
 
 
@@ -24,7 +25,7 @@ def setup_logging(
     """
     # Remove default handler
     logger.remove()
-    
+
     # Console handler with color
     logger.add(
         sys.stderr,
@@ -35,10 +36,10 @@ def setup_logging(
         level=log_level,
         colorize=True,
     )
-    
+
     # Create log directory
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # File handler for all logs
     logger.add(
         log_dir / f"{log_name}.log",
@@ -48,7 +49,7 @@ def setup_logging(
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}",
         level="DEBUG",
     )
-    
+
     # Separate file for errors
     logger.add(
         log_dir / f"{log_name}_errors.log",
@@ -58,7 +59,7 @@ def setup_logging(
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}",
         level="ERROR",
     )
-    
+
     logger.info(f"Logging initialized at level: {log_level}")
 
 

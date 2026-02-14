@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 from loguru import logger
 
 # Ensure backend is in path
@@ -7,18 +8,19 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from api.routers.data import get_qs_client
 
+
 def run_standalone_aggregation():
     logger.info("🚀 Starting Standalone Market Taxonomy Aggregation...")
-    
+
     try:
         client = get_qs_client()
         db = client._db_manager
         con = db.connect()
-        
+
         # 1. Clear existing stats
         logger.info("Cleaning old stats...")
         con.execute("DELETE FROM sector_industry_stats")
-        
+
         # 2. Aggregate Industries
         # We join master_assets_index with prices to get actual Market Cap
         # master_assets_index has: symbol, category, country, market_cap (string)
@@ -54,7 +56,7 @@ def run_standalone_aggregation():
             WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
             GROUP BY category
         """)
-        
+
         # 3. Aggregate Sectors
         logger.info("Aggregating Sectors...")
         con.execute("""
@@ -84,10 +86,10 @@ def run_standalone_aggregation():
             WHERE m.type = 'Equity' AND m.category IS NOT NULL AND m.category != ''
             GROUP BY 1
         """)
-        
+
         count = con.execute("SELECT COUNT(*) FROM sector_industry_stats").fetchone()[0]
         logger.success(f"✅ Aggregation complete: {count} groups processed.")
-        
+
     except Exception as e:
         logger.exception(f"Aggregation failed: {e}")
     finally:

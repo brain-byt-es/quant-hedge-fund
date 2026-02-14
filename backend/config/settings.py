@@ -6,8 +6,6 @@ Pydantic-based settings management with environment variable support.
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
-import os
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,7 +15,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     """Global application settings loaded from environment variables."""
-    
+
     model_config = SettingsConfigDict(
         env_file=str(APP_ROOT / ".env"),
         env_file_encoding="utf-8",
@@ -25,7 +23,7 @@ class Settings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
-    
+
     # ===================
     # API Keys
     # ===================
@@ -34,12 +32,12 @@ class Settings(BaseSettings):
     datalink_api_key: str = Field(default="", description="Datalink API key")
     openai_api_key: str = Field(default="", description="OpenAI API key for AI assistant")
     groq_api_key: str = Field(default="", description="Groq API key for LLM features")
-    
+
     # ===================
     # LLM Settings
     # ===================
     groq_model: str = Field(default="openai/gpt-oss-120b", description="Groq LLM model to use")
-    
+
     # ===================
     # Database Settings
     # ===================
@@ -51,7 +49,7 @@ class Settings(BaseSettings):
         default=APP_ROOT / "data/cache",
         description="Directory for cached parquet files"
     )
-    
+
     # ===================
     # MLflow Settings
     # ===================
@@ -63,12 +61,12 @@ class Settings(BaseSettings):
         default="Nightly Backtest",
         description="Default MLflow experiment name"
     )
-    
+
     # ===================
     # Broker Settings
     # ===================
     active_broker: str = Field(default="ALPACA", description="Active broker: 'IBKR' or 'ALPACA'")
-    
+
     # Alpaca
     alpaca_api_key: str = Field(default="", description="Alpaca API Key")
     alpaca_secret_key: str = Field(default="", description="Alpaca Secret Key")
@@ -80,13 +78,13 @@ class Settings(BaseSettings):
     ib_port: int = Field(default=7497, description="IB Gateway port")
     ib_client_id: int = Field(default=1, description="IB client ID")
     ib_paper_trading: bool = Field(default=True, description="Use paper trading mode")
-    
+
     # ===================
     # Universe Filters
     # ===================
     min_market_cap: float = Field(default=500_000_000.0, description="Minimum market cap for universe selection")
     min_volume: float = Field(default=1_000_000.0, description="Minimum daily volume for universe selection")
-    
+
     # ===================
     # Risk Management
     # ===================
@@ -94,7 +92,7 @@ class Settings(BaseSettings):
     max_symbol_exposure_pct: float = Field(default=0.20, description="Max exposure per symbol (e.g. 0.20 = 20%)")
     max_leverage: float = Field(default=1.5, description="Max portfolio leverage")
     min_order_threshold_usd: float = Field(default=100.0, description="Minimum order size in USD")
-    
+
     # ===================
     # Dashboard Settings
     # ===================
@@ -107,12 +105,12 @@ class Settings(BaseSettings):
         default="quant123",
         description="Dashboard login password (change in production!)"
     )
-    
+
     # ===================
     # OpenAI Settings
     # ===================
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
-    
+
     # ===================
     # Orchestration
     # ===================
@@ -121,13 +119,13 @@ class Settings(BaseSettings):
         default="http://127.0.0.1:4200",
         description="Prefect API URL"
     )
-    
+
     # ===================
     # Logging
     # ===================
     log_level: str = Field(default="INFO", description="Logging level")
     log_dir: Path = Field(default=Path("./logs"), description="Log directory")
-    
+
     @field_validator("duckdb_path", "cache_dir", "dashboard_data_dir", mode="after")
     @classmethod
     def enforce_absolute_paths(cls, v: Path) -> Path:

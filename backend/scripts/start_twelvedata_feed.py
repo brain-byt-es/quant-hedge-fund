@@ -3,28 +3,25 @@ Twelve Data Real-Time Feed
 Uses WebSocket to stream real-time price quotes and feed them to the dashboard.
 API Key provided by user.
 """
-import websocket
 import json
-import time
-import sys
 import os
+import sys
+import time
 from pathlib import Path
-from datetime import datetime
+
+import websocket
 
 # Add project root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from config.registry import get_registry
+from omega.data.candle_engine import CandleAggregator, SessionManager, Tick
 from qsconnect.database.duckdb_manager import DuckDBManager
-from omega.data.candle_engine import CandleAggregator, Tick, SessionManager
-
-from config.registry import get_registry
-
-from config.registry import get_registry
 
 # API Configuration
 API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 if not API_KEY:
-    # Fallback to hardcoded for this session if env not loaded yet, 
+    # Fallback to hardcoded for this session if env not loaded yet,
     # but prefer env in production
     API_KEY = "2b20a28a0c5040f082c35cb6f95a75c2"
 
@@ -44,7 +41,7 @@ def on_message(ws, message):
     try:
         data = json.loads(message)
         event = data.get("event")
-        
+
         # Twelve Data 'price' event (Quote)
         if event == "price":
             symbol = data.get("symbol")
@@ -53,13 +50,13 @@ def on_message(ws, message):
 
             price = float(data.get("price", 0))
             raw_ts = data.get("timestamp")
-            
+
             # Robust timestamp handling
             if isinstance(raw_ts, (int, float)):
                 exchange_ts = raw_ts
             else:
                 exchange_ts = time.time()
-                
+
             tick = Tick(
                 symbol=symbol,
                 price=price,
@@ -69,20 +66,20 @@ def on_message(ws, message):
                 source="TWELVE_DATA",
                 asset_class=REGISTRY.get_asset_class(symbol)
             )
-            
+
             # Process Tick
             AGGREGATORS[symbol].process_tick(tick)
             print(f"Update {symbol}: {price:.2f}")
 
         elif event == "subscribe-status":
             print(f"📡 Subscription Status: {data.get('status')} for {data.get('success', [])}")
-            
+
         elif event == "heartbeat":
             print(".", end="", flush=True)
-            
+
         elif data.get("status") == "error":
             print(f"\n❌ API Error: {data.get('message')}")
-            
+
     except Exception as e:
         print(f"\nError processing message: {e}")
 
@@ -94,7 +91,7 @@ def on_close(ws, close_status_code, close_msg):
 
 def on_open(ws):
     print("✅ Connected to Twelve Data. Subscribing...")
-    
+
     # Subscribe to price quotes (no interval = ticks/quotes)
     payload = {
         "action": "subscribe",
@@ -107,22 +104,22 @@ def on_open(ws):
 def main():
     print("🚀 Starting Twelve Data Real-Time Feed...")
     print(f"   Symbols: {SYMBOLS}")
-    
+
     # Initialize Aggregators
     for sym in SYMBOLS:
         AGGREGATORS[sym] = CandleAggregator(
-            symbol=sym, 
+            symbol=sym,
             session_mgr=PermissiveSession(),
             db_mgr=DB_MGR,
             source="TWELVE_DATA",
             asset_class=REGISTRY.get_asset_class(sym)
         )
-    
+
     # Run WebSocket with reconnection logic
     ws_url = f"wss://ws.twelvedata.com/v1/quotes/price?apikey={API_KEY}"
-    
+
     while True:
-        print(f"Connecting to Twelve Data...")
+        print("Connecting to Twelve Data...")
         ws = websocket.WebSocketApp(
             ws_url,
             on_open=on_open,
@@ -130,7 +127,7 @@ def main():
             on_error=on_error,
             on_close=on_close
         )
-        
+
         try:
             ws.run_forever()
         except KeyboardInterrupt:
@@ -138,7 +135,7 @@ def main():
             break
         except Exception as e:
             print(f"\n⚠️ WS Crash: {e}")
-            
+
         print("Waiting 5s before reconnecting...")
         time.sleep(5)
 

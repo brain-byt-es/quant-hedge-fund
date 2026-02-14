@@ -62,6 +62,7 @@ if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
 fi
 export HDF5_DIR=/opt/homebrew/opt/hdf5
+export MLFLOW_TRACKING_URI=sqlite:///mlflow.db
 # Using python -m uvicorn to ensure we use the python from the environment
 # workers=1 is crucial for DuckDB concurrency safety in dev mode
 python -m uvicorn main:app --reload --port 8000 --workers 1 &
@@ -69,7 +70,7 @@ BACKEND_PID=$!
 
 # Start MLflow UI (Strategy Lab)
 echo "Starting Strategy Lab (MLflow)..."
-mlflow ui --port 5000 --backend-store-uri ./mlruns &
+mlflow ui --port 5000 --backend-store-uri sqlite:///mlflow.db &
 MLFLOW_PID=$!
 
 # Start Prefect Server (The Janitor)

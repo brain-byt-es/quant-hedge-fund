@@ -1,15 +1,17 @@
-import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+import yaml
 from loguru import logger
+
 
 class AssetRegistry:
     """Helper to load and query the config/assets.yaml file."""
-    
+
     def __init__(self, config_path: Optional[Path] = None):
         if config_path is None:
             config_path = Path(__file__).parent / "assets.yaml"
-        
+
         self.config_path = config_path
         self.assets: Dict[str, Any] = {}
         self.load()

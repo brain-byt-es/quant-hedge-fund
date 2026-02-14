@@ -9,6 +9,8 @@ import { CompanyProfile } from "@/components/research/company-profile"
 import { MarketOverviewTable } from "@/components/research/market-overview-table"
 import { BacktestHistoryTable } from "@/components/research/backtest-history-table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Activity } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
 
@@ -74,7 +76,7 @@ export default function ResearchPage() {
   const loadData = useCallback(async () => {
       try {
           const [sigData, runData] = await Promise.all([
-              api.getResearchSignals(lookback),
+              api.getResearchSignals(lookback, minMCap, minVolume),
               api.listBacktests(50)
           ])
           
@@ -88,7 +90,7 @@ export default function ResearchPage() {
       } catch {
           console.debug("Research Lab: Backend busy...")
       }
-  }, [lookback, symbol])
+  }, [lookback, minMCap, minVolume, symbol])
 
   useEffect(() => {
       loadData()
@@ -180,22 +182,19 @@ export default function ResearchPage() {
                          <FactorDistributionChart data={signals} />
                     </div>
 
-                    {/* Row 3: Tabs (Market Table vs Backtest History) */}
-                    <div className="h-[600px] shrink-0 pb-4 flex flex-col">
-                         <Tabs defaultValue="market" className="h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-2">
-                                <TabsList className="h-7 bg-muted/50 border border-border/50 p-0.5">
-                                    <TabsTrigger value="market" className="text-[10px] h-6 uppercase tracking-widest font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Market Overview</TabsTrigger>
-                                    <TabsTrigger value="backtests" className="text-[10px] h-6 uppercase tracking-widest font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Strategy Audit Log</TabsTrigger>
-                                </TabsList>
+                    {/* Row 3: Market Table (Full Height) */}
+                    <div className="flex-1 min-h-[500px] pb-4">
+                         <div className="h-full flex flex-col border border-border/50 rounded-xl overflow-hidden shadow-xl bg-card/20 backdrop-blur-md">
+                            <div className="py-2 px-3 border-b border-border/50 flex items-center justify-between bg-card/40">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                                    <Activity className="h-3 w-3" /> Market Intelligence Universe
+                                </h3>
+                                <Badge variant="outline" className="text-[9px] h-4 bg-background/50">{signals.length} Active Signals</Badge>
                             </div>
-                            <TabsContent value="market" className="flex-1 min-h-0 mt-0">
+                            <div className="flex-1 overflow-hidden">
                                 <MarketOverviewTable data={signals} onSelectSymbol={setSymbol} />
-                            </TabsContent>
-                            <TabsContent value="backtests" className="flex-1 min-h-0 mt-0">
-                                <BacktestHistoryTable data={backtests} />
-                            </TabsContent>
-                         </Tabs>
+                            </div>
+                         </div>
                     </div>
                 </div>
 

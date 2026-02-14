@@ -21,6 +21,8 @@ import { StrategyGovernance } from "@/components/research/strategy-governance"
 import { BacktestHistoryTable } from "@/components/research/backtest-history-table"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 
 interface BacktestRun {
   run_id: string
@@ -34,8 +36,29 @@ interface BacktestRun {
   tags: Record<string, string>
 }
 
+const DEFAULT_CODE = `from zipline.api import order_target, record, symbol
+
+def initialize(context):
+    context.i = 0
+    context.asset = symbol('AAPL')
+
+def handle_data(context, data):
+    # Strategy logic here
+    pass`
+
+interface StrategyConfig {
+  strategy_name: string
+  capital_base: number
+  start_date: string
+  end_date: string
+  params: Record<string, unknown>
+}
+
 export default function QuantLabPage() {
   const [backtests, setBacktests] = useState<BacktestRun[]>([])
+  const [strategyCode, setStrategyCode] = useState(DEFAULT_CODE)
+  const [isInjecting, setIsInjecting] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -44,6 +67,11 @@ export default function QuantLabPage() {
         const res = await api.listBacktests(20)
         if (isMounted) {
           setBacktests((res as unknown as BacktestRun[]) || [])
+        }
+        // Load existing algorithms.py code
+        const codeRes = await api.getAlgorithmsCode()
+        if (isMounted && codeRes?.code) {
+            setStrategyCode(codeRes.code)
         }
       } catch (err) {
         console.error(err)
@@ -59,6 +87,44 @@ export default function QuantLabPage() {
       setBacktests((res as unknown as BacktestRun[]) || [])
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const handleInjectCode = async () => {
+    setIsInjecting(true)
+    try {
+        await api.updateAlgorithmsCode(strategyCode)
+        toast.success("Code Injected", { description: "algorithms.py has been updated on the server." })
+    } catch (err) {
+        toast.error("Injection Failed", { description: "Ensure backend is online." })
+    } finally {
+        setIsInjecting(false)
+    }
+  }
+
+  const handleRunBacktest = async (config: StrategyConfig) => {
+    setIsRunning(true)
+    try {
+        // Build full execution config
+        const fullConfig = {
+            ...config,
+            bundle_name: "historical_prices_fmp",
+            benchmark: "SPY",
+            algorithm: {
+                callable: "custom_logic", // This maps to our dynamically updated file
+                params: config.params
+            }
+        }
+        
+        await api.runBacktest(fullConfig)
+        toast.success("Backtest Initiated", { description: `Simulation '${config.strategy_name}' is running.` })
+        
+        // Refresh history after a short delay
+        setTimeout(handleRefresh, 3000)
+    } catch (err) {
+        toast.error("Execution Failed", { description: "Backend refused the request." })
+    } finally {
+        setIsRunning(false)
     }
   }
 
@@ -114,7 +180,7 @@ export default function QuantLabPage() {
                 {/* Left: Code Editor (Large) */}
                 <div className="col-span-12 lg:col-span-8 flex flex-col gap-4">
                     <div className="flex-1 min-h-0 border border-border rounded-xl overflow-hidden shadow-2xl bg-black/20 backdrop-blur-md">
-                        <CodeEditor />
+                        <CodeEditor value={strategyCode} onChange={setStrategyCode} />
                     </div>
                     <div className="h-12 bg-card border border-border/50 rounded-xl flex items-center px-4 justify-between shrink-0 shadow-sm">
                         <div className="flex items-center gap-4">
@@ -125,15 +191,21 @@ export default function QuantLabPage() {
                                 <Database className="h-3 w-3" /> universe: simfin-anchored
                             </span>
                         </div>
-                        <Button size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
-                            <Save className="h-3.5 w-3.5 mr-2" /> Inject Code
+                        <Button 
+                            size="sm" 
+                            className="h-8 text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
+                            onClick={handleInjectCode}
+                            disabled={isInjecting}
+                        >
+                            {isInjecting ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-2" />}
+                            Inject Code
                         </Button>
                     </div>
                 </div>
 
                 {/* Right: Strategy Config (Sidebar) */}
                 <div className="col-span-12 lg:col-span-4 h-full flex flex-col gap-4 overflow-y-auto pr-1 custom-scrollbar">
-                    <StrategyForm />
+                    <StrategyForm onSubmit={handleRunBacktest} isLoading={isRunning} />
                     <Card className="border-border bg-card/30">
                         <CardHeader className="py-3">
                             <CardTitle className="text-xs uppercase tracking-widest font-black flex items-center gap-2">

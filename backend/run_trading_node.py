@@ -1,19 +1,21 @@
-import time
-import sys
 import random
+import time
 from datetime import datetime
+
 from loguru import logger
-from omega.trading_app import TradingApp
+
 from omega.data.candle_engine import Tick
+from omega.trading_app import TradingApp
+
 
 def run_simulation(app):
     """Generates synthetic ticks for offline verification."""
     logger.warning("⚠️  STARTING SIMULATION MODE ⚠️")
     logger.info("Generating synthetic ticks for AMZN to verify Truth Layer...")
-    
+
     symbol = "AMZN"
     price = 185.50
-    
+
     # Manually initialize aggregator if not already done via subscribe
     # Simulation bypasses IBKR subscription, so we init manually
     if symbol not in app.aggregators:
@@ -24,15 +26,15 @@ def run_simulation(app):
             event_bus=app.event_bus,
             db_mgr=app._db_manager
         )
-    
+
     agg = app.aggregators[symbol]
-    
+
     try:
         while True:
             # Random Walk
             price += random.choice([-0.05, -0.01, 0.00, 0.01, 0.05])
             size = random.randint(1, 500)
-            
+
             # Create Truth Tick
             tick = Tick(
                 symbol=symbol,
@@ -41,22 +43,22 @@ def run_simulation(app):
                 exchange_ts=datetime.now().timestamp(),
                 recv_ts=datetime.now().timestamp()
             )
-            
+
             # Feed Engine
             agg.process_tick(tick)
-            
+
             # logger.info(f"SIM TICK: {price:.2f}")
             time.sleep(0.5) # 2 ticks per second
-            
+
     except KeyboardInterrupt:
         logger.info("Simulation Stopped.")
 
 def main():
     logger.info("Starting Omega Trading Node...")
-    
+
     # Initialize App
     app = TradingApp()
-    
+
     # Connect to IBKR
     connected = False
     try:
@@ -76,9 +78,9 @@ def main():
     symbol = "AMZN"
     logger.info(f"Subscribing to Truth Layer for {symbol}...")
     app.subscribe_truth_layer(symbol)
-    
+
     logger.success(f"Trading Node Active. Feeding {symbol} candles to Dashboard.")
-    
+
     # Keep alive
     try:
         while True:

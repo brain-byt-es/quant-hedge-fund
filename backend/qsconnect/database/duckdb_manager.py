@@ -5,15 +5,15 @@ High-performance columnar database management using DuckDB.
 Handles all data storage, querying, and schema management.
 """
 
-from pathlib import Path
-from typing import Optional, List, Dict, Any
+import threading
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import duckdb
-import polars as pl
 import pandas as pd
+import polars as pl
 from loguru import logger
-import threading
 
 
 class DuckDBManager:
@@ -21,7 +21,7 @@ class DuckDBManager:
     Manager for DuckDB database operations.
     Supports multi-threaded access via a shared connection.
     """
-    
+
     def __init__(self, db_path: Path, read_only: bool = False, auto_close: bool = False):
         """
         Initialize DuckDB manager.
@@ -29,16 +29,16 @@ class DuckDBManager:
         self.db_path = Path(db_path)
         self.read_only = read_only
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Persistent connection for the process
         self._conn = None
         self._lock = threading.Lock()
-        
+
         # Initialize schema
         self._init_schema()
-        
+
         logger.info(f"DuckDB manager initialized: {self.db_path}")
-    
+
     def connect(self, read_only: Optional[bool] = None) -> duckdb.DuckDBPyConnection:
         """Get a cursor from the persistent connection."""
         # Note: read_only parameter is kept for signature compatibility but ignored
@@ -47,7 +47,7 @@ class DuckDBManager:
             if self._conn is None:
                 import time
                 db_path_str = str(self.db_path.absolute().resolve())
-                
+
                 # Retry loop only for the initial connection
                 for attempt in range(10):
                     try:
@@ -58,25 +58,29 @@ class DuckDBManager:
                         if attempt < 9:
                             time.sleep(0.1 * (2 ** attempt))
                         else: raise e
-            
+
             return self._conn.cursor()
-    
+
     def close(self) -> None:
         """Close the persistent connection."""
         with self._lock:
             if self._conn:
                 self._conn.close()
                 self._conn = None
-    
+
     def _init_schema(self) -> None:
         """Initialize institutional database schema."""
+        if self.read_only:
+            logger.debug("Skipping schema initialization in read-only mode.")
+            return
+
         # Using a direct connection once for initialization
         db_path_str = str(self.db_path.absolute().resolve())
         # Ensure we can initialize the schema
         conn = None
         try:
             conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
-            
+
             # 1. Historical Prices
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS historical_prices_fmp (
@@ -95,7 +99,7 @@ class DuckDBManager:
                     PRIMARY KEY (symbol, date)
                 )
             """)
-            
+
             # 2. Stock List
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS stock_list_fmp (
@@ -164,7 +168,7 @@ class DuckDBManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # Migration: Add missing columns if they don't exist
             try:
                 cols = conn.execute("PRAGMA table_info('bulk_company_profiles_fmp')").fetchall()
@@ -194,7 +198,7 @@ class DuckDBManager:
                     ttl_expiry TIMESTAMP
                 )
             """)
-            
+
             # 15. Strategy Drift Logs (Performance Tracking)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS strategy_drift_logs (
@@ -256,7 +260,7 @@ class DuckDBManager:
                     PRIMARY KEY (index_symbol, date, symbol)
                 )
             """)
-            
+
             # 19. System Logs (Headless execution tracking)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS system_logs (
@@ -343,7 +347,7 @@ class DuckDBManager:
                     PRIMARY KEY (symbol, data_type)
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS institutional_filers (
                     cik VARCHAR PRIMARY KEY,
@@ -416,7 +420,7 @@ class DuckDBManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # Safe migration: Add total_revenue if missing
             try:
                 cols = conn.execute("PRAGMA table_info('sector_industry_stats')").fetchall()
@@ -424,12 +428,12 @@ class DuckDBManager:
                 if 'total_revenue' not in col_names:
                     conn.execute("ALTER TABLE sector_industry_stats ADD COLUMN total_revenue DOUBLE")
             except: pass
-            
+
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_sym ON historical_prices_fmp(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hp_date ON historical_prices_fmp(date)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_ts ON system_logs(timestamp)")
-            
+
             logger.info("Institutional database schema initialized successfully")
         finally:
             if conn:
@@ -448,25 +452,25 @@ class DuckDBManager:
             column_mapping = {"adjClose": "adj_close", "changePercent": "change_percent"}
             for old, new in column_mapping.items():
                 if old in df.columns: df = df.rename({old: new})
-            
+
             # FORCE all numeric columns to Float64 (DOUBLE) to prevent overflow errors
             numeric_cols = ["volume", "open", "high", "low", "close", "adj_close", "change", "change_percent", "vwap"]
             for col in numeric_cols:
                 if col in df.columns:
                     # Cast to float64 which maps directly to DuckDB DOUBLE
                     df = df.with_columns(pl.col(col).cast(pl.Float64))
-            
+
             # Ensure we only select what exists and is needed
             target_cols = ["symbol", "date", "open", "high", "low", "close", "volume"]
             available_cols = [c for c in target_cols if c in df.columns]
             df_subset = df.select(available_cols)
-            
+
             conn.register("temp_prices", df_subset)
             conn.execute("""
                 INSERT OR REPLACE INTO historical_prices_fmp (symbol, date, open, high, low, close, volume)
                 SELECT symbol, date, open, high, low, close, volume FROM temp_prices
             """)
-            
+
             # Post-Upsert Sanity: Check for outliers in the current batch
             try:
                 outliers = conn.execute("""
@@ -479,7 +483,7 @@ class DuckDBManager:
                     FROM returns 
                     WHERE abs((close/NULLIF(prev_close,0))-1) > 0.5
                 """).pl()
-                
+
                 if not outliers.is_empty():
                     for row in outliers.to_dicts():
                         self.log_event("WARNING", "DataValidator", f"Price anomaly detected for {row['symbol']} on {row['date']}: ${row['prev_close']} -> ${row['close']}")
@@ -505,10 +509,10 @@ class DuckDBManager:
                     df = df.rename({col: col.lower()})
 
             conn.register("temp_fund", df)
-            
+
             # 2. Perform Institutional Upsert (DELETE + INSERT pattern)
             # This is safer than ON CONFLICT because it handles schema changes dynamically
-            
+
             # Extract symbols and dates from temp_fund to delete potential duplicates
             # Note: We do this in a transaction to ensure atomicity
             conn.execute("BEGIN TRANSACTION")
@@ -520,14 +524,14 @@ class DuckDBManager:
                         SELECT symbol, date FROM temp_fund
                     )
                 """)
-                
+
                 # Insert new rows
                 conn.execute(f"INSERT INTO {table_name} SELECT * FROM temp_fund")
                 conn.execute("COMMIT")
             except Exception as tx_err:
                 conn.execute("ROLLBACK")
                 raise tx_err
-            
+
             return len(df)
         finally:
             try: conn.unregister("temp_fund")
@@ -556,7 +560,7 @@ class DuckDBManager:
                 "companyName": "name"
             }
             df = df.rename(columns=mapping)
-            
+
             # Ensure ALL required columns exist
             required_cols = ["symbol", "cik", "name", "exchange", "exchange_short_name", "asset_type", "price", "sector", "industry", "country"]
             for col in required_cols:
@@ -566,15 +570,15 @@ class DuckDBManager:
                         df[col] = df["exchange_short_name"]
                     else:
                         df[col] = None # Default to NULL for missing columns
-            
+
             # Add updated_at timestamp from Python to avoid SQL binder errors
             df["updated_at"] = datetime.now()
 
             conn.register("temp_stocks", df)
-            
+
             # Self-healing: Ensure unique constraint exists for ON CONFLICT
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_sl_pk ON stock_list_fmp(symbol)")
-            
+
             # Use explicit Upsert with ON CONFLICT for robustness
             conn.execute("""
                 INSERT INTO stock_list_fmp (
@@ -582,7 +586,7 @@ class DuckDBManager:
                 )
                 SELECT symbol, cik, name, exchange, exchange_short_name, asset_type, price, sector, industry, country, updated_at FROM temp_stocks
                 ON CONFLICT (symbol) DO UPDATE SET
-                    cik = EXCLUDED.cik,
+                    cik = COALESCE(EXCLUDED.cik, stock_list_fmp.cik),
                     name = EXCLUDED.name,
                     exchange = EXCLUDED.exchange,
                     exchange_short_name = EXCLUDED.exchange_short_name,
@@ -606,12 +610,12 @@ class DuckDBManager:
         try:
             # Add updated_at timestamp
             df["updated_at"] = datetime.now()
-            
+
             conn.register("temp_profiles", df)
-            
+
             # Self-healing: Ensure unique constraint exists for ON CONFLICT
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_pk ON bulk_company_profiles_fmp(symbol)")
-            
+
             conn.execute("""
                 INSERT INTO bulk_company_profiles_fmp (
                     symbol, company_name, sector, industry, description, website, ceo, full_time_employees, price, beta, ipo_date, exchange, updated_at
@@ -652,14 +656,14 @@ class DuckDBManager:
             }
             df = df.rename(columns=mapping)
             df["updated_at"] = datetime.now()
-            
+
             # Keep only columns that exist in schema
             target_cols = ["symbol", "transaction_date", "reporting_name", "type_of_owner", "transaction_type", "securities_transacted", "price", "updated_at"]
             available_cols = [c for c in target_cols if c in df.columns]
             df = df[available_cols]
 
             conn.register("temp_insider", df)
-            
+
             conn.execute(f"""
                 INSERT INTO insider_trades ({', '.join(available_cols)})
                 SELECT {', '.join(available_cols)} FROM temp_insider
@@ -702,17 +706,17 @@ class DuckDBManager:
         """
         query = "SELECT symbol, date, open, high, low, close, volume FROM historical_prices_fmp"
         conditions = []
-        
+
         if start_date:
             conditions.append(f"date >= '{start_date}'")
         if end_date:
             conditions.append(f"date <= '{end_date}'")
-            
+
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-            
+
         query += " ORDER BY symbol, date"
-        
+
         return self.query(query)
 
     def get_data_health(self) -> pl.DataFrame:
@@ -767,7 +771,7 @@ class DuckDBManager:
             "trades",
             "realtime_candles"
         ]
-        
+
         stats = []
         conn = None
         try:
@@ -787,13 +791,13 @@ class DuckDBManager:
             logger.debug(f"Global stats fetch failed: {e}")
         finally:
             if conn: conn.close()
-        
+
         return stats
 
     # =====================
     # Query Core
     # =====================
-    
+
     def query(self, sql: str) -> pl.DataFrame:
         """Execute a SQL query. Attempts read-only first for maximum concurrency."""
         try:
@@ -810,7 +814,7 @@ class DuckDBManager:
                 return conn.execute(sql).pl()
             finally:
                 conn.close()
-    
+
     def query_pandas(self, sql: str) -> pd.DataFrame:
         """Execute a SQL query and return results as Pandas DataFrame."""
         conn = self.connect()
@@ -832,7 +836,7 @@ class DuckDBManager:
         """Get list of all symbols in the price database."""
         result = self.query("SELECT DISTINCT symbol FROM historical_prices_fmp ORDER BY symbol")
         return result["symbol"].to_list() if not result.is_empty() else []
-    
+
     def get_symbols_with_data(self, table_name: str) -> List[str]:
         """Get list of symbols that already have entries in a specific fundamental table."""
         try:
@@ -840,7 +844,7 @@ class DuckDBManager:
             exists = self.query(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table_name}'")[0,0] > 0
             if not exists:
                 return []
-            
+
             result = self.query(f"SELECT DISTINCT symbol FROM {table_name}")
             return result["symbol"].to_list() if not result.is_empty() else []
         except Exception as e:
@@ -871,7 +875,7 @@ class DuckDBManager:
         except Exception as e:
             logger.debug(f"Failed to fetch negative cache: {e}")
             return []
-    
+
     def get_date_range(self) -> Dict[str, Any]:
         """Get the date range of price data in the database."""
         result = self.query_pandas("SELECT MIN(date) as min_date, MAX(date) as max_date, COUNT(DISTINCT symbol) as num_symbols, COUNT(*) as num_records FROM historical_prices_fmp")

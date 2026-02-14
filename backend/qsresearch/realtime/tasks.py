@@ -6,7 +6,6 @@ This module defines the InferenceTask structure used by the real-time scheduler.
 
 from dataclasses import dataclass
 from typing import Any, Optional
-import numpy as np
 
 
 @dataclass
@@ -28,7 +27,7 @@ class InferenceTask:
     arrival_ns: int
     deadline_ns: int
     domain: Optional[str] = None
-    
+
     @property
     def latency_budget_ns(self) -> int:
         """Return the total time budget for this task."""

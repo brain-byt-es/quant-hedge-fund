@@ -4,7 +4,8 @@ Omega - Zipline Trade Converter
 Converts Zipline backtest orders to Omega trade format.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from loguru import logger
 
 
@@ -28,11 +29,11 @@ def omega_trades_from_zipline(
         List of order dictionaries for Omega
     """
     orders = []
-    
+
     # Create lookup for current positions
     current_map = {p["symbol"]: p for p in current_positions}
     target_map = {p["symbol"]: p for p in target_positions}
-    
+
     # Find positions to liquidate (in current but not in target)
     for symbol in current_map:
         if symbol not in target_map:
@@ -44,11 +45,11 @@ def omega_trades_from_zipline(
                 "action": "LIQUIDATE",
             })
             logger.info(f"Liquidating position: {symbol}")
-    
+
     # Find positions to adjust or open
     for symbol, target in target_map.items():
         target_weight = target.get("weight", 0)
-        
+
         if target_weight > 0:
             orders.append({
                 "symbol": symbol,
@@ -57,9 +58,9 @@ def omega_trades_from_zipline(
                 "order_type": "MKT",
                 "action": "REBALANCE",
             })
-    
+
     logger.info(f"Generated {len(orders)} orders from Zipline positions")
-    
+
     return orders
 
 
@@ -83,15 +84,15 @@ def extract_orders_from_performance(
     if "orders" not in performance_df.columns:
         logger.warning("No 'orders' column in performance DataFrame")
         return []
-    
+
     # Get the most recent day's orders
     latest_row = performance_df.iloc[-1]
     orders_list = latest_row.get("orders", [])
-    
+
     if not orders_list:
         logger.info("No orders for the latest trading day")
         return []
-    
+
     orders = []
     for order in orders_list:
         orders.append({
@@ -102,7 +103,7 @@ def extract_orders_from_performance(
             "filled": order.get("filled", 0),
             "commission": order.get("commission", 0),
         })
-    
+
     logger.info(f"Extracted {len(orders)} orders from performance")
-    
+
     return orders

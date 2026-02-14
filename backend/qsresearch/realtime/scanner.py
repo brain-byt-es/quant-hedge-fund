@@ -1,10 +1,11 @@
-from typing import List, Dict, Any
-import pandas as pd
-from loguru import logger
-from datetime import datetime, timedelta
-
-import yaml
 import os
+from datetime import datetime
+from typing import Any, Dict, List
+
+import pandas as pd
+import yaml
+from loguru import logger
+
 
 def load_scanner_config():
     path = "backend/config/scanners.yaml"
@@ -13,9 +14,9 @@ def load_scanner_config():
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
-def find_momentum_rockets(client, 
-                          min_price: float = 2.0, 
-                          max_price: float = 20.0, 
+def find_momentum_rockets(client,
+                          min_price: float = 2.0,
+                          max_price: float = 20.0,
                           max_mcap: float = 300_000_000,
                           min_gain_pct: float = 10.0,
                           min_rvol: float = 5.0,
@@ -28,7 +29,7 @@ def find_momentum_rockets(client,
     signals = []
     config = load_scanner_config()
     scanner_def = next((s for s in config["scanners"] if s["id"] == scanner_type), None)
-    
+
     if not scanner_def:
         logger.warning(f"Scanner ID '{scanner_type}' not found in config. Using defaults.")
         filters = {
@@ -45,11 +46,11 @@ def find_momentum_rockets(client,
         # For brevity, I'll skip historical YAML logic implementation and use existing one
         # but updated to at least respect the scanner_type
         return _find_historical_rockets(client, min_price, max_price, max_mcap, min_gain_pct, min_rvol, min_gap_pct, target_date, scanner_type)
-    
+
     try:
         # 1. Broad Pre-filter from DB
         sql = "SELECT symbol, market_cap, sector FROM factor_ranks_snapshot"
-        
+
         # Optimize pre-filter based on YAML if possible
         if "price" in filters:
             sql += f" WHERE price BETWEEN {filters['price'][0]} AND {filters['price'][1]}"
@@ -60,34 +61,34 @@ def find_momentum_rockets(client,
             candidates_df = client.query(sql).to_pandas()
         except Exception:
             return []
-        
+
         if candidates_df.empty: return []
         candidate_symbols = candidates_df["symbol"].tolist()
-        
+
         # 2. Live Quote Check
         quotes_df = client._fmp_client.get_quotes_batch(candidate_symbols)
         if quotes_df.empty: return []
 
         for _, row in quotes_df.iterrows():
             symbol = row['symbol']
-            
+
             # --- Apply YAML Filters ---
             passed = True
-            
+
             # Price
             if "price" in filters:
                 if not (filters["price"][0] <= row['price'] <= filters["price"][1]): passed = False
-            
+
             # Change %
             if "min_day_change" in filters:
                 if row['changesPercentage'] < (filters["min_day_change"] * 100): passed = False
-            
+
             # RVOL
             avg_vol = row['avgVolume'] if row['avgVolume'] > 0 else 1
             rvol = row['volume'] / avg_vol
             if "min_rvol" in filters:
                 if rvol < filters["min_rvol"]: passed = False
-            
+
             # Volume
             if "min_volume" in filters:
                 if row['volume'] < filters["min_volume"]: passed = False
@@ -98,7 +99,7 @@ def find_momentum_rockets(client,
                 mcap = candidates_df[candidates_df['symbol'] == symbol]['market_cap'].values[0]
                 float_shares = mcap / row['price'] if row['price'] > 0 else 0
             except: pass
-            
+
             if "max_float" in filters:
                 if float_shares > filters["max_float"]: passed = False
 
@@ -113,7 +114,7 @@ def find_momentum_rockets(client,
                 if not is_halted: passed = False
 
             if not passed: continue
-            
+
             # 3. News Catalyst
             catalyst = "-"
             catalyst_url = ""
@@ -145,7 +146,7 @@ def find_momentum_rockets(client,
 
     except Exception as e:
         logger.error(f"Scanner Error: {e}")
-        
+
     signals.sort(key=lambda x: x['change_percent'], reverse=True)
     return signals
 
@@ -157,23 +158,23 @@ def _find_historical_rockets(client, min_price, max_price, max_mcap, min_gain_pc
     try:
         # Determine Date (Find closest available trading day <= target)
         search_date = target_date if target_date else datetime.now().strftime('%Y-%m-%d')
-        
+
         try:
             date_sql = f"SELECT MAX(date) as effective_date FROM historical_prices_fmp WHERE date <= CAST('{search_date}' AS DATE)"
             date_res = client.query(date_sql)
-            
+
             if date_res.is_empty() or date_res.to_dicts()[0]["effective_date"] is None:
                 logger.warning(f"Scanner: No historical data found on or before {search_date}")
                 return []
-                
+
             last_date = date_res.to_dicts()[0]["effective_date"]
-            
+
         except Exception as e:
             logger.error(f"Date resolution failed: {e}")
             return []
-            
+
         logger.info(f"Scanner: Analyzing historical data for {last_date} (Requested: {search_date})")
-        
+
         # Complex Query for Stats
         sql = f"""
             WITH Stats AS (
@@ -207,7 +208,7 @@ def _find_historical_rockets(client, min_price, max_price, max_mcap, min_gain_pc
               AND (m.market_cap / t.price) < 10000000
             ORDER BY t.change_percent DESC
         """
-        
+
         try:
             res = client.query(sql)
         except Exception as query_err:
@@ -217,27 +218,27 @@ def _find_historical_rockets(client, min_price, max_price, max_mcap, min_gain_pc
         if res.is_empty():
             logger.info("Scanner: No historical rockets found matching criteria.")
             return []
-            
+
         df = res.to_pandas()
         if 'sector' not in df.columns:
             df['sector'] = "Unknown"
-        
+
         for _, row in df.iterrows():
             # Get Catalyst for that day
             catalyst = "-"
             catalyst_url = ""
             try:
                 news_df = client._fmp_client.get_stock_news(
-                    row['symbol'], 
-                    limit=1, 
-                    from_date=str(last_date), 
+                    row['symbol'],
+                    limit=1,
+                    from_date=str(last_date),
                     to_date=str(last_date)
                 )
                 if not news_df.empty:
                     catalyst = news_df.iloc[0]['title']
                     catalyst_url = news_df.iloc[0]['url']
             except: pass
-            
+
             signals.append({
                 "symbol": row['symbol'],
                 "price": row['price'],
@@ -254,8 +255,8 @@ def _find_historical_rockets(client, min_price, max_price, max_mcap, min_gain_pc
                 "sector": row['sector'] if pd.notnull(row['sector']) else "Unknown",
                 "timestamp": str(last_date)
             })
-            
+
     except Exception as e:
         logger.error(f"Historical Scanner Error: {e}")
-        
+
     return signals

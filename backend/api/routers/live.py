@@ -1,8 +1,7 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from typing import Dict, Any
-import asyncio
-import json
 
 # Use Singleton
 from omega.singleton import get_omega_app
@@ -48,9 +47,9 @@ def get_portfolio_risk():
         app = get_omega_app()
         positions = app.get_positions()
         account = app.get_account_summary() # Assumes this returns equity info
-        
+
         total_equity = account.get("NetLiquidation", account.get("Equity", 100000.0))
-        
+
         # Format positions for risk engine
         risk_positions = []
         for p in positions:
@@ -59,7 +58,7 @@ def get_portfolio_risk():
                 "market_value": p["market_value"],
                 "quantity": p["quantity"]
             })
-            
+
         return app.risk_manager.get_portfolio_risk(risk_positions, total_equity)
     except Exception as e:
         from loguru import logger
@@ -78,11 +77,11 @@ async def websocket_tick_stream(websocket: WebSocket):
     """
     await websocket.accept()
     app = get_omega_app()
-    
+
     try:
         while True:
             # Poll for live candle updates
-            if app.is_connected() or True: 
+            if app.is_connected() or True:
                 data = app.get_live_candles()
                 if data:
                     await websocket.send_json({
@@ -90,7 +89,7 @@ async def websocket_tick_stream(websocket: WebSocket):
                         "data": data,
                         "timestamp": asyncio.get_event_loop().time()
                     })
-            
+
             # Send heartbeat/pnl updates
             status = app.get_health_status()
             await websocket.send_json({

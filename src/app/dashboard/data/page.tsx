@@ -7,7 +7,7 @@ import { SqlExplorer } from "@/components/data/sql-explorer"
 import { LogViewer } from "@/components/status/log-viewer"
 import { InfoTooltip } from "@/components/ui/info-tooltip"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { LayoutDashboard, Database, Activity } from "lucide-react"
+import { Database, Activity } from "lucide-react"
 
 export default function DataHubPage() {
   return (

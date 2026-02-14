@@ -1,6 +1,8 @@
+
 import pytest
-from pathlib import Path
+
 from omega.risk_engine import RiskManager
+
 
 @pytest.fixture
 def risk_mgr(tmp_path):
@@ -25,7 +27,7 @@ def test_execution_authority(risk_mgr):
         "AAPL", "EQUITY", "BUY", 10, 200, 100000, [], {"GrossPositionValue": 0}
     )
     assert is_valid
-    
+
     # Invalid: CRYPTO is in NONE authority
     is_valid, reason = risk_mgr.validate_order(
         "BTC/USD", "CRYPTO", "BUY", 1, 40000, 100000, [], {"GrossPositionValue": 0}
@@ -55,7 +57,7 @@ def test_asset_class_limit(risk_mgr):
         {"symbol": "MSFT", "market_value": 20000}, # 20%
         {"symbol": "GOOGL", "market_value": 20000} # 20%
     ]
-    
+
     # Try to add 20% more in AAPL (Total 60%, Class Limit 50%)
     is_valid, reason = risk_mgr.validate_order(
         "AAPL", "EQUITY", "BUY", 100, 200, 100000, current_pos, {"GrossPositionValue": 40000}

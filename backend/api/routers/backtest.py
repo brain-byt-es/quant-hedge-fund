@@ -4,13 +4,12 @@ QS Connect - Backtest API Router
 Handles interaction with MLflow to retrieve backtest results, metrics, and artifacts.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
-from typing import List, Dict, Any, Optional
-import mlflow
-from mlflow.tracking import MlflowClient
-from loguru import logger
-import pandas as pd
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from loguru import logger
+from mlflow.tracking import MlflowClient
 from pydantic import BaseModel
 
 from qsresearch.backtest.run_backtest import run_backtest
@@ -43,10 +42,10 @@ def _format_run(run) -> Dict[str, Any]:
     """Helper to format a raw MLflow run object into a clean dictionary."""
     data = run.data
     info = run.info
-    
+
     # Map complex metrics to frontend-friendly keys
     metrics = data.metrics
-    
+
     return {
         "run_id": info.run_id,
         "experiment_id": info.experiment_id,
@@ -57,7 +56,7 @@ def _format_run(run) -> Dict[str, Any]:
         "params": data.params,
         "tags": data.tags,
         "strategy_name": data.tags.get("strategy_name", data.tags.get("mlflow.runName", "Unknown Strategy")),
-        
+
         # Mapping Logic
         "annual_return": metrics.get("portfolio_cagr", metrics.get("annual_return", 0.0)),
         "sharpe_ratio": metrics.get("portfolio_yearly_sharpe", metrics.get("sharpe", 0.0)),
@@ -72,27 +71,27 @@ def _format_run(run) -> Dict[str, Any]:
 def list_backtests(limit: int = 20) -> List[Dict[str, Any]]:
     """List all recorded backtests (MLflow runs)."""
     client = get_mlflow_client()
-    
+
     # Ensure experiment exists
     experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
     if not experiment:
         return []
-        
+
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         max_results=limit,
         order_by=["attribute.start_time DESC"]
     )
-    
+
     return [_format_run(run) for run in runs]
 
 @router.post("/run")
 async def execute_backtest(params: BacktestParams, background_tasks: BackgroundTasks):
     """Trigger a real backtest run via background task."""
-    
+
     # Determine algorithm config
     algo_config = params.algorithm if params.algorithm else {
-        "callable": "use_factor_as_signal", 
+        "callable": "use_factor_as_signal",
         "params": params.params
     }
 
@@ -126,9 +125,9 @@ async def execute_backtest(params: BacktestParams, background_tasks: BackgroundT
             client.log_event("ERROR", "Research", f"Backtest Failed: {params.strategy_name}. Error: {str(e)}")
 
     background_tasks.add_task(_task)
-    
+
     return {
-        "status": "accepted", 
+        "status": "accepted",
         "message": "Backtest started in background",
         "run_name": config["run_name"]
     }
@@ -175,7 +174,7 @@ async def trigger_smoke_test(background_tasks: BackgroundTasks):
 
         background_tasks.add_task(_run)
         return {"status": "started", "message": "Real Smoke Test initiated in background."}
-        
+
     except Exception as e:
         logger.error(f"Failed to trigger smoke test: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -41,13 +41,21 @@ export function SignalControlCenter({
     allSymbols = [] 
 }: SignalControlCenterProps) {
   const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchInput] = useState("")
 
-  // Filter optimization
-  const symbols = allSymbols.length > 0 ? [...allSymbols].sort() : ["RGTI", "AAPL", "NVDA", "MSFT"]
+  // Ensure ALL symbols from backend are in the dropdown
+  const symbols = Array.from(new Set([
+      ...allSymbols
+  ])).sort()
 
   const formatMillions = (val: number) => {
       if (val >= 1000) return `${(val/1000).toFixed(1)}B`
       return `${val}M`
+  }
+
+  const handleManualSelect = (val: string) => {
+      setSymbol(val.toUpperCase())
+      setOpen(false)
   }
 
   return (
@@ -73,19 +81,31 @@ export function SignalControlCenter({
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[300px] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search ticker..." />
+                        <Command shouldFilter={true}>
+                          <CommandInput 
+                            placeholder="Search ticker (e.g. AAPL)..." 
+                            onValueChange={setSearchInput}
+                          />
                           <CommandList className="max-h-[300px]">
-                            <CommandEmpty>No symbol found.</CommandEmpty>
-                            <CommandGroup>
-                              {symbols.slice(0, 5000).map((s) => (
+                            <CommandEmpty className="py-2 px-4 text-xs">
+                                <p className="mb-2">No matches in universe.</p>
+                                {searchQuery.length > 0 && (
+                                    <Button 
+                                        variant="secondary" 
+                                        size="sm" 
+                                        className="w-full h-7 text-[10px] uppercase font-black"
+                                        onClick={() => handleManualSelect(searchQuery)}
+                                    >
+                                        Force Analyze &quot;{searchQuery.toUpperCase()}&quot;
+                                    </Button>
+                                )}
+                            </CommandEmpty>
+                            <CommandGroup heading="Ranked Assets">
+                              {symbols.map((s) => (
                                 <CommandItem
                                   key={s}
                                   value={s}
-                                  onSelect={(currentValue) => {
-                                    setSymbol(currentValue.toUpperCase())
-                                    setOpen(false)
-                                  }}
+                                  onSelect={(currentValue) => handleManualSelect(currentValue)}
                                   className="font-mono font-medium"
                                 >
                                   <Check

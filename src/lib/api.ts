@@ -80,8 +80,8 @@ export const api = {
     return handleResponse(res);
   },
 
-  getResearchSignals: async (lookback = 252) => {
-    const res = await fetch(`${API_BASE_URL}/research/signals?lookback=${lookback}`);
+  getResearchSignals: async (lookback = 252, min_mcap = 0, min_volume = 0) => {
+    const res = await fetch(`${API_BASE_URL}/research/signals?lookback=${lookback}&min_mcap=${min_mcap}&min_volume=${min_volume}`);
     return handleResponse(res);
   },
 

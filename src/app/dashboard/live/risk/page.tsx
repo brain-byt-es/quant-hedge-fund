@@ -1,23 +1,18 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ShieldAlert, TrendingDown, Target, PieChart, Activity, AlertCircle, ArrowUpRight, ArrowDownRight } from "lucide-react"
-import { api } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
     ResponsiveContainer, 
     PieChart as RePieChart, 
     Pie, 
     Cell, 
-    Tooltip as ReTooltip,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid
+    Tooltip as ReTooltip
 } from "recharts"
 
 interface RiskProfile {
@@ -154,7 +149,7 @@ export default function RiskControlPage() {
             </div>
 
             {/* Middle Row: Charts & Stress Tests */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
                 
                 {/* Concentration Chart (5 Cols) */}
                 <Card className="lg:col-span-5 border-border bg-card/30 flex flex-col overflow-hidden">
@@ -163,37 +158,48 @@ export default function RiskControlPage() {
                             <PieChart className="h-4 w-4" /> Sector Concentration
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-1 p-4 min-h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RePieChart>
-                                <Pie
-                                    data={risk?.concentration.sectors || []}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {risk?.concentration.sectors.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <ReTooltip 
-                                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', fontSize: '10px' }}
-                                    formatter={(value: number) => `$${value.toLocaleString()}`}
-                                />
-                            </RePieChart>
-                        </ResponsiveContainer>
-                        <div className="grid grid-cols-2 gap-2 mt-4">
-                            {risk?.concentration.sectors.slice(0, 4).map((s, i) => (
-                                <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
-                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                                    <span className="text-muted-foreground truncate">{s.name}:</span>
-                                    <span className="font-bold">{(s.weight * 100).toFixed(1)}%</span>
+                    <CardContent className="p-4 min-h-[300px] flex flex-col items-center justify-center">
+                        {risk && risk.concentration.sectors.length > 0 ? (
+                            <>
+                                <div className="flex-1 w-full min-h-[200px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <RePieChart>
+                                            <Pie
+                                                data={risk.concentration.sectors}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {risk.concentration.sectors.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <ReTooltip 
+                                                contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', fontSize: '10px' }}
+                                                formatter={(value: number) => `$${value.toLocaleString()}`}
+                                            />
+                                        </RePieChart>
+                                    </ResponsiveContainer>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="grid grid-cols-2 gap-2 mt-4 w-full">
+                                    {risk.concentration.sectors.slice(0, 4).map((s, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
+                                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                                            <span className="text-muted-foreground truncate">{s.name}:</span>
+                                            <span className="font-bold">{(s.weight * 100).toFixed(1)}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center gap-3 opacity-20 py-12">
+                                <PieChart className="h-12 w-12" />
+                                <p className="text-[10px] font-mono uppercase tracking-widest">No Active Positions</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -201,43 +207,50 @@ export default function RiskControlPage() {
                 <Card className="lg:col-span-7 border-border bg-card/30 flex flex-col overflow-hidden">
                     <CardHeader className="p-4 border-b border-border bg-muted/20">
                         <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4" /> 'What-If' Stress Scenarios
+                            <AlertCircle className="h-4 w-4" /> &apos;What-If&apos; Stress Scenarios
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-1 p-0 min-h-0">
-                        <ScrollArea className="h-full">
-                            <table className="w-full text-left">
-                                <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm border-b border-border z-10">
-                                    <tr className="text-[10px] uppercase text-muted-foreground font-bold">
-                                        <th className="px-4 py-3">Scenario</th>
-                                        <th className="px-4 py-3 text-right">Proj. Impact ($)</th>
-                                        <th className="px-4 py-3 text-right">Proj. Impact (%)</th>
-                                        <th className="px-4 py-3 text-center">Severity</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/50">
-                                    {risk?.stress_tests.map((s, i) => (
-                                        <tr key={i} className="hover:bg-accent/5 transition-colors">
-                                            <td className="px-4 py-3 text-[11px] font-bold text-foreground/90">{s.scenario}</td>
-                                            <td className="px-4 py-3 text-[11px] font-mono text-right text-destructive">
-                                                -${Math.abs(s.impact_usd).toLocaleString()}
-                                            </td>
-                                            <td className="px-4 py-3 text-[11px] font-mono text-right text-destructive">
-                                                -{(Math.abs(s.impact_percent) * 100).toFixed(2)}%
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <Badge className={cn(
-                                                    "text-[8px] uppercase px-1.5 h-4",
-                                                    s.status === "SEVERE" ? "bg-destructive/20 text-destructive border-destructive/30" : "bg-amber-500/20 text-amber-500 border-amber-500/30"
-                                                )}>
-                                                    {s.status}
-                                                </Badge>
-                                            </td>
+                    <CardContent className="p-0 min-h-[300px]">
+                        {risk && risk.summary.total_equity > 0 ? (
+                            <ScrollArea className="h-[300px]">
+                                <table className="w-full text-left">
+                                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm border-b border-border z-10">
+                                        <tr className="text-[10px] uppercase text-muted-foreground font-bold">
+                                            <th className="px-4 py-3">Scenario</th>
+                                            <th className="px-4 py-3 text-right">Proj. Impact ($)</th>
+                                            <th className="px-4 py-3 text-right">Proj. Impact (%)</th>
+                                            <th className="px-4 py-3 text-center">Severity</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </ScrollArea>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/50">
+                                        {risk.stress_tests.map((s, i) => (
+                                            <tr key={i} className="hover:bg-accent/5 transition-colors">
+                                                <td className="px-4 py-3 text-[11px] font-bold text-foreground/90">{s.scenario}</td>
+                                                <td className="px-4 py-3 text-[11px] font-mono text-right text-destructive">
+                                                    -${Math.abs(s.impact_usd).toLocaleString()}
+                                                </td>
+                                                <td className="px-4 py-3 text-[11px] font-mono text-right text-destructive">
+                                                    -{(Math.abs(s.impact_percent) * 100).toFixed(2)}%
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <Badge className={cn(
+                                                        "text-[8px] uppercase px-1.5 h-4",
+                                                        s.status === "SEVERE" ? "bg-destructive/20 text-destructive border-destructive/30" : "bg-amber-500/20 text-amber-500 border-amber-500/30"
+                                                    )}>
+                                                        {s.status}
+                                                    </Badge>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </ScrollArea>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full gap-3 opacity-20 py-12">
+                                <ShieldAlert className="h-12 w-12" />
+                                <p className="text-[10px] font-mono uppercase tracking-widest">Awaiting Portfolio Data</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

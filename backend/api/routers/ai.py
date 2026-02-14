@@ -4,16 +4,16 @@ QS Connect - AI API Router
 Handles AI-powered analysis and generation tasks.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
-from loguru import logger
-import mlflow
-from mlflow.tracking import MlflowClient
+from typing import List, Optional
 
+import mlflow
+from fastapi import APIRouter, HTTPException
+from loguru import logger
+from pydantic import BaseModel
+
+from api.routers.backtest import MLFLOW_EXPERIMENT_NAME, _format_run, get_mlflow_client
 from omega.ai_service import get_market_analyst
 from qsresearch.llm.strategy_generator import StrategyGenerator
-from api.routers.backtest import get_mlflow_client, _format_run, MLFLOW_EXPERIMENT_NAME
 
 router = APIRouter()
 
@@ -54,7 +54,7 @@ def get_best_runs(limit: int = 5):
         experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
         if not experiment:
             return []
-            
+
         runs = client.search_runs(
             experiment_ids=[experiment.experiment_id],
             max_results=limit,
@@ -76,7 +76,7 @@ async def chat(request: ChatRequest):
     analyst = get_market_analyst()
     if not analyst:
         raise HTTPException(status_code=503, detail="AI Service unavailable")
-        
+
     # Inject Best Runs context
     best_runs = get_best_runs(3)
     runs_context = ""
@@ -97,7 +97,7 @@ async def chat(request: ChatRequest):
     
     User Query: "{request.message}"
     """
-    
+
     try:
         # Use conversational mode (json_mode=False)
         response = analyst._call_llm(prompt, json_mode=False)
@@ -115,10 +115,10 @@ async def deploy_code(request: DeployCodeRequest):
         # Ensure directory exists
         save_path = "backend/qsresearch/features/injected_factor.py"
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        
+
         with open(save_path, "w") as f:
             f.write(request.code)
-            
+
         logger.info(f"🚀 AI Factor Injected: {request.factor_name} saved to {save_path}")
         return {"status": "success", "message": f"Factor '{request.factor_name}' deployed and ready for backtesting."}
     except Exception as e:
@@ -134,14 +134,14 @@ async def generate_hypotheses(request: HypothesisRequest):
     try:
         # Initialize generator
         generator = StrategyGenerator()
-        
+
         # Skip market data fetch for now to prevent KeyErrors if SPY is missing
         # The generator uses internal logic/LLM creativity primarily
         prices = None
-            
+
         candidates = generator.generate_candidates(prices, n=request.n)
         return candidates
-        
+
     except Exception as e:
         logger.error(f"Hypothesis generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -165,7 +165,7 @@ async def analyze_backtest(request: AnalyzeRequest):
     # Construct prompt for AI
     metrics = run_data["metrics"]
     strategy_name = run_data["strategy_name"]
-    
+
     prompt = f"""
     Analyze this backtest result for strategy '{strategy_name}'.
     
@@ -184,17 +184,17 @@ async def analyze_backtest(request: AnalyzeRequest):
     
     Output JSON with keys: "verdict", "risk_analysis", "recommendation".
     """
-    
+
     try:
         analysis = analyst._call_llm(prompt)
-        
+
         # Log analysis as artifact to MLflow
         with mlflow.start_run(run_id=request.run_id):
             import json
             with open("ai_analysis.json", "w") as f:
                 json.dump(analysis, f)
             mlflow.log_artifact("ai_analysis.json")
-            
+
         return analysis
     except Exception as e:
         logger.error(f"AI Analysis failed: {e}")
@@ -208,7 +208,7 @@ async def agentic_query(request: AgenticQueryRequest):
     """
     from api.routers.data import get_qs_client
     client = get_qs_client()
-    
+
     try:
         if request.query_type == "alpha":
             # Fetch top 5 alpha signals from Factor Engine Snapshot
@@ -220,7 +220,7 @@ async def agentic_query(request: AgenticQueryRequest):
                     LIMIT 5
                 """
                 signals = client.query(sql).to_dicts()
-                
+
                 # Format for chat
                 sig_text = ", ".join([f"{s['symbol']} ({s['score']})" for s in signals])
                 return {
@@ -231,15 +231,15 @@ async def agentic_query(request: AgenticQueryRequest):
             except Exception as db_err:
                 logger.error(f"Alpha query db error: {db_err}")
                 return {"type": "alpha", "data": [], "summary": "Could not retrieve factor signals."}
-            
+
         elif request.query_type == "risk":
             # Fetch VaR and ES from the Omega Risk Engine
             from omega.singleton import get_omega_app
             omega = get_omega_app()
-            
+
             # Get current state first
             state = omega.get_portfolio_state()
-            
+
             # Safe calculation: if no positions, risk is 0
             if not state.positions:
                 return {
@@ -247,16 +247,16 @@ async def agentic_query(request: AgenticQueryRequest):
                     "data": {"var_95": 0, "expected_shortfall": 0, "stress_tests": []},
                     "summary": "0.00% (No active market exposure)"
                 }
-                
+
             risk_metrics = omega.risk_manager.get_portfolio_risk(state.positions, state.account.total_equity)
             var_val = risk_metrics.get('var_95', 0)
-            
+
             return {
                 "type": "risk",
                 "data": risk_metrics,
                 "summary": f"{var_val*100:.2f}%"
             }
-            
+
         elif request.query_type == "backtest_stats":
             best_runs = get_best_runs(5)
             summary = ", ".join([f"{r['strategy_name']} ({r['sharpe_ratio']:.2f})" for r in best_runs])
@@ -265,9 +265,9 @@ async def agentic_query(request: AgenticQueryRequest):
                 "data": best_runs,
                 "summary": f"Top strategies by Sharpe: {summary}"
             }
-            
+
         return {"error": "Unknown query type"}
-        
+
     except Exception as e:
         logger.error(f"Agentic query failed: {e}")
         return {"error": str(e)}
@@ -280,7 +280,7 @@ async def generate_strategy(request: StrategyRequest):
     analyst = get_market_analyst()
     if not analyst:
         raise HTTPException(status_code=503, detail="AI Service unavailable")
-        
+
     prompt = f"""
     Generate a valid JSON configuration for a quantitative trading strategy based on this request:
     "{request.prompt}"
@@ -311,7 +311,7 @@ async def generate_strategy(request: StrategyRequest):
     
     Return ONLY the JSON.
     """
-    
+
     try:
         config = analyst._call_llm(prompt)
         return config
@@ -327,7 +327,7 @@ async def generate_code(request: CodeGenRequest):
     analyst = get_market_analyst()
     if not analyst:
         raise HTTPException(status_code=503, detail="AI Service unavailable")
-        
+
     prompt = f"""
     Generate a Python function for a quantitative alpha factor.
     Type: {request.factor_type}
@@ -341,7 +341,7 @@ async def generate_code(request: CodeGenRequest):
         
     Return JSON with keys: "code", "explanation".
     """
-    
+
     try:
         result = analyst._call_llm(prompt)
         return result

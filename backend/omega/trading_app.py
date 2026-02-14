@@ -4,15 +4,17 @@ Omega - Trading Application
 Main trading application for executing trades via Interactive Brokers.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional, Dict, List, Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
-from config.settings import get_settings
 from config.registry import get_registry
-from qsresearch.governance.manager import GovernanceManager
-from omega.data.candle_engine import CandleAggregator, BarCloseEventBus, Tick
+from config.settings import get_settings
+from omega.data.candle_engine import BarCloseEventBus, CandleAggregator
 from omega.risk_engine import RiskManager
+from qsresearch.governance.manager import GovernanceManager
+
 
 class PortfolioState:
     """Snapshot of current portfolio state."""
@@ -39,7 +41,7 @@ class TradingApp:
         >>> positions = app.get_positions()
         >>> app.order_target_percent("AAPL", 0.05)
     """
-    
+
     def __init__(
         self,
         host: Optional[str] = None,
@@ -57,25 +59,25 @@ class TradingApp:
             paper_trading: Whether to use paper trading mode
         """
         settings = get_settings()
-        
+
         self.host = host or settings.ib_host
         self.port = port or settings.ib_port
         self.client_id = client_id or settings.ib_client_id
         self.paper_trading = paper_trading
-        
+
         self._connected = False
         self._ib = None
         self._halted = False  # Critical safety flag
-        
+
         # Broker Adapter Strategy
         self.broker_type = settings.active_broker.upper()
         self.broker = None
-        
+
         if self.broker_type == "ALPACA":
             from omega.broker.alpaca import AlpacaBroker
             self.broker = AlpacaBroker(
-                settings.alpaca_api_key, 
-                settings.alpaca_secret_key, 
+                settings.alpaca_api_key,
+                settings.alpaca_secret_key,
                 settings.alpaca_paper,
                 settings.alpaca_base_url
             )
@@ -89,7 +91,7 @@ class TradingApp:
         if not hasattr(self, '_db_manager'):
             from qsconnect.database.duckdb_manager import DuckDBManager
             self._db_manager = DuckDBManager(settings.duckdb_path)
-            
+
         self.gov = GovernanceManager(self._db_manager)
         self.registry = get_registry()
         self.risk_manager = RiskManager()
@@ -98,7 +100,7 @@ class TradingApp:
         # --- Phase 3: Candle Truth Layer ---
         self.event_bus = BarCloseEventBus()
         self.aggregators: Dict[str, CandleAggregator] = {}
-        
+
         # Telemetry & Metrics
         self.metrics = {
             "last_tick_time": None,
@@ -106,34 +108,34 @@ class TradingApp:
             "order_latencies": [],
             "daily_pnl_initial_value": None
         }
-        
+
         logger.info(
             f"TradingApp initialized: {self.host}:{self.port} "
             f"(paper={self.paper_trading})"
         )
-    
+
     def set_broker(self, broker_type: str) -> bool:
         """
         Dynamically switch the active broker.
         """
         settings = get_settings()
         broker_type = broker_type.upper()
-        
+
         if broker_type == self.broker_type and self.is_connected():
             return True
-            
+
         logger.info(f"Switching broker from {self.broker_type} to {broker_type}...")
-        
+
         # Disconnect current
         if self.is_connected():
             self.disconnect()
-            
+
         try:
             if broker_type == "ALPACA":
                 from omega.broker.alpaca import AlpacaBroker
                 self.broker = AlpacaBroker(
-                    settings.alpaca_api_key, 
-                    settings.alpaca_secret_key, 
+                    settings.alpaca_api_key,
+                    settings.alpaca_secret_key,
                     settings.alpaca_paper,
                     settings.alpaca_base_url
                 )
@@ -143,9 +145,9 @@ class TradingApp:
             else:
                 logger.error(f"Unknown broker type: {broker_type}")
                 return False
-                
+
             self.broker_type = broker_type
-            
+
             # Connect new
             if self.connect():
                 logger.info(f"Successfully switched to {broker_type}")
@@ -153,7 +155,7 @@ class TradingApp:
             else:
                 logger.error(f"Failed to connect to {broker_type}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Broker switch failed: {e}")
             return False
@@ -161,16 +163,16 @@ class TradingApp:
     # =====================
     # Connection Management
     # =====================
-    
+
     def connect(self) -> bool:
         """Connect to the active broker."""
         return self.broker.connect()
-    
+
     def disconnect(self) -> None:
         """Disconnect from active broker."""
         # Adapter pattern doesn't strictly enforce disconnect, but good practice
         pass
-    
+
     def is_connected(self) -> bool:
         """Check if connected to broker."""
         return self.broker.is_connected()
@@ -192,10 +194,10 @@ class TradingApp:
     # =====================
     # Account Information
     # =====================
-    
+
     def get_account_info(self) -> Dict[str, Any]:
         return self.broker.get_account_info()
-    
+
     def get_portfolio_value(self) -> float:
         info = self.get_account_info()
         return info.get("NetLiquidation", 0.0)
@@ -206,25 +208,25 @@ class TradingApp:
         Used by Risk Engine and AI Agents.
         """
         return PortfolioState(self.get_positions(), self.get_account_info())
-    
+
     # =====================
     # Position Management
     # =====================
-    
+
     def get_positions(self) -> List[Dict[str, Any]]:
         return self.broker.get_positions()
-    
+
     def get_position(self, symbol: str) -> Optional[Dict[str, Any]]:
         positions = self.get_positions()
         for pos in positions:
             if pos["symbol"] == symbol:
                 return pos
         return None
-    
+
     # =====================
     # Order Execution
     # =====================
-    
+
     def create_contract(self, symbol: str, sec_type: str = "STK", exchange: str = "SMART") -> Any:
         # Legacy support / Helper if needed, but preferably move to broker adapter
         return None # Deprecated in favor of adapter
@@ -244,25 +246,25 @@ class TradingApp:
         # --- Governance Check: Staged Deployment & Expiry ---
         if not self.active_strategy:
             self.active_strategy = self.gov.get_active_strategy()
-            
+
         if not self.active_strategy:
             logger.warning(f"RISK REJECTED: No active approved strategy found for {symbol}")
             return False
-            
+
         # Check Expiry
         if datetime.now() > self.active_strategy.get("ttl_expiry", datetime.max):
             logger.error(f"RISK REJECTED: Strategy {self.active_strategy['strategy_hash'][:8]} has EXPIRED")
             self._halted = True # Fail safe
             return False
-            
+
         # Deployment Stage Enforcement
         stage = self.active_strategy.get("stage", "SHADOW")
         if stage == "SHADOW":
             logger.info(f"SHADOW MODE: Signal for {side} {shares} {symbol} recorded. Execution suppressed.")
             return False
-        
+
         if stage == "PAPER" and not self.paper_trading:
-            logger.error(f"RISK REJECTED: PAPER strategy cannot run on LIVE account.")
+            logger.error("RISK REJECTED: PAPER strategy cannot run on LIVE account.")
             return False
 
         # --- Centralized Risk Engine Call ---
@@ -312,12 +314,12 @@ class TradingApp:
         Returns:
             True if system is healthy, False if HALTED.
         """
-        if self._halted: 
+        if self._halted:
             return False
 
         # 1. Check P&L Circuit Breaker
         portfolio_value = self.get_portfolio_value()
-        
+
         # Initialize daily PnL reference if not set (first run of the day)
         if self.metrics["daily_pnl_initial_value"] is None:
             self.metrics["daily_pnl_initial_value"] = portfolio_value
@@ -325,17 +327,17 @@ class TradingApp:
             return True
 
         current_pnl = portfolio_value - self.metrics["daily_pnl_initial_value"]
-        
+
         should_halt, msg = self.risk_manager.check_daily_loss(current_pnl)
-        
+
         if should_halt:
             logger.critical(f"GLOBAL RISK ALERT: {msg}")
             self.halt()
             # Optional: self.flatten_all_positions() if configured for hard stops
             return False
-            
+
         return True
-    
+
     def order_target_percent(
         self,
         symbol: str,
@@ -348,58 +350,58 @@ class TradingApp:
         if not self.is_connected():
             if not self.connect():
                 return None
-        
+
         # Get portfolio value
         portfolio_value = self.get_portfolio_value()
         target_value = portfolio_value * target_percent
-        
+
         # Get current position
         current_pos = self.get_position(symbol)
         current_value = current_pos["market_value"] if current_pos else 0.0
-        
+
         # Calculate difference
         diff_value = target_value - current_value
-        
+
         # Configurable minimum order threshold (default $100)
         min_order_threshold = getattr(get_settings(), 'min_order_threshold', 100)
         if abs(diff_value) < min_order_threshold:
             logger.info(f"Skipping {symbol}: difference too small (${diff_value:.2f})")
             return None
-        
+
         # Get current price
         quote = self.get_quote(symbol)
         current_price = quote.get("last", 0.0) or quote.get("ask", 0.0) # Fallback
-        
+
         if current_price <= 0:
             logger.warning(f"Could not get price for {symbol}")
             return None
-        
+
         # Calculate shares
         shares = int(diff_value / current_price)
-        
+
         if shares == 0:
             return None
-        
+
         # Determine order action
         action = "BUY" if shares > 0 else "SELL"
         shares = abs(shares)
-        
+
         # --- Pre-Trade Risk Gate ---
         import time
         start_time = time.time()
-        
+
         if not self._validate_risk(symbol, shares, current_price, action):
             return None
-            
+
         # Submit via Broker Adapter
         trade = self.broker.submit_order(symbol, shares, action, order_type, current_price)
-        
+
         # Telemetry
         latency = (time.time() - start_time) * 1000
         self.metrics["order_latencies"].append(latency)
-        
+
         return trade
-    
+
     def liquidate_position(self, symbol: str) -> Optional[Any]:
         """
         Liquidate entire position in a symbol.
@@ -411,7 +413,7 @@ class TradingApp:
             Order trade object
         """
         return self.order_target_percent(symbol, 0.0)
-    
+
     def submit_order(self, order: Dict[str, Any]) -> Optional[Any]:
         """
         Submit a pre-built order dictionary.
@@ -426,56 +428,56 @@ class TradingApp:
         quantity = order.get("quantity", 0)
         side = order.get("side", "BUY")
         order_type = order.get("order_type", "MKT")
-        
+
         if not symbol or quantity == 0:
             return None
-        
+
         if not self.is_connected():
             if not self.connect():
                 return None
-        
+
         if self._ib is None:
             return None
-        
-        from ib_insync import MarketOrder, LimitOrder
-        
+
+        from ib_insync import LimitOrder, MarketOrder
+
         contract = self.create_contract(symbol)
-        
+
         if order_type.upper() == "MKT":
             ib_order = MarketOrder(side, abs(quantity))
         else:
             price = order.get("limit_price", 0)
             ib_order = LimitOrder(side, abs(quantity), price)
-        
+
         trade = self._ib.placeOrder(contract, ib_order)
-        
+
         logger.info(f"Submitted order: {side} {quantity} {symbol}")
-        
+
         return trade
-    
+
     # =====================
     # Order Management
     # =====================
-    
+
     def get_open_orders(self) -> List[Dict[str, Any]]:
         if not self.is_connected():
             return []
         return self.broker.get_open_orders()
-    
+
     def get_recent_orders(self, limit: int = 50) -> List[Dict[str, Any]]:
         if not self.is_connected():
             return []
         return self.broker.get_recent_orders(limit=limit)
-    
+
     def cancel_all_orders(self) -> int:
         if not self.is_connected():
             return 0
         return self.broker.cancel_all_orders()
-    
+
     # =====================
     # Market Data
     # =====================
-    
+
     def get_quote(self, symbol: str) -> Dict[str, float]:
         if not self.is_connected():
             return {"bid": 0.0, "ask": 0.0, "last": 0.0, "volume": 0}
@@ -488,10 +490,10 @@ class TradingApp:
         positions = self.get_positions()
         account = self.get_account_info()
         total_equity = account.get("NetLiquidation", 0.0)
-        
+
         # Use new comprehensive risk logic
         risk_summary = self.risk_manager.get_portfolio_risk(positions, total_equity)
-        
+
         # P&L Calculation
         daily_pnl = account.get("DailyPnL")
         if daily_pnl is None:
@@ -516,12 +518,12 @@ class TradingApp:
             "daily_pnl_usd": daily_pnl,
             "net_liquidation": total_equity
         }
-        
+
         if self.metrics["order_latencies"]:
             import numpy as np
             status["latency_p50_ms"] = float(np.percentile(self.metrics["order_latencies"], 50))
             status["latency_p99_ms"] = float(np.percentile(self.metrics["order_latencies"], 99))
-            
+
         return status
 
     def get_live_candles(self) -> Dict[str, Dict[str, Any]]:

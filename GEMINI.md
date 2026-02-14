@@ -71,8 +71,18 @@ Managed via `start.sh`. Features **Aggressive Pre-flight Cleanup**:
 - **Type Safety:** All numeric financial data must be cast to `Float64` before DB insertion.
 
 ### **Developer Experience (DX) / Troubleshooting**
+
 - **Zipline 404 Fix:** If a bundle is not found, ensure the `ZIPLINE_ROOT` environment variable is set to the absolute path of `app/data/zipline`.
+
 - **Ratio Calculation Failure:** `FinanceToolkit` requires transposed financial statements (Metrics as Rows, Dates as Columns). Ensure `FactorEngine.get_detailed_metrics` maintains this flow.
-- **DuckDB Lock Fix:** If `IO Error: Could not set lock`, find and kill the lingering Python process via `lsof data/quant.duckdb`.\n## **Future Enhancements / TODO**\n- [ ] **Ticker Mismatch Checker & Mapper:** Implement a fuzzy-matching logic to bridge ticker differences between SimFin (e.g., BRK.B), FMP (e.g., BRK-B), and Yahoo Finance. This will resolve the 'Missing Prices' issue for ~400 symbols.\n- [ ] **SQL Data Explorer:** Add a raw SQL console in the Data Hub for manual integrity checks.\n- [ ] **Risk Engine V2:** Fully implement Live VaR (95%) and Net Exposure tracking in the new Risk Control dashboard.
+
+- **DuckDB Lock Fix:** If `IO Error: Could not set lock`, find and kill the lingering Python process via `lsof data/quant.duckdb`.
+
+- **Version Integrity:** NEVER downgrade libraries or frameworks (e.g. NumPy, Pandas) to fix compatibility issues. Always solve via code patches or wrappers.
+
+- **Python Version:** The project is strictly targeting Python 3.13+.
+- **Backtest Engine Bridge:** For manual strategies in the Quant Lab (`custom_logic`), the system uses a `_run_wrapped_fast_engine` (Pandas-based) instead of raw Zipline to bypass C-extension and NumPy 2.x read-only buffer errors. It supports the core Zipline API (`initialize`, `handle_data`, `order_target_percent`).
+
+\n## **Future Enhancements / TODO**\n- [ ] **Ticker Mismatch Checker & Mapper:** Implement a fuzzy-matching logic to bridge ticker differences between SimFin (e.g., BRK.B), FMP (e.g., BRK-B), and Yahoo Finance. This will resolve the 'Missing Prices' issue for ~400 symbols.\n- [ ] **SQL Data Explorer:** Add a raw SQL console in the Data Hub for manual integrity checks.\n- [ ] **Risk Engine V2:** Fully implement Live VaR (95%) and Net Exposure tracking in the new Risk Control dashboard.
 \n## **Latest Milestone Summary (February 11, 2026)**\n- **SimFin Anchor Strategy:** Successfully restructured ingestion to focus on a curated 5,000+ symbol universe. Solved the 350k asset bottleneck and optimized API usage.\n- **Institutional Strategy Lab:** Launched an engineering-first workbench with manual code injection, dual-pane editing, and live MLflow integration.\n- **Pro Stock Screener:** Deployed a high-speed scanner with 'Warrior Trading' presets (RVol, Gap%) powered by DuckDB and Polars.\n- **Data Integrity:** Identified Zipline ingestion blocker (AssertionError due to missing trading sessions) after successful 2.3M record download. Added to TODO for fix.\n- **UX/UI:** Integrated in-app documentation hub, hover tooltips, and consolidated strategy governance into the Lab workflow.
 \n- [ ] **CIK-Mapping Integration (HIGH PRIORITY): Implement "Smart Stitching" logic (SimFin History + FMP Recent) using** Refactor QSConnect to use SEC CIK as the primary entity identifier. This will merge SimFin and FMP data for assets with mismatched tickers (e.g., BRK.B vs BRK-B) and eliminate redundant API calls.

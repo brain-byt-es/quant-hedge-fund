@@ -4,9 +4,10 @@ QS Research - Universe Screener
 Filters the investment universe based on liquidity, volatility, and other criteria.
 """
 
-from typing import Optional, List
-import pandas as pd
+from typing import Optional
+
 import numpy as np
+import pandas as pd
 from loguru import logger
 
 
@@ -58,60 +59,60 @@ def universe_screener(
     """
     initial_symbols = df[symbol_column].nunique()
     logger.info(f"Screening universe from {initial_symbols} symbols")
-    
+
     df = df.copy()
-    
+
     # Get latest lookback_days of data
     if lookback_days:
         max_date = df[date_column].max()
         min_date = max_date - pd.Timedelta(days=lookback_days * 1.5)  # Buffer for weekends
         df = df[df[date_column] >= min_date]
-    
+
     # Calculate screening metrics per symbol
     metrics = df.groupby(symbol_column).agg({
         close_column: ["mean", "std", "last"],
         volume_column: "mean",
     })
     metrics.columns = ["avg_price", "price_std", "last_price", "avg_volume"]
-    
+
     # Calculate annualized volatility
     returns = df.groupby(symbol_column)[close_column].pct_change()
     volatility = df.groupby(symbol_column).apply(
         lambda x: x[close_column].pct_change().std() * np.sqrt(252)
     )
     metrics["volatility"] = volatility
-    
+
     # Apply filters
     valid_symbols = metrics.index.tolist()
-    
+
     # Minimum average volume
     if min_avg_volume:
         vol_filter = metrics["avg_volume"] >= min_avg_volume
         filtered_out = (~vol_filter).sum()
         valid_symbols = metrics[vol_filter].index.tolist()
         logger.debug(f"Volume filter removed {filtered_out} symbols")
-    
+
     # Minimum average price
     if min_avg_price:
         price_filter = metrics.loc[valid_symbols, "avg_price"] >= min_avg_price
         filtered_out = (~price_filter).sum()
         valid_symbols = [s for s, v in price_filter.items() if v]
         logger.debug(f"Avg price filter removed {filtered_out} symbols")
-    
+
     # Minimum last price
     if min_last_price:
         last_filter = metrics.loc[valid_symbols, "last_price"] >= min_last_price
         filtered_out = (~last_filter).sum()
         valid_symbols = [s for s, v in last_filter.items() if v]
         logger.debug(f"Last price filter removed {filtered_out} symbols")
-    
+
     # Volatility filter
     if volatility_filter:
         vol_filter = metrics.loc[valid_symbols, "volatility"] <= max_volatility
         filtered_out = (~vol_filter).sum()
         valid_symbols = [s for s, v in vol_filter.items() if v]
         logger.debug(f"Volatility filter removed {filtered_out} symbols")
-    
+
     # Top N by volume
     if volume_top_n and len(valid_symbols) > volume_top_n:
         top_by_volume = (
@@ -121,14 +122,14 @@ def universe_screener(
         )
         valid_symbols = top_by_volume
         logger.debug(f"Volume top_n reduced to {volume_top_n} symbols")
-    
+
     # Filter DataFrame
     df = df[df[symbol_column].isin(valid_symbols)]
-    
+
     final_symbols = df[symbol_column].nunique()
     logger.info(
         f"Screened universe: {final_symbols} symbols "
         f"({final_symbols/initial_symbols:.1%} retained)"
     )
-    
+
     return df

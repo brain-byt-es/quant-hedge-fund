@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
-import polars as pl
+from typing import List, Optional
+
 import numpy as np
+import polars as pl
+from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
+from pydantic import BaseModel
 
 from api.routers.data import get_qs_client
 
@@ -39,7 +40,7 @@ def scan_market(
     """
     try:
         client = get_qs_client()
-        
+
         # 1. Get Base Universe (Profiles) for static data (Sector, MktCap, Float proxy)
         # We calculate float approx as Market Cap / Price if not directly available
         q_profiles = """
@@ -51,15 +52,15 @@ def scan_market(
                 (full_time_employees * 0 + 1) as has_profile -- dummy check
             FROM bulk_company_profiles_fmp
         """
-        
+
         # 2. Get Price Data
         # STRATEGY: Try Realtime Candles first, Fallback to Historical
         # For this implementation, we will use a robust query that gets the LATEST available data point for every stock
-        
+
         # Get the max date first to ensure we are looking at the "current" market state
         max_date_df = client.query("SELECT MAX(date) as d FROM historical_prices_fmp")
         latest_date = max_date_df["d"][0]
-        
+
         if not latest_date:
             return []
 
@@ -67,8 +68,8 @@ def scan_market(
         # A. Get Latest Day Stats (Close, Volume, Open)
         # B. Get Previous Day Close (for Gap & Change calc)
         # C. Get Avg Volume (30D)
-        
-        sql = f"""
+
+        sql = """
             WITH max_dates AS (
                 SELECT MAX(date) as latest, 
                        MAX(date) - INTERVAL 30 DAY as start_30d
@@ -113,9 +114,9 @@ def scan_market(
             LEFT JOIN bulk_company_profiles_fmp prof ON l.symbol = prof.symbol
             WHERE l.close > 0
         """
-        
+
         df = client.query(sql)
-        
+
         if df.is_empty():
             return []
 
@@ -126,7 +127,7 @@ def scan_market(
             ((pl.col("open") - pl.col("prev_close")) / pl.col("prev_close") * 100).fill_null(0.0).alias("gap_percent"),
             ((pl.col("price") - pl.col("prev_close")) / pl.col("prev_close") * 100).fill_null(0.0).alias("change_percent"),
         ])
-        
+
         # Ensure results are Floats for Pydantic
         df = df.with_columns([
             pl.col("price").cast(pl.Float64),
@@ -136,7 +137,7 @@ def scan_market(
             pl.col("change_percent").cast(pl.Float64),
             pl.col("avg_vol_30d").fill_null(0.0).cast(pl.Float64)
         ])
-        
+
         # Let's perform filtering
         if min_price is not None:
             df = df.filter(pl.col("price") >= min_price)
@@ -150,10 +151,10 @@ def scan_market(
             df = df.filter(pl.col("gap_percent") >= min_gap_percent)
         if max_gap_percent is not None:
             df = df.filter(pl.col("gap_percent") <= max_gap_percent)
-            
+
         # Sort by Relative Volume (Day Trading default) or Change
         df = df.sort("relative_volume", descending=True).head(limit)
-        
+
         results = []
         for row in df.iter_rows(named=True):
             def safe_float(val):
@@ -173,7 +174,7 @@ def scan_market(
                 "sector": row["sector"] or "Unknown",
                 "float_shares": 0.0
             })
-            
+
         return results
 
     except Exception as e:

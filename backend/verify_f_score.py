@@ -1,17 +1,18 @@
-import duckdb
-from pathlib import Path
 import os
 import sys
+
+import duckdb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config.settings import get_settings
 
+
 def verify_symbol(symbol: str):
     settings = get_settings()
     conn = duckdb.connect(str(settings.duckdb_path), read_only=True)
-    
+
     print(f"\n=== F-Score Audit: {symbol} ===")
-    
+
     # Get the raw metrics and scores from our snapshot
     res = conn.execute(f"SELECT * FROM factor_ranks_snapshot WHERE symbol = '{symbol}'").df()
     if res.empty:
@@ -48,16 +49,16 @@ def verify_symbol(symbol: str):
     FROM Fundamentals
     """
     data = conn.execute(sql).df()
-    
+
     if len(data) < 5:
         print("Warning: Insufficient history for full YoY audit (need at least 5 quarters).")
-    
+
     # Compare row 0 (Current) with row 4 (YoY)
     curr = data.iloc[0]
     prev = data.iloc[4] if len(data) >= 5 else None
 
     print(f"Comparison: {curr['date']} vs {prev['date'] if prev is not None else 'N/A'}")
-    
+
     criteria = [
         ("1. ROA > 0", curr['ni'] > 0),
         ("2. CFO > 0", curr['cfo'] > 0),

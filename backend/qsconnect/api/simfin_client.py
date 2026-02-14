@@ -4,21 +4,22 @@ Wrapper for the SimFin Python library to provide standardized Polars access.
 Optimized for BASIC/PRO accounts with quarterly granularity.
 """
 
-import simfin as sf
-from simfin.names import *
-import polars as pl
-import pandas as pd
-from loguru import logger
-from typing import Optional, List
-from pathlib import Path
 import os
+from pathlib import Path
+
+import pandas as pd
+import polars as pl
+import simfin as sf
+from loguru import logger
+from simfin.names import *
+
 
 class SimFinClient:
     """
     Client for SimFin Data.
     Focused on bulk loading of fundamental and price data.
     """
-    
+
     def __init__(self, api_key: str, data_dir: str = None):
         """
         Initialize SimFin.
@@ -30,7 +31,7 @@ class SimFinClient:
             # Default to /app/data/simfin using PROJECT_ROOT
             root = Path(os.getenv("PROJECT_ROOT", str(Path(__file__).resolve().parent.parent.parent.parent)))
             data_dir = str(root / "data/simfin")
-            
+
         sf.set_api_key(api_key)
         sf.set_data_dir(data_dir)
         logger.info(f"SimFin client initialized. Cache directory: {data_dir}")
@@ -60,7 +61,7 @@ class SimFinClient:
                 elif statement == "balance": df = sf.load_balance(variant=variant, market='us')
                 elif statement == "cashflow": df = sf.load_cashflow(variant=variant, market='us')
                 else: raise ValueError("Invalid statement type.")
-            
+
             return pl.from_pandas(df.reset_index())
         except Exception as e:
             logger.error(f"Failed to load SimFin fundamentals ({statement}, {template}): {e}")
@@ -72,11 +73,11 @@ class SimFinClient:
         """
         logger.info(f"Loading SimFin derived ratios ({variant}, template={template})...")
         try:
-            if template == "banks": 
+            if template == "banks":
                 df = sf.load(dataset='derived-banks', variant=variant, market='us')
-            elif template == "insurance": 
+            elif template == "insurance":
                 df = sf.load(dataset='derived-insurance', variant=variant, market='us')
-            else: 
+            else:
                 df = sf.load(dataset='derived', variant=variant, market='us')
             return pl.from_pandas(df.reset_index())
         except Exception as e:

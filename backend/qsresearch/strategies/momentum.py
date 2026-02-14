@@ -1,6 +1,6 @@
 import json
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add backend to path for Zipline
@@ -9,12 +9,12 @@ sys.path.append(os.getcwd())
 import loguru
 from zipline.api import (
     attach_pipeline,
-    pipeline_output,
-    order_target_percent,
-    schedule_function,
     date_rules,
-    time_rules,
     get_open_orders,
+    order_target_percent,
+    pipeline_output,
+    schedule_function,
+    time_rules,
 )
 from zipline.pipeline import Pipeline
 from zipline.pipeline.data import USEquityPricing
@@ -51,7 +51,7 @@ def make_pipeline():
     # Alpha Model
     alpha_config = CONFIG["alpha_model"]
     params = alpha_config["params"]
-    
+
     momentum = make_momentum_factor(
         window_length=params["window_length"],
         gap_window=params["gap_window"]
@@ -69,14 +69,14 @@ def initialize(context):
     Called once at the start of the simulation.
     """
     context.params = CONFIG
-    
+
     # Rebalance Schedule
     # "frequency": "monthly", "date_rule": "month_start", "time_rule": "market_open", "offset_minutes": 60
     sched_config = CONFIG["portfolio_construction"]["rebalance_schedule"]
-    
+
     # Mapping simple config strings to zipline rules (simplified)
     # Ideally this should be robust.
-    
+
     schedule_function(
         rebalance,
         date_rules.month_start(),
@@ -96,30 +96,30 @@ def rebalance(context, data):
     Execute orders based on pipeline output.
     """
     pipeline_data = context.pipeline_data
-    
+
     # Alpha Logic: Rank Descending
     # "top_n_percentile": 0.10
     top_n_pct = context.params["portfolio_construction"]["top_n_percentile"]
-    
+
     # Select top percentile
     n_assets = len(pipeline_data)
     n_long = int(n_assets * top_n_pct)
-    
+
     if n_long == 0:
         loguru.logger.warning("No assets selected for rebalance.")
         return
 
     # Sort by momentum descending
     top_assets = pipeline_data.sort_values("momentum", ascending=False).head(n_long)
-    
+
     # Weighting: Equal Weight
     # "weighting": "equal_weight"
     # total_weight = 1.0 (assuming 100% long)
     weight = 1.0 / len(top_assets)
-    
+
     # Execute Orders
     current_assets = set(top_assets.index)
-    
+
     # Close positions not in target
     for asset in context.portfolio.positions:
         if asset not in current_assets and get_open_orders(asset):
@@ -127,7 +127,7 @@ def rebalance(context, data):
              pass
         if asset not in current_assets:
             order_target_percent(asset, 0)
-            
+
     # Open/Adjust positions
     for asset in top_assets.index:
         if data.can_trade(asset):

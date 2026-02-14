@@ -3,11 +3,13 @@ Groq LLM Client
 Wrapper around the Groq API (via OpenAI SDK) for the Quant Hedge Fund system.
 """
 
-from typing import Optional, Dict, Any, List
 import json
 import os
+from typing import Any, Dict, Optional
+
 from loguru import logger
 from openai import OpenAI
+
 
 class LLMClient:
     """Client for interacting with LLM APIs (OpenAI or Groq)."""
@@ -16,15 +18,14 @@ class LLMClient:
         """
         Initialize the LLM client. Priorities: OpenAI > Groq.
         """
-        import os
         from dotenv import load_dotenv
-        
+
         # Explicitly load .env to ensure keys are available
         load_dotenv()
-        
+
         self.openai_key = os.getenv("OPENAI_API_KEY")
         self.groq_key = api_key or os.getenv("GROQ_API_KEY")
-        
+
         self.provider = "none"
         self.client = None
 
@@ -33,7 +34,7 @@ class LLMClient:
             self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
             self.client = OpenAI(api_key=self.openai_key)
             logger.info(f"LLM Client initialized with OpenAI ({self.model})")
-            
+
         elif self.groq_key:
             self.provider = "groq"
             self.model = model or os.getenv("GROQ_MODEL", "mixtral-8x7b-32768")
@@ -46,8 +47,8 @@ class LLMClient:
             logger.warning("No LLM API keys found. AI features disabled.")
 
     def generate_completion(
-        self, 
-        system_prompt: str, 
+        self,
+        system_prompt: str,
         user_prompt: str,
         temperature: float = 0.7,
         max_tokens: int = 1024,
@@ -101,7 +102,7 @@ class LLMClient:
             "reasoning": "Detailed explanation of why these params fit the regime."
         }
         """
-        
+
         regime_str = json.dumps(market_regime, indent=2)
         user_prompt = f"""
         Current Market Regime Metrics:
@@ -110,14 +111,14 @@ class LLMClient:
         Based on these metrics, suggest the optimal strategy configuration.
         Explain your reasoning in a 'reasoning' field, but ensure the 'config' field contains the parameters.
         """
-        
+
         response = self.generate_completion(
-            system_prompt, 
-            user_prompt, 
-            temperature=0.2, 
+            system_prompt,
+            user_prompt,
+            temperature=0.2,
             json_mode=True
         )
-        
+
         try:
             return json.loads(response)
         except json.JSONDecodeError:

@@ -5,10 +5,10 @@ Creates strategy manifest JSON files for MLflow artifact storage.
 Based on the Quant Science production artifact structure.
 """
 
-from typing import Dict, Any, Optional, List
-from pathlib import Path
-from datetime import datetime
 import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from loguru import logger
@@ -37,12 +37,12 @@ def generate_strategy_manifest(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Build manifest
     manifest = {
         "generated_at": datetime.now().isoformat(),
         "version": "1.0",
-        
+
         # Strategy configuration
         "strategy": {
             "name": config.get("experiment_name", "Unknown"),
@@ -52,25 +52,25 @@ def generate_strategy_manifest(
             "end_date": config.get("end_date", ""),
             "capital_base": config.get("capital_base", 1_000_000),
         },
-        
+
         # Preprocessing steps
         "preprocessing": config.get("preprocessing", []),
-        
+
         # Factor configuration
         "factors": config.get("factors", []),
-        
+
         # Algorithm configuration
         "algorithm": config.get("algorithm", {}),
-        
+
         # Portfolio construction
         "portfolio_strategy": config.get("portfolio_strategy", {}),
-        
+
         # Risk settings
         "risk": {
             "stop_loss_enabled": config.get("stop_loss_enabled", False),
             "stop_loss_pct": config.get("stop_loss_pct", 0.15),
         },
-        
+
         # Key metrics summary
         "metrics_summary": {
             "total_return": metrics.get("portfolio_total_return", 0),
@@ -82,14 +82,14 @@ def generate_strategy_manifest(
             "win_rate": metrics.get("portfolio_win_rate", 0),
         },
     }
-    
+
     # Save manifest
     manifest_path = output_dir / "strategy_manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, default=str)
-    
+
     logger.info(f"Strategy manifest saved to {manifest_path}")
-    
+
     return manifest_path
 
 
@@ -109,12 +109,12 @@ def generate_weights_csv(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     weights_path = output_dir / "weights_latest.csv"
     weights.to_csv(weights_path, index=False)
-    
+
     logger.info(f"Weights CSV saved to {weights_path}")
-    
+
     return weights_path
 
 
@@ -134,12 +134,12 @@ def generate_rankings_csv(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     rankings_path = output_dir / "rankings_latest.csv"
     rankings.to_csv(rankings_path, index=False)
-    
+
     logger.info(f"Rankings CSV saved to {rankings_path}")
-    
+
     return rankings_path
 
 
@@ -159,7 +159,7 @@ def generate_serving_config(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     serving_config = {
         "model_name": config.get("experiment_name", "production"),
         "version": "latest",
@@ -169,13 +169,13 @@ def generate_serving_config(
         "algorithm": config.get("algorithm", {}),
         "portfolio_strategy": config.get("portfolio_strategy", {}),
     }
-    
+
     config_path = output_dir / "serving_config.json"
     with open(config_path, "w") as f:
         json.dump(serving_config, f, indent=2)
-    
+
     logger.info(f"Serving config saved to {config_path}")
-    
+
     return config_path
 
 
@@ -204,24 +204,24 @@ def generate_all_strategy_artifacts(
     if output_dir is None:
         from config.settings import get_settings
         output_dir = get_settings().dashboard_data_dir / "strategy_assets"
-    
+
     output_dir = Path(output_dir)
     artifacts = {}
-    
+
     # Generate manifest
     artifacts["manifest"] = generate_strategy_manifest(config, performance, metrics, output_dir)
-    
+
     # Generate serving config
     artifacts["serving_config"] = generate_serving_config(config, output_dir)
-    
+
     # Generate weights CSV
     if weights is not None:
         artifacts["weights"] = generate_weights_csv(weights, output_dir)
-    
+
     # Generate rankings CSV
     if rankings is not None:
         artifacts["rankings"] = generate_rankings_csv(rankings, output_dir)
-    
+
     logger.info(f"Generated {len(artifacts)} strategy artifacts")
-    
+
     return artifacts
