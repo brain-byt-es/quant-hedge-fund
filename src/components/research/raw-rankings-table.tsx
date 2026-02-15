@@ -1,9 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import * as React from "react"
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  SortingState,
+  useReactTable,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface RankingData {
   symbol: string;
@@ -18,88 +28,178 @@ interface RankingData {
   [key: string]: string | number | undefined | unknown;
 }
 
-type SortKey = keyof RankingData;
-
 export function RawRankingsTable({ data }: { data: RankingData[] }) {
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: 'asc' | 'desc' }>({ 
-      key: 'momentum', 
-      direction: 'desc' 
-  });
+  const [sorting, setSorting] = React.useState<SortingState>([{ id: "momentum", desc: true }])
 
-  const handleSort = (key: SortKey) => {
-      setSortConfig(current => ({
-          key,
-          direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
-      }));
-  };
-
-  const sorted = [...data].sort((a, b) => {
-      const aVal = a[sortConfig.key];
-      const bVal = b[sortConfig.key];
-      
-      if (aVal === undefined || aVal === null) return 1;
-      if (bVal === undefined || bVal === null) return -1;
-
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-  });
-
-  const SortIcon = ({ column }: { column: SortKey }) => {
-      if (sortConfig.key !== column) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />;
-      return sortConfig.direction === 'asc' 
-          ? <ArrowUp className="ml-1 h-3 w-3 text-primary" /> 
-          : <ArrowDown className="ml-1 h-3 w-3 text-primary" />;
-  };
-
-  const renderHeader = (label: string, key: SortKey, align: string = "right") => (
-      <TableHead 
-          className={`h-7 text-[9px] uppercase text-muted-foreground ${align === 'right' ? 'text-right' : ''} cursor-pointer hover:text-foreground transition-colors select-none px-2`}
-          onClick={() => handleSort(key)}
-      >
-          <div className={`flex items-center ${align === 'right' ? 'justify-end' : ''} gap-1`}>
-              {label}
-              <SortIcon column={key} />
+  const columns = React.useMemo<ColumnDef<RankingData>[]>(
+    () => [
+      {
+        accessorKey: "symbol",
+        header: ({ column }) => (
+          <div className="flex items-center gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            SYMBOL
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
           </div>
-      </TableHead>
-  );
+        ),
+        cell: ({ row }) => <span className="font-bold text-foreground group-hover:text-primary transition-colors">{row.original.symbol}</span>,
+      },
+      {
+        accessorKey: "momentum",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            MOM
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => <div className="text-right text-primary">{(row.original.momentum as number)?.toFixed(1) || "-"}</div>,
+      },
+      {
+        accessorKey: "quality",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            QUAL
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => <div className="text-right text-muted-foreground">{(row.original.quality as number)?.toFixed(1) || "-"}</div>,
+      },
+      {
+        accessorKey: "value",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            VAL
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => <div className="text-right text-muted-foreground">{(row.original.value as number)?.toFixed(1) || "-"}</div>,
+      },
+      {
+        accessorKey: "growth",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            GROW
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => <div className="text-right text-muted-foreground">{(row.original.growth as number)?.toFixed(1) || "-"}</div>,
+      },
+      {
+        accessorKey: "safety",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            SAFE
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => <div className="text-right text-muted-foreground">{(row.original.safety as number)?.toFixed(1) || "-"}</div>,
+      },
+      {
+        accessorKey: "f_score",
+        header: ({ column }) => (
+          <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting()}>
+            F-SCORE
+            {column.getIsSorted() === "asc" ? <ArrowUp className="h-3 w-3" /> : column.getIsSorted() === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+          </div>
+        ),
+        cell: ({ row }) => {
+          const score = row.original.f_score as number;
+          return (
+            <div className={cn(
+              "text-right font-black",
+              score >= 7 ? "text-green-500" : score <= 3 ? "text-red-500" : "text-muted-foreground"
+            )}>
+              {score ?? "-"}
+            </div>
+          )
+        },
+      },
+    ],
+    []
+  )
+
+  const table = useReactTable({
+    data,
+    columns,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
+  const { rows } = table.getRowModel()
+
+  const parentRef = React.useRef<HTMLDivElement>(null)
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 32, // Fixed height per row in pixels
+    overscan: 10,
+  })
 
   return (
     <Card className="h-full border-border/50 bg-card/40 backdrop-blur-md flex flex-col overflow-hidden shadow-xl">
-        <CardHeader className="py-2 px-3 border-b border-border/50 flex flex-row items-center justify-between bg-card/20">
-            <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Factor Rankings (Universe)</CardTitle>
-            <span className="text-[9px] text-muted-foreground font-mono">Count: {data.length}</span>
-        </CardHeader>
-        <CardContent className="p-0 flex-1 overflow-auto custom-scrollbar">
-            <Table>
-                <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 shadow-sm border-b border-border/50">
-                    <TableRow className="border-border/50 hover:bg-transparent">
-                        {renderHeader("Symbol", "symbol", "left")}
-                        {renderHeader("Mom", "momentum")}
-                        {renderHeader("Qual", "quality")}
-                        {renderHeader("Val", "value")}
-                        {renderHeader("Grow", "growth")}
-                        {renderHeader("Safe", "safety")}
-                        {renderHeader("F-Score", "f_score")}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sorted.map((row) => (
-                        <TableRow key={row.symbol} className="border-border/30 hover:bg-primary/5 transition-colors group">
-                            <TableCell className="py-1.5 text-xs font-mono font-bold text-foreground px-2 group-hover:text-primary">{row.symbol}</TableCell>
-                            <TableCell className="py-1.5 text-xs font-mono text-primary text-right px-2">{row.momentum?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.quality?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.value?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.growth?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className="py-1.5 text-xs font-mono text-muted-foreground text-right px-2">{row.safety?.toFixed(1) || "-"}</TableCell>
-                            <TableCell className={`py-1.5 text-xs font-mono font-black text-right px-2 ${row.f_score && row.f_score >= 7 ? 'text-green-500' : row.f_score && row.f_score <= 3 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                                {row.f_score !== undefined ? row.f_score : "-"}
-                            </TableCell>
-                        </TableRow>
+      <CardHeader className="py-2 px-3 border-b border-border/50 flex flex-row items-center justify-between bg-card/20 shrink-0">
+        <CardTitle className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Factor Rankings (Universe)</CardTitle>
+        <span className="text-[9px] text-muted-foreground font-mono">Count: {data.length}</span>
+      </CardHeader>
+      <CardContent 
+        ref={parentRef}
+        className="p-0 flex-1 overflow-auto custom-scrollbar relative"
+      >
+        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+          <Table className="border-collapse">
+            <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-20 shadow-sm border-b border-border/50">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="border-border/50 hover:bg-transparent flex w-full">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      className="h-7 text-[9px] uppercase text-muted-foreground px-2 flex items-center bg-transparent border-none"
+                      style={{ width: header.column.getSize(), flex: header.id === 'symbol' ? '1 1 auto' : '0 0 80px' }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index]
+                return (
+                  <TableRow
+                    key={row.id}
+                    data-index={virtualRow.index}
+                    className="border-border/30 hover:bg-primary/5 transition-colors group absolute w-full flex"
+                    style={{
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        className="py-1.5 text-xs font-mono px-2 flex items-center border-none"
+                        style={{ width: cell.column.getSize(), flex: cell.column.id === 'symbol' ? '1 1 auto' : '0 0 80px' }}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
-                </TableBody>
-            </Table>
-        </CardContent>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
     </Card>
   )
 }
