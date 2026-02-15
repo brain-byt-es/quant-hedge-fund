@@ -198,6 +198,10 @@ def get_company_profile(symbol: str):
             api_profile = client._fmp_client.get_company_profile(symbol)
             if api_profile:
                 profile_data.update(api_profile)
+                # Normalize JIT data
+                if "company_name" not in profile_data and "companyName" in profile_data:
+                    profile_data["company_name"] = profile_data.pop("companyName")
+                
                 # Cache via Proxy
                 client._db_proxy.upsert_company_profiles(pd.DataFrame([api_profile]))
 
@@ -241,9 +245,9 @@ def get_price_history(symbol: str, lookback: int = 252):
         """
         res = client.query(sql)
         if not res.is_empty():
-            return res.select(
-                pl.col("date").dt.strftime("%Y-%m-%d"),
-                pl.col("close")
+            # Robust conversion: cast to date first if it's arriving as string
+            return res.with_columns(
+                pl.col("date").cast(pl.Date).dt.strftime("%Y-%m-%d")
             ).to_dicts()
         return []
     except Exception as e:
@@ -313,23 +317,27 @@ def trigger_taxonomy_aggregation():
             df_sec = fmp.get_sector_performance(yesterday)
             df_ind = fmp.get_industry_performance(yesterday)
 
-            con = client._db_manager.connect()
-            try:
-                if not df_sec.empty:
-                    for _, row in df_sec.iterrows():
-                        name = row.get('sector')
-                        perf = row.get('changesPercentage', 0.0)
-                        if name:
-                            con.execute(f"UPDATE sector_industry_stats SET perf_1d = {perf} WHERE group_type = 'sector' AND (name ILIKE '%{name}%' OR '{name}' ILIKE '%' || name || '%')")
+            if not df_sec.empty:
+                for _, row in df_sec.iterrows():
+                    name = row.get('sector')
+                    perf = row.get('changesPercentage', 0.0)
+                    if name:
+                        # Use proxy execute
+                        client.execute(
+                            "UPDATE sector_industry_stats SET perf_1d = ? WHERE group_type = 'sector' AND (name ILIKE ? OR ? ILIKE '%' || name || '%')",
+                            [perf, f"%{name}%", name]
+                        )
 
-                if not df_ind.empty:
-                    for _, row in df_ind.iterrows():
-                        name = row.get('industry')
-                        perf = row.get('changesPercentage', 0.0)
-                        if name:
-                            con.execute(f"UPDATE sector_industry_stats SET perf_1d = {perf} WHERE group_type = 'industry' AND (name ILIKE '%{name}%' OR '{name}' ILIKE '%' || name || '%')")
-            finally:
-                con.close()
+            if not df_ind.empty:
+                for _, row in df_ind.iterrows():
+                    name = row.get('industry')
+                    perf = row.get('changesPercentage', 0.0)
+                    if name:
+                        # Use proxy execute
+                        client.execute(
+                            "UPDATE sector_industry_stats SET perf_1d = ? WHERE group_type = 'industry' AND (name ILIKE ? OR ? ILIKE '%' || name || '%')",
+                            [perf, f"%{name}%", name]
+                        )
         except Exception as fmp_err:
             logger.warning(f"FMP Performance seeding skipped: {fmp_err}")
 

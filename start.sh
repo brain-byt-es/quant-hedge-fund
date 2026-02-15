@@ -15,6 +15,10 @@ pre_cleanup() {
     pgrep -f "data_service:app" | xargs kill -9 2>/dev/null
     pgrep -f "prefect_flows" | xargs kill -9 2>/dev/null
     
+    # NEW: Clear all __pycache__ to prevent stale code issues
+    echo "🧹 Purging Python pycache..."
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+
     # AGGRESSIVE: Kill anything holding the DuckDB file lock
     echo "🔒 Releasing DB locks..."
     # Find the process ID holding the lock and kill it
@@ -64,7 +68,7 @@ cd backend
 if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
 fi
-python -m uvicorn qsconnect.database.data_service:app --port 8001 &
+python -m uvicorn qsconnect.database.data_service:app --port 8001 --reload &
 DATA_SERVICE_PID=$!
 sleep 2 # Give it a head start to claim the file lock
 

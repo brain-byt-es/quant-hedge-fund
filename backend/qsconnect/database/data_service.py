@@ -146,12 +146,45 @@ async def clear_factors():
         logger.error(f"Clear Factor Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/upsert/stock_list")
+async def upsert_stock_list(data: List[Dict[str, Any]]):
+    """Bulk upsert stock list data."""
+    try:
+        df = pd.DataFrame(data)
+        count = db_mgr.upsert_stock_list(df)
+        return {"status": "success", "count": count}
+    except Exception as e:
+        logger.error(f"Stock List Upsert Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upsert/profiles")
+async def upsert_profiles(data: List[Dict[str, Any]]):
+    """Bulk upsert company profile data (Short Path)."""
+    try:
+        df = pd.DataFrame(data)
+        count = db_mgr.upsert_company_profiles(df)
+        return {"status": "success", "count": count}
+    except Exception as e:
+        logger.error(f"Profile Upsert Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upsert/company_profiles")
+async def upsert_company_profiles_redundant(data: List[Dict[str, Any]]):
+    """Bulk upsert company profile data (Long Path)."""
+    try:
+        df = pd.DataFrame(data)
+        count = db_mgr.upsert_company_profiles(df)
+        return {"status": "success", "count": count}
+    except Exception as e:
+        logger.error(f"Profile Redundant Upsert Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     return {
         "service": "Quant Science Unified Data Service",
         "status": "online",
-        "endpoints": ["/query", "/execute", "/upsert/prices", "/upsert/fundamentals", "/factors/historical", "/factors/clear", "/health"]
+        "endpoints": ["/query", "/execute", "/upsert/prices", "/upsert/fundamentals", "/upsert/stock_list", "/upsert/profiles", "/factors/historical", "/factors/clear", "/health"]
     }
 
 @app.get("/health")

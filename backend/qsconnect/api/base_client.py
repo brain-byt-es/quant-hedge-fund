@@ -99,7 +99,10 @@ class BaseAPIClient(ABC):
                 return data
 
             except requests.exceptions.HTTPError as e:
-                logger.warning(f"HTTP error on attempt {attempt + 1}: {e}")
+                # Institutional Silence: Don't flood logs with plan-restriction warnings we intend to catch
+                if response.status_code not in [402, 403]:
+                    logger.warning(f"HTTP error on attempt {attempt + 1}: {e}")
+                
                 if response.status_code == 429:  # Rate limited
                     time.sleep(retry_delay * (attempt + 1) * 2)
                 elif response.status_code >= 500:

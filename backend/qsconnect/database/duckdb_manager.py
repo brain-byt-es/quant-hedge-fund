@@ -655,19 +655,43 @@ class DuckDBManager:
         if df.empty: return 0
         conn = self.connect()
         try:
+            # 1. Standardize column mapping before registration
+            mapping = {
+                "companyName": "company_name",
+                "fullTimeEmployees": "full_time_employees",
+                "ipoDate": "ipo_date",
+                "exchangeShortName": "exchange"
+            }
+            # Rename columns in pandas to match schema
+            df = df.rename(columns=mapping)
+            
+            # Explicitly ensure company_name is set from any potential camelCase leftovers
+            if "companyName" in df.columns and "company_name" not in df.columns:
+                df["company_name"] = df["companyName"]
+
+            # Ensure all required schema columns exist
+            schema_cols = ["symbol", "company_name", "sector", "industry", "description", "website", "ceo", "full_time_employees", "price", "beta", "ipo_date", "exchange"]
+            for col in schema_cols:
+                if col not in df.columns:
+                    df[col] = None
+
             # Add updated_at timestamp
             df["updated_at"] = datetime.now()
+
+            # Keep only schema columns
+            df = df[schema_cols + ["updated_at"]]
 
             conn.register("temp_profiles", df)
 
             # Self-healing: Ensure unique constraint exists for ON CONFLICT
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_pk ON bulk_company_profiles_fmp(symbol)")
 
+            # Use simple SELECT * from temp_profiles since it's now perfectly aligned
             conn.execute("""
                 INSERT INTO bulk_company_profiles_fmp (
                     symbol, company_name, sector, industry, description, website, ceo, full_time_employees, price, beta, ipo_date, exchange, updated_at
                 )
-                SELECT symbol, companyName, sector, industry, description, website, ceo, fullTimeEmployees, price, beta, ipoDate, exchangeShortName, updated_at FROM temp_profiles
+                SELECT * FROM temp_profiles
                 ON CONFLICT (symbol) DO UPDATE SET
                     company_name = EXCLUDED.company_name,
                     sector = EXCLUDED.sector,

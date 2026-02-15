@@ -25,16 +25,14 @@ class ApprovalRequest(BaseModel):
 
 @router.post("/approve")
 async def approve_strategy(request: ApprovalRequest):
-    """Log a human approval for a strategy transition."""
+    """Log a human approval for a strategy transition via Proxy."""
     client = get_qs_client()
     try:
-        # We use the existing DuckDBManager via the client
-        db = client._db_manager
-
         import json
         config_json = json.dumps(request.config_snapshot) if request.config_snapshot else "{}"
 
-        db.execute("""
+        # Use proxy execute
+        client.execute("""
             INSERT INTO strategy_audit_log (strategy_hash, stage, approved_by, human_rationale, config_json, approved_at)
             VALUES (?, ?, ?, ?, ?, ?)
         """, [request.strategy_hash, request.stage, request.approved_by, request.rationale, config_json, datetime.now()])
@@ -47,11 +45,10 @@ async def approve_strategy(request: ApprovalRequest):
 
 @router.get("/audit-trail")
 async def get_audit_trail(limit: int = 50):
-    """Retrieve the immutable audit log of strategy changes."""
+    """Retrieve the immutable audit log via Proxy."""
     client = get_qs_client()
     try:
-        db = client._db_manager
-        df = db.query(f"SELECT * FROM strategy_audit_log ORDER BY approved_at DESC LIMIT {limit}")
+        df = client.query(f"SELECT * FROM strategy_audit_log ORDER BY approved_at DESC LIMIT {limit}")
         return df.to_dicts()
     except Exception as e:
         logger.error(f"Audit trail fetch failed: {e}")

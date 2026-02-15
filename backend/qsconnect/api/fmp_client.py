@@ -43,6 +43,8 @@ class FMPClient(BaseAPIClient):
             api_key=api_key,
             rate_limit_per_minute=FMP_RATE_LIMIT_PER_MINUTE,
         )
+        # Plan state tracking
+        self._supports_batch = True
         logger.info("FMP client initialized")
 
     # =====================
@@ -616,24 +618,47 @@ class FMPClient(BaseAPIClient):
         return {}
 
     def get_quotes_batch(self, symbols: List[str]) -> pd.DataFrame:
-        """Get batch quotes for multiple symbols."""
+        """Get quotes for multiple symbols with parallel fallback for Payment Required errors."""
         if not symbols:
             return pd.DataFrame()
-        # Limit to 500 symbols per batch as per general API limits, although FMP is generous
-        chunk_size = 500
-        all_data = []
 
-        for i in range(0, len(symbols), chunk_size):
-            chunk = symbols[i:i + chunk_size]
-            symbols_str = ",".join(chunk)
-            # Use specific batch endpoint or standard quote with comma separated
-            # Checking docs: stable/quote?symbol=A,B might work, or stable/batch-quote
-            # Using stable/quote as it's often more reliable for small batches, but let's try batch-quote as per docs
-            url = "https://financialmodelingprep.com/stable/batch-quote"
-            params = {"symbols": symbols_str}
-            data = self._make_request(url, params=params)
-            if data:
-                all_data.extend(data)
+        # Plan-aware routing: skip batch if previously failed due to plan restriction
+        if self._supports_batch:
+            try:
+                url = "https://financialmodelingprep.com/stable/batch-quote"
+                params = {"symbols": ",".join(symbols[:500])}
+                data = self._make_request(url, params=params)
+                if data:
+                    return pd.DataFrame(data)
+            except Exception as e:
+                if "402" in str(e) or "403" in str(e):
+                    self._supports_batch = False
+                    logger.info("FMP Plan restricted: Batch quotes disabled for this session. Switching to parallel mode.")
+                else:
+                    logger.warning(f"Batch quote failed: {e}. Attempting fallback.")
+
+        # Fallback: Parallel individual requests
+        import concurrent.futures
+        all_data = []
+        
+        def _fetch_quote(symbol):
+            try:
+                url = "https://financialmodelingprep.com/stable/quote"
+                params = {"symbol": symbol}
+                res = self._make_request(url, params=params)
+                return res[0] if res else None
+            except:
+                return None
+
+        # Use 5 workers to stay efficient but safe
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # Limit the symbols to prevent huge parallel bursts in fallback mode
+            targets = symbols[:100]
+            future_to_symbol = {executor.submit(_fetch_quote, sym): sym for sym in targets}
+            for future in concurrent.futures.as_completed(future_to_symbol):
+                res = future.result()
+                if res:
+                    all_data.append(res)
 
         return pd.DataFrame(all_data) if all_data else pd.DataFrame()
 

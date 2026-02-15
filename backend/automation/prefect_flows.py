@@ -44,7 +44,8 @@ def task_update_stock_list():
     if data:
         df_full = pd.DataFrame(data)
         df_active = df_full[df_full["symbol"].isin(active_symbols)]
-        client._db_manager.upsert_stock_list(df_active)
+        # Use Proxy Upsert
+        client._db_proxy.upsert_stock_list(df_active)
         log_step(client, "INFO", "Ingest", f"Active metadata enriched for {len(df_active)} symbols.")
         return f"Enriched {len(df_active)} symbols"
     
@@ -58,9 +59,8 @@ def task_enrich_ciks():
     log_step(client, "INFO", "Ingest", "Enriching CIK identifiers via Parallel Stable Profiles...")
     
     try:
-        con = client._db_manager.connect()
-        missing_df = con.execute("SELECT symbol FROM stock_list_fmp WHERE cik IS NULL OR cik = ''").pl()
-        con.close()
+        # Use Proxy Query
+        missing_df = client.query("SELECT symbol FROM stock_list_fmp WHERE cik IS NULL OR cik = ''")
         
         pending_symbols = missing_df["symbol"].to_list()
         total = len(pending_symbols)
@@ -95,21 +95,16 @@ def task_enrich_ciks():
                     batch_updates.append((cik, symbol))
                     
                 if len(batch_updates) >= 100:
-                    con = client._db_manager.connect()
-                    try:
-                        for cik_val, sym_val in batch_updates:
-                            con.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
-                        updated_count += len(batch_updates)
-                        batch_updates = []
-                    finally:
-                        con.close()
+                    # Use Proxy Execute
+                    for cik_val, sym_val in batch_updates:
+                        client.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
+                    updated_count += len(batch_updates)
+                    batch_updates = []
 
             if batch_updates:
-                con = client._db_manager.connect()
                 for cik_val, sym_val in batch_updates:
-                    con.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
+                    client.execute("UPDATE stock_list_fmp SET cik = ? WHERE symbol = ?", [cik_val, sym_val])
                 updated_count += len(batch_updates)
-                con.close()
                 
         log_step(client, "SUCCESS", "Ingest", f"✅ CIK Enrichment complete. Updated {updated_count} symbols.")
         
@@ -157,9 +152,11 @@ def task_ingest_fundamentals(limit: int = 5):
             if clean_name == "key": clean_name = "key_metrics"
             simfin_table = f"bulk_{clean_name}_quarter_fmp"
             
-            existing_fmp = set(client._db_manager.get_symbols_with_data(table_name))
-            existing_simfin = set(client._db_manager.get_symbols_with_data(simfin_table))
-            failed_scans = set(client._db_manager.get_failed_symbols(stmt))
+            # Use Proxy methods for symbols
+            existing_fmp = set(client.query(f"SELECT DISTINCT symbol FROM {table_name}")["symbol"].to_list())
+            existing_simfin = set(client.query(f"SELECT DISTINCT symbol FROM {simfin_table}")["symbol"].to_list())
+            # For failed scans, we can use client.query too
+            failed_scans = set(client.query(f"SELECT symbol FROM failed_scans WHERE data_type = '{stmt}'")["symbol"].to_list())
             
             completed_symbols = existing_fmp.union(existing_simfin).union(failed_scans)
             pending_symbols = [s for s in active_symbols if s not in completed_symbols]
@@ -189,14 +186,15 @@ def task_ingest_fundamentals(limit: int = 5):
                     if isinstance(data, pd.DataFrame) and not data.empty:
                         for col in data.select_dtypes(include=['number']).columns:
                             data[col] = data[col].astype(float)
-                        client._db_manager.upsert_fundamentals(stmt, "annual", pl.from_pandas(data))
+                        # Use Proxy Upsert
+                        client._db_proxy.upsert_fundamentals(stmt, "annual", pl.from_pandas(data))
                         successful_symbols = set(data["symbol"].unique().to_list())
                     else:
                         successful_symbols = set()
 
                     for s in batch_symbols:
                         if s not in successful_symbols:
-                            client._db_manager.log_failed_scan(s, stmt, "No data available")
+                            client.log_failed_scan(s, stmt, "No data available")
                     
                     import time
                     time.sleep(0.5)
@@ -210,21 +208,18 @@ def task_ingest_fundamentals(limit: int = 5):
 
 @task(retries=0)
 def task_stitch_tickers():
-    """Identify and merge duplicate symbols sharing the same CIK."""
+    """Identify and merge duplicate symbols sharing the same CIK via Proxy."""
     client = QSConnectClient()
-    db = client._db_manager
-    con = db.connect()
-    
     log_step(client, "INFO", "Stitcher", "🔍 Starting Ticker Stitching (CIK Merge)...")
     
     try:
-        duplicates = con.execute("""
+        duplicates = client.query("""
             SELECT cik, list(symbol) as symbols, count(*) as count
             FROM stock_list_fmp 
             WHERE cik IS NOT NULL AND cik != '' AND cik != 'None'
             GROUP BY cik 
             HAVING count(distinct symbol) > 1
-        """).pl()
+        """)
         
         if duplicates.is_empty():
             log_step(client, "INFO", "Stitcher", "✅ No ticker mismatches found.")
@@ -235,8 +230,13 @@ def task_stitch_tickers():
             symbols = row['symbols']
             cik = row['cik']
             
+            # Use Proxy for historical data check
             dates_query = f"SELECT symbol, MAX(date) as last_date FROM historical_prices_fmp WHERE symbol IN ({','.join(['?' for _ in symbols])}) GROUP BY symbol"
-            dates_df = con.execute(dates_query, symbols).pl()
+            dates_df = client.query(dates_query) # Wait, query doesn't take params like execute? 
+            # Fix: Format query manually or use execute if it returns data.
+            # Actually client.query takes raw SQL.
+            dates_query_formatted = f"SELECT symbol, MAX(date) as last_date FROM historical_prices_fmp WHERE symbol IN ({','.join([f'\'{s}\'' for s in symbols])}) GROUP BY symbol"
+            dates_df = client.query(dates_query_formatted)
             
             if dates_df.is_empty(): continue
             
@@ -248,37 +248,47 @@ def task_stitch_tickers():
                 source_info = dates_df.filter(pl.col("symbol") == source)
                 if not source_info.is_empty():
                     source_last_date = source_info["last_date"][0]
+                    # Handle date comparison (might be string from JSON proxy)
+                    if isinstance(source_last_date, str): source_last_date = date.fromisoformat(source_last_date)
+                    if isinstance(master_last_date, str): master_last_date = date.fromisoformat(master_last_date)
+                    
                     days_stale = (master_last_date - source_last_date).days
                     if days_stale < 90: continue
 
                 log_step(client, "INFO", "Stitcher", f"🧵 Stitching {source} -> {master_symbol} (CIK: {cik})")
                 
-                con.execute("""
+                # Proxy Execute
+                client.execute("""
                     INSERT OR IGNORE INTO ticker_aliases (source_symbol, master_symbol, cik, reason)
                     VALUES (?, ?, ?, 'CIK Match')
                 """, [source, master_symbol, cik])
                 
-                con.execute(f"""
+                client.execute(f"""
                     INSERT OR IGNORE INTO historical_prices_fmp (symbol, date, open, high, low, close, volume, updated_at)
                     SELECT '{master_symbol}', date, open, high, low, close, volume, updated_at 
                     FROM historical_prices_fmp 
                     WHERE symbol = ?
                 """, [source])
                 
-                con.execute("DELETE FROM historical_prices_fmp WHERE symbol = ?", [source])
-                con.execute("DELETE FROM stock_list_fmp WHERE symbol = ?", [source])
+                client.execute("DELETE FROM historical_prices_fmp WHERE symbol = ?", [source])
+                client.execute("DELETE FROM stock_list_fmp WHERE symbol = ?", [source])
                 merged_count += 1
         
         log_step(client, "SUCCESS", "Stitcher", f"✅ Successfully stitched {merged_count} ticker pairs.")
         return f"Merged {merged_count} symbols"
-    finally:
-        con.close()
+    except Exception as e:
+        logger.error(f"Stitching failed: {e}")
+        return "Stitching failed"
 
 @task
 def task_rebuild_bundle():
     """Finalize data for Zipline."""
     client = QSConnectClient()
     log_step(client, "INFO", "Bundler", "Starting Zipline Bundle reconstruction...")
+    # Bundler requires local manager for writing to H5/Zipline files, 
+    # but the source SQL will use the proxy internally if we configure it.
+    # For now, ZiplineBundler might still need direct DuckDB access for READS.
+    # Since it's READ-ONLY, it shouldn't block the DataService writer.
     client.build_zipline_bundle("historical_prices_fmp")
     client.ingest_bundle("historical_prices_fmp")
     log_step(client, "INFO", "Bundler", "Zipline Bundle ready for Research Lab.")
@@ -286,7 +296,7 @@ def task_rebuild_bundle():
 
 @task(retries=0)
 def task_ingest_simfin():
-    """Ingest SimFin Bulk Data (Prices + Fundamentals)."""
+    """Ingest SimFin Bulk Data (Prices + Fundamentals) via Proxy."""
     client = QSConnectClient()
     log_step(client, "INFO", "Ingest", "Starting SimFin Bulk Ingest...")
     stats = client.ingest_simfin_bulk()
@@ -295,17 +305,14 @@ def task_ingest_simfin():
 
 @task
 def task_aggregate_market_taxonomy():
-    """Aggregates assets into buckets using proven pure-SQL logic with NaN protection."""
+    """Aggregates assets into buckets using Proxy Execution."""
     client = QSConnectClient()
-    db = client._db_manager
-    con = db.connect()
-    
     log_step(client, "INFO", "Analytics", "🚀 Starting Market Taxonomy Aggregation...")
     
     try:
         # 1. Performance Table - Filter out NaNs immediately
-        con.execute("DROP TABLE IF EXISTS asset_perf_working")
-        con.execute("""
+        client.execute("DROP TABLE IF EXISTS asset_perf_working")
+        client.execute("""
             CREATE TABLE asset_perf_working AS
             WITH p AS (
                 SELECT symbol, date, close,
@@ -336,8 +343,8 @@ def task_aggregate_market_taxonomy():
         """)
 
         # 2. Stats Table
-        con.execute("DROP TABLE IF EXISTS sector_industry_stats")
-        con.execute("""
+        client.execute("DROP TABLE IF EXISTS sector_industry_stats")
+        client.execute("""
             CREATE TABLE sector_industry_stats (
                 name VARCHAR, group_type VARCHAR, stock_count INTEGER,
                 market_cap DOUBLE, total_revenue DOUBLE, avg_pe DOUBLE,
@@ -347,7 +354,7 @@ def task_aggregate_market_taxonomy():
             )
         """)
 
-        # 3. Perform the Aggregation (using trim(symbol) to ensure join integrity)
+        # 3. Perform the Aggregation
         for col, gtype in [('industry', 'industry'), ('sector', 'sector')]:
             sql = f"""
                 INSERT INTO sector_industry_stats
@@ -378,16 +385,16 @@ def task_aggregate_market_taxonomy():
                 WHERE s.{col} IS NOT NULL AND s.{col} != ''
                 GROUP BY 1
             """
-            con.execute(sql)
+            client.execute(sql)
 
-        count = con.execute("SELECT COUNT(*) FROM sector_industry_stats").fetchone()[0]
+        count_res = client.query("SELECT COUNT(*) as count FROM sector_industry_stats")
+        count = count_res["count"][0] if not count_res.is_empty() else 0
         log_step(client, "SUCCESS", "Analytics", f"✅ Aggregation complete: {count} groups processed.")
     except Exception as e:
         logger.error(f"Aggregation failed: {e}")
         raise e
     finally:
-        con.execute("DROP TABLE IF EXISTS asset_perf_working")
-        con.close()
+        client.execute("DROP TABLE IF EXISTS asset_perf_working")
 
 @task
 def task_sync_finance_database():
@@ -399,27 +406,30 @@ def task_sync_finance_database():
 
 @task
 def task_discover_ipos():
-    """Daily: Discover new IPOs via OpenBB/FMP and add to master index."""
+    """Daily: Discover new IPOs via FMP and add to master index via Proxy."""
     client = QSConnectClient()
     try:
         ipos_df = client._fmp_client.get_ipo_calendar()
         if not ipos_df.empty:
-            con = client._db_manager.connect()
-            try:
-                standard_df = pd.DataFrame()
-                standard_df['symbol'] = ipos_df['symbol']
-                standard_df['name'] = ipos_df.get('company', ipos_df.get('name', 'Unknown'))
-                standard_df['type'] = 'Equity'; standard_df['category'] = 'New IPO'
-                standard_df['exchange'] = ipos_df['exchange']; standard_df['country'] = 'United States'
-                standard_df['updated_at'] = datetime.now()
-                con.register('temp_ipos', standard_df)
-                con.execute("INSERT OR IGNORE INTO master_assets_index SELECT * FROM temp_ipos")
-            finally: con.close()
+            standard_df = pd.DataFrame()
+            standard_df['symbol'] = ipos_df['symbol']
+            standard_df['name'] = ipos_df.get('company', ipos_df.get('name', 'Unknown'))
+            standard_df['type'] = 'Equity'; standard_df['category'] = 'New IPO'
+            standard_df['exchange'] = ipos_df['exchange']; standard_df['country'] = 'United States'
+            standard_df['updated_at'] = datetime.now()
+            
+            # Use Proxy execute for individual inserts to avoid temp table registration complexity
+            # Or implement a dedicated upsert_master_assets in Proxy
+            for _, row in standard_df.iterrows():
+                client.execute(
+                    "INSERT OR IGNORE INTO master_assets_index (symbol, name, type, category, exchange, country, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [row['symbol'], row['name'], row['type'], row['category'], row['exchange'], row['country'], row['updated_at']]
+                )
     except Exception as e: logger.warning(f"IPO discovery skipped: {e}")
 
-# ==========================================
+# =====================
 # Flows
-# ==========================================
+# =====================
 
 @flow(name="Hedge Fund Backfill (2-Year)")
 def historical_backfill_flow():

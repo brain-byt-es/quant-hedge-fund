@@ -12,7 +12,7 @@ from loguru import logger
 class RemoteWriter:
     """
     Proxy for DuckDB operations.
-    Talks to the Unified Data Service microservice.
+    Talks to the Unified Data Service microservice on Port 8001.
     """
     
     def __init__(self, base_url: str = "http://localhost:8001"):
@@ -32,6 +32,13 @@ class RemoteWriter:
         except Exception as e:
             logger.error(f"Remote Query Failed: {e}")
             return pl.DataFrame()
+
+    def query_pandas(self, sql: str) -> pd.DataFrame:
+        """Execute a SQL query and return results as Pandas DataFrame via Proxy."""
+        res = self.query(sql)
+        if res.is_empty():
+            return pd.DataFrame()
+        return res.to_pandas()
 
     def execute(self, sql: str, params: Optional[List[Any]] = None):
         """Execute a SQL command via the Data Service."""
@@ -86,33 +93,46 @@ class RemoteWriter:
         try:
             data = df.to_dict(orient="records")
             response = requests.post(
-                f"{self.base_url}/execute",
-                json={
-                    "sql": "CREATE TEMP TABLE temp_stocks AS SELECT * FROM ?; INSERT OR REPLACE INTO stock_list_fmp SELECT * FROM temp_stocks",
-                    "params": [data]
-                },
+                f"{self.base_url}/upsert/stock_list",
+                json=data,
                 timeout=30
             )
             response.raise_for_status()
-            return len(df)
+            return response.json().get("count", 0)
         except Exception as e:
             logger.error(f"Remote Stock List Upsert Failed: {e}")
             return 0
 
     def upsert_company_profiles(self, df: pd.DataFrame) -> int:
-        """Upsert company profiles via the Data Service."""
+        """Upsert company profiles via the Data Service with redundant fallback."""
         try:
             data = df.to_dict(orient="records")
-            response = requests.post(
-                f"{self.base_url}/execute",
-                json={
-                    "sql": "CREATE TEMP TABLE temp_profiles AS SELECT * FROM ?; INSERT OR REPLACE INTO bulk_company_profiles_fmp SELECT * FROM temp_profiles",
-                    "params": [data]
-                },
-                timeout=30
-            )
-            response.raise_for_status()
-            return len(df)
+            # Try primary first
+            try:
+                response = requests.post(
+                    f"{self.base_url}/upsert/profiles",
+                    json=data,
+                    timeout=30
+                )
+                if response.status_code == 404:
+                    # Fallback to redundant if primary not yet reloaded
+                    response = requests.post(
+                        f"{self.base_url}/upsert/company_profiles",
+                        json=data,
+                        timeout=30
+                    )
+                response.raise_for_status()
+                return response.json().get("count", 0)
+            except Exception as inner_e:
+                logger.error(f"Remote Profile Upsert (Attempt 1) failed: {inner_e}")
+                # Last ditch fallback
+                response = requests.post(
+                    f"{self.base_url}/upsert/company_profiles",
+                    json=data,
+                    timeout=30
+                )
+                response.raise_for_status()
+                return response.json().get("count", 0)
         except Exception as e:
             logger.error(f"Remote Profile Upsert Failed: {e}")
             return 0

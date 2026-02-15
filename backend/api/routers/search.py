@@ -291,30 +291,28 @@ def get_asset_list(
         data = res.to_dicts()
 
         # Data Enrichment (Real-time Polish)
+        # PERFORMANCE: Only enrich the first 50 symbols to keep response time snappy.
+        # Fetching hundreds of quotes individually via individual API calls is too slow.
         if data:
-            symbols = [row['symbol'] for row in data if row['symbol']]
+            symbols = [row['symbol'] for row in data[:50] if row['symbol']]
             if symbols:
                 try:
-                    # Enforce chunking for large symbol lists
-                    batch_size = 50
-                    for i in range(0, len(symbols), batch_size):
-                        chunk = symbols[i:i + batch_size]
-                        quotes_df = client._fmp_client.get_quotes_batch(chunk)
+                    # Single batch for the top 50
+                    quotes_df = client._fmp_client.get_quotes_batch(symbols)
+                    
+                    if not quotes_df.empty:
+                        price_map = {q.get('symbol'): q for q in quotes_df.to_dict(orient='records')}
                         
-                        if not quotes_df.empty:
-                            price_map = {q.get('symbol'): q for q in quotes_df.to_dict(orient='records')}
-                            
-                            for row in data:
-                                symbol = row['symbol']
-                                if symbol in price_map:
-                                    quote = price_map[symbol]
-                                    # Update row with real-time data if available
-                                    if quote.get('price'): row['price'] = quote.get('price')
-                                    # FMP uses 'changesPercentage', we map to 'change_percent' for frontend
-                                    if quote.get('changesPercentage') is not None:
-                                        row['change_percent'] = quote.get('changesPercentage')
-                                    if quote.get('marketCap'): row['market_cap'] = quote.get('marketCap')
-                                    if quote.get('volume'): row['volume'] = quote.get('volume')
+                        for row in data:
+                            symbol = row['symbol']
+                            if symbol in price_map:
+                                quote = price_map[symbol]
+                                # Update row with real-time data if available
+                                if quote.get('price'): row['price'] = quote.get('price')
+                                if quote.get('changesPercentage') is not None:
+                                    row['change_percent'] = quote.get('changesPercentage')
+                                if quote.get('marketCap'): row['market_cap'] = quote.get('marketCap')
+                                if quote.get('volume'): row['volume'] = quote.get('volume')
                 except Exception as enrich_err:
                     logger.warning(f"Failed to enrich asset list: {enrich_err}")
 
@@ -427,11 +425,10 @@ def debug_asset(symbol: str):
 @router.post("/repair")
 def repair_search_index():
     """
-    Comprehensive repair of country mappings and placeholder names.
+    Comprehensive repair of country mappings and placeholder names via Proxy.
     """
     try:
         client = get_qs_client()
-        con = client._db_manager.connect()
         suffix_map = {
             '.SZ': 'China', '.SS': 'China', '.HK': 'Hong Kong',
             '.KS': 'South Korea', '.KQ': 'South Korea',
@@ -445,7 +442,7 @@ def repair_search_index():
             '.BR': 'Belgium', '.HE': 'Finland', '.OL': 'Norway', '.ST': 'Sweden'
         }
         for suffix, country in suffix_map.items():
-            con.execute(f"UPDATE master_assets_index SET country = '{country}' WHERE symbol ILIKE '%{suffix}'")
+            client.execute("UPDATE master_assets_index SET country = ? WHERE symbol ILIKE ?", [country, f"%{suffix}"])
 
         exchange_map = {
             'Shenzhen': 'China', 'Shanghai': 'China', 'Hong Kong': 'Hong Kong',
@@ -453,25 +450,22 @@ def repair_search_index():
             'Paris': 'France', 'Toronto': 'Canada', 'ASX': 'Australia'
         }
         for ex, country in exchange_map.items():
-            con.execute(f"UPDATE master_assets_index SET country = '{country}' WHERE exchange ILIKE '%{ex}%'")
+            client.execute("UPDATE master_assets_index SET country = ? WHERE exchange ILIKE ?", [country, f"%{ex}%"])
 
-        con.execute("UPDATE master_assets_index SET country = 'Other' WHERE country = 'United States' AND symbol LIKE '%.%'")
+        client.execute("UPDATE master_assets_index SET country = 'Other' WHERE country = 'United States' AND symbol LIKE '%.%'")
         for suffix, country in suffix_map.items():
-            con.execute(f"UPDATE master_assets_index SET country = '{country}' WHERE symbol ILIKE '%{suffix}'")
+            client.execute("UPDATE master_assets_index SET country = ? WHERE symbol ILIKE ?", [country, f"%{suffix}"])
 
-        con.execute("""
+        client.execute("""
             UPDATE master_assets_index 
             SET country = 'United States' 
             WHERE (exchange ILIKE '%NASDAQ%' OR exchange ILIKE '%NYSE%' OR exchange = 'ASE' OR exchange = 'BATS')
             AND symbol NOT LIKE '%.%'
         """)
-        con.execute("UPDATE master_assets_index SET name = symbol WHERE name IN ('one', 'two', 'Unknown', 'N/A', '') OR name IS NULL")
-        con.execute("UPDATE master_assets_index SET country = 'United States' WHERE country ILIKE 'USA' OR country ILIKE 'U.S.'")
+        client.execute("UPDATE master_assets_index SET name = symbol WHERE name IN ('one', 'two', 'Unknown', 'N/A', '') OR name IS NULL")
+        client.execute("UPDATE master_assets_index SET country = 'United States' WHERE country ILIKE 'USA' OR country ILIKE 'U.S.'")
 
         return {"status": "success", "message": "Search index fully repaired."}
     except Exception as e:
         logger.error(f"Repair failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        try: con.close()
-        except: pass

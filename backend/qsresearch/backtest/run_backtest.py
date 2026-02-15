@@ -326,7 +326,10 @@ def _load_factor_data(start_date: str, end_date: str) -> pd.DataFrame:
         # Load factors from factor_history table
         sql = f"SELECT * FROM factor_history WHERE date >= '{start_date}' AND date <= '{end_date}'"
         factors = client.query(sql)
-        return factors.to_pandas()
+        df = factors.to_pandas()
+        if not df.empty:
+            df['date'] = pd.to_datetime(df['date'])
+        return df
     except Exception as e:
         logger.warning(f"Failed to load factor data: {e}")
         return pd.DataFrame()
@@ -350,8 +353,18 @@ def _run_zipline_backtest(strategy_file, bundle_name, start_date, end_date, capi
 def _load_price_data(bundle_name, start_date, end_date):
     from qsconnect import Client
     client = Client()
-    prices = client._db_manager.get_prices(start_date=start_date, end_date=end_date)
-    return prices.to_pandas()
+    # Use client.query proxy to avoid direct file access
+    sql = f"""
+        SELECT symbol, date, open, high, low, close, volume 
+        FROM historical_prices_fmp 
+        WHERE date >= '{start_date}' AND date <= '{end_date}'
+        ORDER BY symbol, date
+    """
+    prices = client.query(sql)
+    df = prices.to_pandas()
+    if not df.empty:
+        df['date'] = pd.to_datetime(df['date'])
+    return df
 
 
 def _apply_preprocessing(df, config): return df

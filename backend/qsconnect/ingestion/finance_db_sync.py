@@ -15,12 +15,11 @@ from api.routers.data import get_qs_client
 class FinanceDBSosync:
     """
     Synchronizes the global asset universe from FinanceDatabase (JerBouma)
-    into the local DuckDB 'master_assets_index'.
+    into the local DuckDB 'master_assets_index' via Proxy.
     """
 
     def __init__(self):
         self.client = get_qs_client()
-        self.db = self.client._db_manager
 
     def sync_all(self):
         logger.info("🌍 Starting Global Asset Sync via FinanceDatabase...")
@@ -85,30 +84,30 @@ class FinanceDBSosync:
         standard_df = standard_df.fillna("N/A")
 
         count = len(standard_df)
-        logger.info(f"Inserting {count} {asset_type}s...")
+        logger.info(f"Inserting {count} {asset_type}s via Proxy...")
 
-        # DuckDB Insert
-        con = self.db.connect()
+        # DuckDB Insert via Proxy Execute
         try:
-            con.register('temp_assets', standard_df)
-            con.execute("""
-                INSERT OR REPLACE INTO master_assets_index 
-                (symbol, name, type, category, exchange, country, currency, market_cap, isin, cusip, updated_at)
-                SELECT symbol, name, type, category, exchange, country, currency, market_cap, isin, cusip, updated_at 
-                FROM temp_assets
-            """)
-            con.unregister('temp_assets')
+            # We process in batches to avoid huge SQL strings or payload issues
+            batch_size = 500
+            for i in range(0, count, batch_size):
+                batch = standard_df.iloc[i : i + batch_size]
+                for _, row in batch.iterrows():
+                    self.client.execute(
+                        """
+                        INSERT OR REPLACE INTO master_assets_index 
+                        (symbol, name, type, category, exchange, country, currency, market_cap, isin, cusip, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        [row['symbol'], row['name'], row['type'], row['category'], row['exchange'], 
+                         row['country'], row['currency'], row['market_cap'], row['isin'], row['cusip'], row['updated_at']]
+                    )
         except Exception as e:
             logger.error(f"Failed to insert {asset_type}: {e}")
-        finally:
-            con.close()
 
     def sync_equities(self):
         logger.info("Fetching Equities...")
         equities = fd.Equities()
-        # Fetching all can be heavy, let's try country by country or just select() for all
-        # select() with no args returns everything but might take time.
-        # Let's trust the library's efficiency.
         try:
             df = equities.select()
             self._bulk_insert(df, "Equity")
