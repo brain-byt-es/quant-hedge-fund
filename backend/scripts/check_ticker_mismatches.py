@@ -1,19 +1,12 @@
 from pathlib import Path
-
-import duckdb
 from loguru import logger
-
+from qsconnect.database.remote_writer import RemoteWriter
 
 def check_mismatches():
-    db_path = Path("data/quant.duckdb")
-    if not db_path.exists():
-        logger.error(f"Database not found at {db_path}")
-        return
+    # Use RemoteWriter to avoid DuckDB lock conflicts
+    writer = RemoteWriter()
 
-    # Using read_only=True to avoid conflicts with running background tasks
-    conn = duckdb.connect(str(db_path), read_only=True)
-
-    logger.info("🔍 Analyzing Ticker Mismatches via CIK...")
+    logger.info("🔍 Analyzing Ticker Mismatches via CIK (Unified Mode)...")
 
     try:
         # 1. Find CIKs associated with multiple symbols
@@ -38,7 +31,7 @@ def check_mismatches():
             ORDER BY s.cik, s.symbol
         """
 
-        df = conn.execute(sql_duplicates).pl()
+        df = writer.query(sql_duplicates)
 
         if df.is_empty():
             logger.success("✅ No CIK duplicates found! All symbols are uniquely identified.")
@@ -58,13 +51,8 @@ def check_mismatches():
             print(f"{row['cik']:12} | {row['symbol']:8} | {price_str:8} | {first:10} | {last:10} | {row['name']}")
         print("="*80)
 
-        # 2. Identify "Ghost" symbols (No prices but have a CIK match that HAS prices)
-        # This tells us which ones we can safely merge/delete.
-
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
-    finally:
-        conn.close()
 
 if __name__ == "__main__":
     check_mismatches()

@@ -135,6 +135,16 @@ class RemoteWriter:
             logger.error(f"Remote Historical Factors Failed: {e}")
             return 0
 
+    def get_stats(self) -> List[Dict[str, Any]]:
+        """Fetch table statistics via the Data Service."""
+        try:
+            response = requests.get(f"{self.base_url}/health", timeout=10)
+            response.raise_for_status()
+            return response.json().get("tables", [])
+        except Exception as e:
+            logger.error(f"Remote Stats Failed: {e}")
+            return []
+
     def clear_factor_history(self) -> bool:
         """Clear the factor history table via Data Service."""
         try:

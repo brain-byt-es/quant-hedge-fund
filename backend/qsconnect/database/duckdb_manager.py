@@ -40,23 +40,21 @@ class DuckDBManager:
         logger.info(f"DuckDB manager initialized: {self.db_path}")
 
     def connect(self, read_only: Optional[bool] = None) -> duckdb.DuckDBPyConnection:
-        """Get a cursor from the persistent connection."""
-        # Note: read_only parameter is kept for signature compatibility but ignored
-        # as the main connection defines the mode for the process.
+        """Get a cursor from the persistent connection with safety retries."""
         with self._lock:
             if self._conn is None:
                 import time
                 db_path_str = str(self.db_path.absolute().resolve())
 
-                # Retry loop only for the initial connection
-                for attempt in range(10):
+                # Institutional Retry: DuckDB can be sensitive to rapid lock switching
+                for attempt in range(5):
                     try:
                         self._conn = duckdb.connect(database=db_path_str, read_only=self.read_only)
                         self._conn.execute("PRAGMA threads=4")
                         break
                     except Exception as e:
-                        if attempt < 9:
-                            time.sleep(0.1 * (2 ** attempt))
+                        if attempt < 4:
+                            time.sleep(0.2 * (2 ** attempt))
                         else: raise e
 
             return self._conn.cursor()
@@ -229,6 +227,23 @@ class DuckDBManager:
                     account_id VARCHAR
                 )
             """)
+
+            # 16b. Sub-Portfolio Snapshots (Performance Attribution)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sub_portfolio_snapshots (
+                    strategy_hash VARCHAR,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    equity DOUBLE,
+                    daily_pnl DOUBLE,
+                    realized_pnl DOUBLE,
+                    unrealized_pnl DOUBLE,
+                    exposure_long DOUBLE,
+                    exposure_short DOUBLE,
+                    cash_balance DOUBLE,
+                    PRIMARY KEY (strategy_hash, timestamp)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sps_hash ON sub_portfolio_snapshots(strategy_hash)")
 
             # 17. Real-Time Candle Truth Layer
             conn.execute("""
@@ -773,57 +788,41 @@ class DuckDBManager:
         return validator.run_full_health_check()
 
     def get_table_stats(self) -> List[Dict[str, Any]]:
-        """Get row counts for key tables."""
+        """Get row counts for key tables using robust existence checks."""
         tables = [
             "stock_list_fmp",
             "historical_prices_fmp",
-            # FMP Annual (New Ingestion Target)
-            "bulk_income_statement_annual_fmp",
-            "bulk_balance_sheet_statement_annual_fmp",
-            "bulk_cash_flow_statement_annual_fmp",
-            "bulk_ratios_annual_fmp",
-            "bulk_key_metrics_annual_fmp",
-            # SimFin Core (Quarterly)
             "bulk_income_quarter_fmp",
             "bulk_balance_quarter_fmp",
             "bulk_cashflow_quarter_fmp",
-            "bulk_ratios_quarter_fmp",
-            # SimFin Banks
-            "bulk_income_banks_quarter_fmp",
-            "bulk_balance_banks_quarter_fmp",
-            "bulk_cashflow_banks_quarter_fmp",
-            "bulk_ratios_banks_quarter_fmp",
-            # SimFin Insurance
-            "bulk_income_insurance_quarter_fmp",
-            "bulk_balance_insurance_quarter_fmp",
-            "bulk_cashflow_insurance_quarter_fmp",
-            "bulk_ratios_insurance_quarter_fmp",
-            # Core Systems
+            "factor_history",
             "strategy_audit_log",
+            "sub_portfolio_snapshots",
             "trades",
-            "realtime_candles"
+            "realtime_candles",
+            "master_assets_index",
+            "failed_scans"
         ]
 
         stats = []
         conn = None
         try:
-            # Explicit read_only connection to avoid waiting for write locks
-            conn = self.connect(read_only=True)
+            # We use a fresh cursor for the stats check
+            conn = self.connect()
             for table in tables:
                 try:
-                    exists = conn.execute(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table}'").fetchone()[0] > 0
+                    # Robust existence check via DuckDB internal master
+                    exists = conn.execute(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='{table}'").fetchone()[0] > 0
                     if exists:
                         count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                         stats.append({"name": table, "count": count, "status": "active"})
                     else:
                         stats.append({"name": table, "count": 0, "status": "missing"})
-                except:
-                    stats.append({"name": table, "count": -1, "status": "locked"})
+                except Exception as tbl_err:
+                    logger.debug(f"Table stat failed for {table}: {tbl_err}")
+                    stats.append({"name": table, "count": -1, "status": "error"})
         except Exception as e:
-            logger.debug(f"Global stats fetch failed: {e}")
-        finally:
-            if conn: conn.close()
-
+            logger.error(f"Global stats fetch failed: {e}")
         return stats
 
     # =====================
@@ -873,7 +872,7 @@ class DuckDBManager:
         """Get list of symbols that already have entries in a specific fundamental table."""
         try:
             # Check if table exists first
-            exists = self.query(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table_name}'")[0,0] > 0
+            exists = self.query(f"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='{table_name}'")[0,0] > 0
             if not exists:
                 return []
 

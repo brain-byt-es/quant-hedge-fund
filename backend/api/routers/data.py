@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
@@ -39,7 +39,7 @@ def get_data_health():
     """Get detailed health check of the data (gaps, outliers, anomalies)."""
     try:
         client = get_qs_client()
-        return client._db_manager.get_full_health_report()
+        return client.get_full_health_report()
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -49,7 +49,7 @@ def get_data_stats():
     """Get row counts for all tables."""
     try:
         client = get_qs_client()
-        return client._db_manager.get_table_stats()
+        return client.get_table_stats()
     except Exception as e:
         logger.error(f"Stats check failed: {e}")
         return []
@@ -117,13 +117,41 @@ async def run_custom_query(request: QueryRequest):
             sql += f" LIMIT {request.limit}"
 
         logger.info(f"Executing SQL Explorer query: {sql[:100]}...")
-        df = client._db_manager.query(sql)
+        df = client.query(sql)
 
         # Convert to list of dicts for JSON frontend
         return df.to_dicts()
     except Exception as e:
         logger.error(f"SQL Explorer error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/ingest/sync")
+async def trigger_unified_sync(background_tasks: BackgroundTasks):
+    """Trigger the Institutional Unified Sync (Task 7)."""
+    
+    async def run_sync():
+        try:
+            from qsconnect.ingestion.sync_coordinator import UnifiedSyncCoordinator
+            client = get_qs_client()
+            client.stop_requested = False
+            
+            save_ingestion_state({"status": "running", "step": "SotW Analysis", "progress": 10, "details": "Analyzing Gaps..."})
+            
+            coordinator = UnifiedSyncCoordinator(client)
+            stats = await coordinator.sync_all()
+            
+            save_ingestion_state({
+                "status": "completed", 
+                "step": "Sync Complete", 
+                "progress": 100, 
+                "details": f"Added {stats.get('new_prices', 0)} prices and {stats.get('new_financials', 0)} financials."
+            })
+        except Exception as e:
+            logger.error(f"Unified Sync failed: {e}")
+            save_ingestion_state({"status": "error", "step": "Failed", "progress": 0, "details": str(e)})
+
+    background_tasks.add_task(run_sync)
+    return {"status": "started", "message": "Unified Institutional Sync started."}
 
 class IngestRequest(BaseModel):
     mode: str = "daily" # 'daily', 'backfill', or 'simfin'
@@ -132,7 +160,7 @@ class IngestRequest(BaseModel):
 
 @router.post("/ingest")
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion in a background thread using the shared connection."""
+    """Legacy/Individual ingestion trigger."""
 
     def run_ingestion():
         client = get_qs_client()

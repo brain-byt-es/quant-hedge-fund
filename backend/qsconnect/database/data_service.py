@@ -87,6 +87,39 @@ async def upsert_fundamentals(payload: Dict[str, Any]):
         logger.error(f"Fundamental Upsert Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/upsert/candles/batch")
+async def upsert_candles_batch(data: List[Dict[str, Any]]):
+    """Institutional Batch Upsert for Real-Time Candles (Burst Mode)."""
+    if not data: return {"status": "skipped"}
+    try:
+        df = pl.from_dicts(data)
+        # Convert timestamp strings to datetime if needed
+        if "timestamp" in df.columns and df["timestamp"].dtype == pl.String:
+            df = df.with_columns(pl.col("timestamp").str.to_datetime())
+            
+        conn = db_mgr.connect()
+        try:
+            conn.register("temp_batch", df)
+            conn.execute("""
+                INSERT INTO realtime_candles (symbol, timestamp, open, high, low, close, volume, is_final, source, asset_class)
+                SELECT symbol, timestamp, open, high, low, close, volume, is_final, source, asset_class FROM temp_batch
+                ON CONFLICT (symbol, timestamp) DO UPDATE SET
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    volume = EXCLUDED.volume,
+                    is_final = EXCLUDED.is_final,
+                    source = EXCLUDED.source,
+                    asset_class = EXCLUDED.asset_class
+            """)
+            return {"status": "success", "count": len(df)}
+        finally:
+            conn.unregister("temp_batch")
+            conn.close()
+    except Exception as e:
+        logger.error(f"Batch Candle Upsert Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/factors/historical")
 async def calculate_historical_factors(request: HistoricalFactorRequest):
     """Trigger remote calculation of historical factors."""

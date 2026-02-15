@@ -21,32 +21,32 @@ ASSETS:
   PG:   { asset_class: EQUITY, realtime_feed: IBKR, execution: IBKR }
   JNJ:  { asset_class: EQUITY, realtime_feed: IBKR, execution: IBKR }
 
-  # --- Metals (Twelve Data Coverage) ---
-  XAU/USD: { asset_class: METAL, realtime_feed: TWELVE_DATA, execution: IBKR } # Gold
-  XAG/USD: { asset_class: METAL, realtime_feed: TWELVE_DATA, execution: IBKR } # Silver
-  XPT/USD: { asset_class: METAL, realtime_feed: TWELVE_DATA, execution: IBKR } # Platinum
-  XPD/USD: { asset_class: METAL, realtime_feed: TWELVE_DATA, execution: IBKR } # Palladium
+  # --- Metals (FMP Coverage) ---
+  XAUUSD: { asset_class: METAL, realtime_feed: FMP, execution: IBKR } # Gold
+  XAGUSD: { asset_class: METAL, realtime_feed: FMP, execution: IBKR } # Silver
+  XPTUSD: { asset_class: METAL, realtime_feed: FMP, execution: IBKR } # Platinum
+  XPDUSD: { asset_class: METAL, realtime_feed: FMP, execution: IBKR } # Palladium
 
   # --- Forex (G10 Majors) ---
-  EUR/USD: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  GBP/USD: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  USD/JPY: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  USD/CHF: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  AUD/USD: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  USD/CAD: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
-  NZD/USD: { asset_class: FX, realtime_feed: TWELVE_DATA, execution: IBKR }
+  EURUSD: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  GBPUSD: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  USDJPY: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  USDCHF: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  AUDUSD: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  USDCAD: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
+  NZDUSD: { asset_class: FX, realtime_feed: FMP, execution: IBKR }
 
-  # --- Crypto (Twelve Data View-Only) ---
-  BTC/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  ETH/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  SOL/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  XRP/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  ADA/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  DOGE/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  DOT/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
-  LINK/USD: { asset_class: CRYPTO, realtime_feed: TWELVE_DATA, execution: NONE }
+  # --- Crypto (FMP View-Only) ---
+  BTCUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  ETHUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  SOLUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  XRPUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  ADAUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  DOGEUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  DOTUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
+  LINKUSD: { asset_class: CRYPTO, realtime_feed: FMP, execution: NONE }
 
   # --- Indices ---
-  SPX: { asset_class: INDEX, realtime_feed: TWELVE_DATA, execution: NONE }
-  NDX: { asset_class: INDEX, realtime_feed: TWELVE_DATA, execution: NONE }
-  DJI: { asset_class: INDEX, realtime_feed: TWELVE_DATA, execution: NONE }
+  SPX: { asset_class: INDEX, realtime_feed: FMP, execution: NONE }
+  NDX: { asset_class: INDEX, realtime_feed: FMP, execution: NONE }
+  DJI: { asset_class: INDEX, realtime_feed: FMP, execution: NONE }

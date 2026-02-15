@@ -266,7 +266,7 @@ flowchart LR
 
 | Feature | Description |
 |---------|-------------|
-| **Twelve Data WebSocket** | Free real-time streaming for stocks, forex, and crypto |
+| **FMP WebSocket** | Professional real-time streaming for stocks, forex, and crypto via Financial Modeling Prep |
 | **Mock Feed** | Simulated data feed for testing without API keys |
 | **Candle Aggregator** | Tick-to-candle conversion with 1-minute bars |
 | **Truth Layer** | Deterministic bar-close synchronization |

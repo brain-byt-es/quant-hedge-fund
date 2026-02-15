@@ -68,11 +68,9 @@ class TradingApp:
         from qsconnect.database.remote_writer import RemoteWriter
         self._writer = RemoteWriter()
         
-        # We still need a local read-only manager for fast lookups
-        from qsconnect.database.duckdb_manager import DuckDBManager
-        self._db_manager = DuckDBManager(settings.duckdb_path, read_only=True)
-
-        self.gov = GovernanceManager(self._db_manager)
+        # In Unified mode, we NO LONGER use a local DuckDBManager to avoid Read-Write lock conflicts.
+        # GovernanceManager and all other subsystems must use self._writer (Proxy).
+        self.gov = GovernanceManager() # Will use its own internal RemoteWriter
         self.registry = get_registry()
         self.risk_manager = RiskManager()
         self.active_strategy: Optional[Dict[str, Any]] = None
@@ -122,7 +120,60 @@ class TradingApp:
 
     async def connect(self) -> bool:
         """Connect to the active broker (Async)."""
-        return await self.broker.connect()
+        success = await self.broker.connect()
+        if success:
+            # Start background risk and attribution heartbeat
+            asyncio.create_task(self._async_performance_heartbeat())
+        return success
+
+    async def _async_performance_heartbeat(self):
+        """Async background task for risk monitoring and sub-portfolio snapshotting."""
+        logger.info("Omega: Performance Heartbeat started.")
+        while self.is_connected():
+            try:
+                # 1. Check Global Risk (Dynamic Stops)
+                await self.check_global_risk()
+                
+                # 2. Sub-Portfolio Snapshotting
+                await self._snapshot_sub_portfolios()
+
+            except Exception as e:
+                logger.error(f"Performance Heartbeat Error: {e}")
+            
+            await asyncio.sleep(60) # 60s attribution resolution
+
+    async def _snapshot_sub_portfolios(self):
+        """Calculates and persists snapshots for each strategy isolated by its hash."""
+        try:
+            # Fetch all unique strategy hashes from audit log that have capital via Proxy
+            df_strategies = self._writer.query("SELECT strategy_hash, capital_allocation FROM strategy_audit_log WHERE capital_allocation > 0")
+            if df_strategies.is_empty(): return
+            
+            strategies = df_strategies.to_dicts()
+
+            for strat in strategies:
+                s_hash = strat['strategy_hash']
+                allocation = strat['capital_allocation'] or 0.0
+                
+                # Calculate realized P&L for this hash from trades table via Proxy
+                realized_res = self._writer.query(f"SELECT SUM(fill_price * quantity * CASE WHEN side='SELL' THEN 1 ELSE -1 END) as realized FROM trades WHERE strategy_hash = '{s_hash}' AND fill_price IS NOT NULL")
+                realized = realized_res["realized"][0] if not realized_res.is_empty() and realized_res["realized"][0] is not None else 0.0
+                
+                # Note: Real attribution would also calculate unrealized P&L by mapping current positions to strategy hashes.
+                unrealized = 0.0 
+                current_equity = allocation + realized + unrealized
+                
+                # Persist Snapshot via Data Service Proxy
+                sql = """
+                    INSERT INTO sub_portfolio_snapshots 
+                    (strategy_hash, equity, realized_pnl, unrealized_pnl, daily_pnl)
+                    VALUES (?, ?, ?, ?, ?)
+                """
+                params = [s_hash, float(current_equity), float(realized), float(unrealized), 0.0]
+                self._writer.execute(sql, params)
+                
+        except Exception as e:
+            logger.error(f"Sub-Portfolio Snapshot Error: {e}")
 
     def is_connected(self) -> bool:
         return self.broker.is_connected()
@@ -165,6 +216,7 @@ class TradingApp:
             return False
 
         if not self.active_strategy:
+            # Note: GovernanceManager might still use local DB, but we proxy its main lookup
             self.active_strategy = self.gov.get_active_strategy()
 
         if not self.active_strategy:

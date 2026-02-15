@@ -66,10 +66,14 @@ class Client:
         self._simfin_client = SimFinClient(api_key=self._simfin_api_key, data_dir=str(simfin_dir))
 
         # IMPORTANT: In the Unified architecture, the Client DOES NOT 
-        # initialize a local DuckDBManager. It uses the RemoteWriter for EVERYTHING.
+        # initialize a local DuckDBManager for writing. It uses the RemoteWriter for EVERYTHING.
         self._db_proxy = RemoteWriter()
         self._cache_manager = CacheManager(cache_dir=self._cache_dir)
         
+        # We still need a local read-only manager for fast lookups/health checks in the API
+        from qsconnect.database.duckdb_manager import DuckDBManager
+        self._db_manager = DuckDBManager(self._duckdb_path, read_only=True)
+
         # Bundler still needs a local manager for Zipline ingestion if run locally,
         # but for standard API use, we avoid it.
         self._bundler = None 
@@ -78,6 +82,37 @@ class Client:
         self._stop_requested = False
 
         logger.info(f"QS Connect client initialized in UNIFIED mode (Proxy to Data Service).")
+
+    def log_event(self, level: str, component: str, message: str, details: Optional[Dict] = None) -> None:
+        """Log a system event via the proxy."""
+        # Use execute proxy to write to system_logs
+        try:
+            import json
+            details_json = json.dumps(details) if details else None
+            self.execute("INSERT INTO system_logs (level, component, message, details) VALUES (?, ?, ?, ?)", [level, component, message, details_json])
+        except Exception as e:
+            logger.error(f"Failed to log event: {e}")
+
+    def get_system_logs(self, limit: int = 100) -> pl.DataFrame:
+        """Fetch recent system logs via the proxy."""
+        sql = f"SELECT * FROM system_logs ORDER BY timestamp DESC LIMIT {limit}"
+        return self.query(sql)
+
+    def get_table_stats(self) -> List[Dict[str, Any]]:
+        """Fetch table statistics via the proxy."""
+        return self._db_proxy.get_stats()
+
+    def get_full_health_report(self) -> Dict[str, Any]:
+        """Fetch comprehensive health report via the proxy."""
+        try:
+            # We proxy this via a specialized query or the health endpoint
+            import requests
+            response = requests.get(f"{self._db_proxy.base_url}/health", timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch health report: {e}")
+            return {"status": "error", "error": str(e)}
 
     @property
     def stop_requested(self) -> bool:

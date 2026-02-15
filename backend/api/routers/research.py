@@ -13,6 +13,60 @@ from qsresearch.features.factor_engine import FactorEngine
 
 router = APIRouter()
 
+@router.get("/portfolio/attribution")
+def get_portfolio_attribution():
+    """Get isolated performance metrics for each strategy hash (Sub-Portfolio Attribution)."""
+    try:
+        client = get_qs_client()
+        
+        # 1. Fetch active strategies
+        strategies = client.query("SELECT strategy_hash, config_json, capital_allocation FROM strategy_audit_log WHERE capital_allocation > 0").to_dicts()
+        
+        if not strategies:
+            return []
+
+        attribution = []
+        for strat in strategies:
+            s_hash = strat['strategy_hash']
+            config = strat['config_json'] or {}
+            allocation = strat['capital_allocation']
+            
+            # Fetch latest snapshot
+            snap_res = client.query(f"SELECT * FROM sub_portfolio_snapshots WHERE strategy_hash = '{s_hash}' ORDER BY timestamp DESC LIMIT 1")
+            
+            if not snap_res.is_empty():
+                snap = snap_res.to_dicts()[0]
+                equity = snap['equity']
+                total_pnl = snap['realized_pnl'] + snap['unrealized_pnl']
+                
+                # Fetch history for chart
+                history = client.query(f"SELECT timestamp, equity FROM sub_portfolio_snapshots WHERE strategy_hash = '{s_hash}' ORDER BY timestamp ASC")
+                
+                # Calculate simple Sharpe proxy (if enough data)
+                returns = []
+                if len(history) > 5:
+                    vals = history['equity'].to_list()
+                    returns = [(vals[i]/vals[i-1]) - 1 for i in range(1, len(vals))]
+                    sharpe = (np.mean(returns) / np.std(returns)) * np.sqrt(252) if np.std(returns) > 0 else 0.0
+                else:
+                    sharpe = 0.0
+
+                attribution.append({
+                    "strategy_hash": s_hash,
+                    "name": config.get("strategy_name", f"Strategy {s_hash[:6]}"),
+                    "equity": float(equity),
+                    "allocation": float(allocation),
+                    "total_pnl": float(total_pnl),
+                    "return_pct": float((equity / allocation) - 1) if allocation > 0 else 0.0,
+                    "sharpe": float(sharpe),
+                    "history": history.to_dicts() if not history.is_empty() else []
+                })
+
+        return attribution
+    except Exception as e:
+        logger.error(f"Portfolio attribution failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/update_factors")
 def trigger_factor_update(
     min_mcap: Optional[float] = Query(None, description="Minimum market cap filter"),

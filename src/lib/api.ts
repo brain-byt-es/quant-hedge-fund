@@ -85,6 +85,11 @@ export const api = {
     return handleResponse(res);
   },
 
+  getPortfolioAttribution: async () => {
+    const res = await fetch(`${API_BASE_URL}/research/portfolio/attribution`);
+    return handleResponse(res);
+  },
+
   triggerFactorUpdate: async (min_mcap?: number, min_volume?: number) => {
     let url = `${API_BASE_URL}/research/update_factors`;
     const params = new URLSearchParams();
